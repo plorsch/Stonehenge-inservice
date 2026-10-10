@@ -597,6 +597,62 @@ async function kioskRoutes(req, res, p, m) {
   return false;
 }
 
+// ---------- Clock-in check ----------
+
+function addDays(date, n) {
+  const [y, m, d] = date.split('-').map(Number);
+  const x = new Date(y, m - 1, d + n);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+
+// One shift per person per day (the earliest punch), so lunch and clock-out punches don't count twice.
+// A shift counts as covered when that person finished an in-service the same day, or, for a clock-in
+// at 6 pm or later, the next morning before noon (night shift finishing after midnight).
+function clockCheck(punches) {
+  const shifts = new Map();
+  for (const raw of punches) {
+    const last4 = cleanLast4(raw.last4);
+    const date = cleanDate(raw.date);
+    if (!last4 || !date) continue;
+    const time = /^\d{2}:\d{2}$/.test(raw.time || '') ? raw.time : '';
+    const key = `${last4}|${cleanText(raw.name, 100).toLowerCase()}|${date}`;
+    const prev = shifts.get(key);
+    if (!prev || (time && (!prev.time || time < prev.time))) {
+      shifts.set(key, { last4, name: cleanText(raw.name, 100), date, time, department: cleanText(raw.department, 60) });
+    }
+  }
+  const results = [];
+  for (const sh of shifts.values()) {
+    let candidates = db.employees.filter(e => e.last4 === sh.last4);
+    if (candidates.length > 1 && sh.name) {
+      // Exports often write "Last, First"; match on any name part.
+      const parts = sh.name.toLowerCase().split(/[\s,]+/).filter(x => x.length > 1);
+      const score = e => e.name.toLowerCase().split(/\s+/).filter(x => parts.includes(x)).length;
+      const best = Math.max(...candidates.map(score));
+      if (best > 0) candidates = candidates.filter(e => score(e) === best);
+    }
+    const emp = candidates.length === 1 ? candidates[0] : null;
+    const nightNext = sh.time && sh.time >= '18:00' ? addDays(sh.date, 1) : null;
+    const mine = r => emp ? r.employeeId === emp.id : r.last4 === sh.last4;
+    const onShift = r => r.date === sh.date || (nightNext && r.date === nightNext && new Date(r.submittedAt).getHours() < 12);
+    const rs = db.responses.filter(r => mine(r) && onShift(r));
+    const done = rs.find(r => r.completed);
+    let status;
+    if (done) status = 'done';
+    else if (rs.length) status = 'unfinished';
+    else status = 'missed';
+    results.push({
+      date: sh.date, time: sh.time, last4: sh.last4,
+      name: emp ? emp.name : sh.name, department: emp ? emp.department : sh.department,
+      onRoster: !!emp, ambiguous: candidates.length > 1,
+      status, completedAt: done ? done.completedAt : null, topic: done ? done.topicTitle : (rs[0] ? rs[0].topicTitle : '')
+    });
+  }
+  results.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+  const count = st => results.filter(r => r.status === st).length;
+  return { shifts: results.length, done: count('done'), missed: count('missed'), unfinished: count('unfinished'), results };
+}
+
 // ---------- Admin routes ----------
 
 function todayOverview() {
@@ -864,6 +920,12 @@ async function adminRoutes(req, res, p, m, url) {
     const rows = filterResponses(url.searchParams).map(r => cols.map(([, f]) => csvCell(f(r))).join(','));
     return send(res, 200, '﻿' + [cols.map(c => c[0]).join(','), ...rows].join('\r\n'), 'text/csv; charset=utf-8',
       { 'Content-Disposition': `attachment; filename="inservice-responses-${today()}.csv"` });
+  }
+
+  if (m === 'POST' && p === '/api/admin/clock-check') {
+    // Compare a time clock export against completed in-services. Nothing from the export is saved.
+    const punches = ((await readBody(req, 20e6)).punches || []).slice(0, 50000);
+    return send(res, 200, clockCheck(punches));
   }
 
   if (m === 'GET' && p === '/api/admin/usage') return send(res, 200, { usage: db.usage.slice().reverse() });

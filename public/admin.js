@@ -652,6 +652,109 @@
   }
   ['resp-from', 'resp-to', 'resp-dept', 'resp-topic', 'resp-missed'].forEach(id => $(id).addEventListener('change', loadResponses));
 
+  // ---------- clock-in check ----------
+  let ccRows = null, ccHeader = null, ccResult = null;
+  const pad2 = n => String(n).padStart(2, '0');
+  // Accepts Excel dates, "10/9/2026 6:45 AM", "2026-10-09 06:45", "10/9/26", and times like "6:45 PM" or Excel day fractions.
+  // Excel dates can come through a few seconds early, so round to the nearest minute.
+  const roundMin = d => new Date(Math.round(d.getTime() / 60000) * 60000);
+  function parseWhen(v) {
+    if (v instanceof Date && !isNaN(v)) v = roundMin(v);
+    if (v instanceof Date && !isNaN(v)) return { date: isoDay(v), time: (v.getHours() || v.getMinutes()) ? `${pad2(v.getHours())}:${pad2(v.getMinutes())}` : '' };
+    const s = String(v || '').trim();
+    let date = '', m;
+    if ((m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/))) date = `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
+    else if ((m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/))) date = `${m[3].length === 2 ? '20' + m[3] : m[3]}-${pad2(m[1])}-${pad2(m[2])}`;
+    return { date, time: parseTime(s.replace(m ? m[0] : '', '')) };
+  }
+  function parseTime(v) {
+    if (v instanceof Date && !isNaN(v)) v = roundMin(v);
+    if (v instanceof Date && !isNaN(v)) return `${pad2(v.getHours())}:${pad2(v.getMinutes())}`;
+    if (typeof v === 'number' && v >= 0 && v < 1) { const mins = Math.round(v * 1440); return `${pad2(Math.floor(mins / 60) % 24)}:${pad2(mins % 60)}`; }
+    const m = String(v || '').match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap]\.?m\.?)?/i);
+    if (!m) return '';
+    let h = Number(m[1]);
+    if (m[3]) { const pm = /p/i.test(m[3]); if (pm && h < 12) h += 12; if (!pm && h === 12) h = 0; }
+    return `${pad2(h)}:${m[2]}`;
+  }
+  function ccOptions(sel, guess, optional) {
+    sel.innerHTML = (optional ? '<option value="-1">(none)</option>' : '') + ccHeader.map((h, i) => `<option value="${i}">${escapeHtml(h || 'Column ' + (i + 1))}</option>`).join('');
+    sel.value = String(guess >= 0 ? guess : (optional ? -1 : 0));
+  }
+  $('cc-file').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    $('cc-error').textContent = ''; $('cc-map').hidden = true; $('cc-results').hidden = true;
+    if (!file) return;
+    try {
+      let rows;
+      if (/\.xlsx?$/i.test(file.name)) {
+        await loadXlsx();
+        const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+      } else rows = parseCsv((await file.text()).replace(/^﻿/, ''));
+      rows = rows.filter(r => r.some(c => String(c).trim()));
+      // Some exports put a title above the column headings; use the first row that names an ID column.
+      const hi = Math.max(0, rows.findIndex(r => r.some(c => /id|employee|worker/i.test(String(c)))));
+      ccHeader = rows[hi].map(c => String(c).trim());
+      ccRows = rows.slice(hi + 1);
+      ccOptions($('cc-col-id'), findCol(ccHeader, [/workday/i, /employee.?id/i, /worker.?id/i, /\bid\b/i, /last ?4/i]));
+      ccOptions($('cc-col-name'), findCol(ccHeader, [/^name$/i, /worker$/i, /employee( name)?$/i, /name/i]), true);
+      ccOptions($('cc-col-date'), findCol(ccHeader, [/clock.?in/i, /time.?in/i, /in.?punch/i, /^date$/i, /date/i, /start/i]));
+      ccOptions($('cc-col-time'), (() => { const d = Number($('cc-col-date').value); const t = findCol(ccHeader, [/^(time )?in$/i, /in time/i, /clock.?in time/i, /start time/i]); return t === d ? -1 : t; })(), true);
+      $('cc-map').hidden = false;
+      runClockCheck();
+    } catch (err) { $('cc-error').textContent = err.message; }
+  });
+  async function runClockCheck() {
+    $('cc-error').textContent = '';
+    const ci = Number($('cc-col-id').value), cn = Number($('cc-col-name').value), cd = Number($('cc-col-date').value), ct = Number($('cc-col-time').value);
+    const punches = [];
+    let skipped = 0;
+    for (const r of ccRows) {
+      const when = parseWhen(r[cd]);
+      const time = ct >= 0 ? parseTime(r[ct]) : when.time;
+      const id = String(r[ci] || '').replace(/\D/g, '');
+      if (!when.date || id.length < 4) { skipped++; continue; }
+      punches.push({ last4: id.slice(-4), name: cn >= 0 ? String(r[cn] || '') : '', date: when.date, time });
+    }
+    if (!punches.length) { $('cc-error').textContent = 'No clock-ins found. Check the columns above.'; $('cc-results').hidden = true; return; }
+    try {
+      ccResult = await post('/api/admin/clock-check', { punches });
+      $('cc-shifts').textContent = ccResult.shifts;
+      $('cc-done').textContent = ccResult.done;
+      $('cc-missed').textContent = ccResult.missed;
+      $('cc-unfinished').textContent = ccResult.unfinished;
+      if (skipped) $('cc-error').textContent = `${skipped} row${skipped === 1 ? ' was' : 's were'} skipped because the ID or date couldn't be read.`;
+      $('cc-results').hidden = false;
+      renderClockCheck();
+    } catch (err) { $('cc-error').textContent = err.message; }
+  }
+  const ccLabel = { done: '<span class="pill good">Done</span>', missed: '<span class="pill warn">Missed</span>', unfinished: '<span class="pill warn">Started, didn\'t finish</span>' };
+  function ccFiltered() {
+    const f = $('cc-filter').value;
+    return ccResult.results.filter(r => f === 'all' || (f === 'done' ? r.status === 'done' : r.status !== 'done'));
+  }
+  function renderClockCheck() {
+    $('cc-rows').innerHTML = ccFiltered().map(r => `<tr>
+      <td style="white-space:nowrap">${fmtDate(r.date)}</td><td>${escapeHtml(r.time || '')}</td>
+      <td>${escapeHtml(r.name)}${r.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}${r.ambiguous ? ' <span class="pill warn" title="Several staff share these last 4 digits">Shared ID</span>' : ''}</td>
+      <td>${escapeHtml(r.last4)}</td><td>${escapeHtml(r.department || '')}</td>
+      <td>${ccLabel[r.status]}${r.status === 'done' ? `<div class="muted small">${fmtWhen(r.completedAt)}</div>` : ''}</td></tr>`).join('')
+      || '<tr><td colspan="6" class="muted">Nothing to show. Everyone did their in-service.</td></tr>';
+  }
+  ['cc-col-id', 'cc-col-name', 'cc-col-date', 'cc-col-time'].forEach(id => $(id).addEventListener('change', runClockCheck));
+  $('cc-run').addEventListener('click', runClockCheck);
+  $('cc-filter').addEventListener('change', renderClockCheck);
+  $('cc-csv').addEventListener('click', () => {
+    const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [['Date', 'Clock-in', 'Name', 'Workday last 4', 'Department', 'Result', 'On roster', 'Finished at'].join(',')]
+      .concat(ccFiltered().map(r => [r.date, r.time, r.name, r.last4, r.department, r.status, r.onRoster ? 'yes' : 'no', r.completedAt || ''].map(cell).join(',')));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' }));
+    a.download = `clock-in-check-${isoDay(new Date())}.csv`;
+    a.click();
+  });
+
   // ---------- usage history ----------
   async function loadUsage() {
     try {

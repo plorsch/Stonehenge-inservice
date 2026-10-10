@@ -78,6 +78,7 @@
     <button data-tab="topics">Topic library</button>
     <button data-tab="staff">Staff</button>
     <button data-tab="responses">Responses</button>
+    <button data-tab="clockcheck">Clock-in check</button>
     <button data-tab="history">Usage history</button>
     <button data-tab="settings">Settings</button>
   </nav>
@@ -246,6 +247,43 @@
       <div class="table-wrap"><table>
         <thead><tr><th>When</th><th>Name</th><th>Dept</th><th>Type</th><th>Topic and question</th><th>First answer</th><th>Result</th></tr></thead>
         <tbody id="resp-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- Clock-in check -->
+  <section class="tab" id="tab-clockcheck">
+    <div class="card">
+      <h2>Who clocked in but didn't do the in-service</h2>
+      <div class="muted small">Export clock-ins from Workday (Excel or CSV) and choose the file here. Each person's first punch of the day counts as one shift. A shift is covered if they finished an in-service that day, or by noon the next day for clock-ins at 6 pm or later. The export is only compared, never saved.</div>
+      <div class="toolbar" style="margin-top:12px"><input type="file" id="cc-file" accept=".xlsx,.xls,.csv,text/csv"></div>
+      <div id="cc-map" hidden>
+        <div class="muted small" style="margin:6px 0">Check that these columns are right:</div>
+        <div class="toolbar">
+          <label>Workday ID <select id="cc-col-id"></select></label>
+          <label>Name <select id="cc-col-name"></select></label>
+          <label>Date or clock-in time <select id="cc-col-date"></select></label>
+          <label>Time <span class="hint">if separate</span> <select id="cc-col-time"></select></label>
+          <button class="btn" id="cc-run">Check</button>
+        </div>
+      </div>
+      <div class="err" id="cc-error"></div>
+    </div>
+    <div class="card" id="cc-results" hidden>
+      <div class="stats" style="margin-bottom:14px">
+        <div><div class="stat" id="cc-shifts">0</div><div class="muted small">shifts in the export</div></div>
+        <div><div class="stat" id="cc-done" style="color:var(--good)">0</div><div class="muted small">did the in-service</div></div>
+        <div><div class="stat" id="cc-missed" style="color:var(--warn)">0</div><div class="muted small">missed it</div></div>
+        <div><div class="stat" id="cc-unfinished">0</div><div class="muted small">started but didn't finish</div></div>
+      </div>
+      <div class="toolbar">
+        <select id="cc-filter"><option value="problems">Missed or unfinished</option><option value="all">All shifts</option><option value="done">Completed</option></select>
+        <span class="grow"></span>
+        <button class="btn" id="cc-csv">Download as CSV</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Clock-in</th><th>Name</th><th>Workday last 4</th><th>Department</th><th>Result</th></tr></thead>
+        <tbody id="cc-rows"></tbody>
       </table></div>
     </div>
   </section>

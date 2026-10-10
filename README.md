@@ -58,6 +58,7 @@ Sign in with username `admin` and your password. The default for a facility-comp
 | **Topic library** | Add, edit, preview, copy, retire. Import from Excel. Topics marked "Needs work" stay off the iPad until they're complete. |
 | **Staff** | The roster: name, Workday last 4, department, active or inactive. Import from Excel or paste from a spreadsheet. |
 | **Responses** | Every answer, filterable by date, department, topic, or "missed first try". Download as CSV. |
+| **Clock-in check** | Choose a Workday time clock export (Excel or CSV) to see who clocked in but didn't finish an in-service. Download the list as CSV. |
 | **Usage history** | Each day each topic was used. |
 | **Settings** | Facility name, departments, whether staff who aren't on the roster can type their name, password, backup and restore. |
 
@@ -84,6 +85,16 @@ Use one row per question with these column headings: **Topic title**, **Question
 ### Importing staff from Excel
 
 You need columns for the name, the Workday ID (the full ID or the last 4) and the department. Staff already on the roster with the same name and last 4 are updated instead of duplicated. New departments are added automatically.
+
+### Catching clock-ins without an in-service
+
+The kiosk can't see the time clock, so the check works from your export. Export clock-ins from Workday for the period you want (a day, a week, a pay period) and choose the file on the **Clock-in check** tab. The page picks the Workday ID, name and clock-in columns, and you can change them if it guesses wrong.
+
+- Each person's first punch of a day counts as one shift, so lunch and clock-out punches aren't counted twice.
+- A shift is covered when the person finished an in-service that day. For clock-ins at 6 pm or later, the next morning before noon also counts.
+- People are matched by the last 4 digits of their Workday ID. If two staff share the same last 4, the name in the export decides.
+- Results are **Done**, **Missed**, or **Started, didn't finish**. IDs that aren't on the Staff tab are flagged so you can add them.
+- The export is only compared, never saved.
 
 ## 4. Data and backups
 
