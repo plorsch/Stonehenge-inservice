@@ -173,6 +173,41 @@ if (!db) {
   upgradeDb(db);
 }
 
+// One-time refresh of the built-in sample topics to the shorter versions with GIFs (October 2026).
+// A sample is updated only if its lesson is still the original text (or already the new text),
+// so any topic you have edited is left alone. Culture samples are added if missing.
+const ORIGINAL_SAMPLE_LESSONS = {
+  "Change in Condition: Stop and Watch": 'f6bc69044b20716c',
+  "Hand Hygiene: When to Use Soap and Water": '7f5fb4307766030a',
+  "Fall Prevention: The Call Light": 'eebd16ee74e187f2',
+  "Fire Safety: RACE": '374508c3397b0b4a',
+  "Abuse Reporting: Your Duty": '79e57760ff37cf1a',
+  "Dignity While Making Beds": '23856c4dbc2c56b0',
+  "Locking the Housekeeping Cart": '104a2a2a00f8fbd8',
+  "IDDSI Diet Textures": 'f28e0ec394daf80c',
+  "Food Temperatures and the Danger Zone": '84d89843cce2ca8e',
+  "Residents Who Self-Administer Medications": '01711e48131993ff',
+  "Pressure Injury Prevention: Repositioning": '375338d465ec68cf'
+};
+if (!(db.settings.sampleRefresh >= 1)) {
+  const hash = s => crypto.createHash('sha1').update(String(s || '')).digest('hex').slice(0, 16);
+  for (const s of loadJson(SEED_FILE, [])) {
+    const t = db.topics.find(x => sameText(x.title, s.title));
+    if (!t) {
+      if (sameText(s.category || '', 'Culture')) db.topics.push(makeTopic(s));
+      continue;
+    }
+    const { topic } = validateTopicInput(s);
+    if (ORIGINAL_SAMPLE_LESSONS[s.title] !== hash(t.lesson) && t.lesson !== topic.lesson) continue;
+    t.lesson = topic.lesson;
+    if (topic.image && !t.image) t.image = topic.image;
+    topic.questions.forEach((q, i) => { if (t.questions[i]) Object.assign(t.questions[i], q, { id: t.questions[i].id }); });
+    t.updatedAt = nowIso();
+  }
+  db.settings.sampleRefresh = 1;
+  saveDb();
+}
+
 function saveDb() {
   const backupFile = path.join(BACKUP_DIR, `db-${today()}.json`);
   if (fs.existsSync(DB_FILE) && !fs.existsSync(backupFile)) {
@@ -221,7 +256,7 @@ function validateTopicInput(input) {
   // Left out entirely when the input has no image field, so a spreadsheet import keeps the existing picture.
   if ('image' in input) {
     const img = cleanText(input.image, 1000);
-    t.image = /^\/media\/[\w-]+\.(png|jpe?g|gif|webp)$/i.test(img) || /^https:\/\/\S+$/i.test(img) ? img : '';
+    t.image = /^\/(media|samples)\/[\w-]+\.(png|jpe?g|gif|webp)$/i.test(img) || /^https:\/\/\S+$/i.test(img) ? img : '';
   }
   if (!t.title) errors.push('Title is required.');
   if (!t.lesson) errors.push('Lesson text is required.');
@@ -864,6 +899,8 @@ async function handle(req, res) {
     return send(res, 404, { error: 'Not found' });
   }
   if (m === 'GET' && /^\/[\w.-]+\.(js|css|png|svg|ico)$/.test(p) && !p.startsWith('/admin')) return serveStatic(res, p.slice(1));
+  const sample = m === 'GET' && p.match(/^\/samples\/([\w-]+\.gif)$/i);
+  if (sample) return serveStatic(res, 'samples/' + sample[1]);
   const media = m === 'GET' && p.match(/^\/media\/([\w-]+\.(png|jpe?g|gif|webp))$/i);
   if (media) {
     // Uploaded files get a new name each time, so the iPad can cache them for good.

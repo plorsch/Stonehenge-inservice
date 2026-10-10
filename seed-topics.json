@@ -79,7 +79,8 @@
         "hint": "It's about as long as singing Happy Birthday twice.",
         "explanation": "Scrubbing for at least 20 seconds removes germs from all surfaces of the hands."
       }
-    ]
+    ],
+    "image": "/samples/hand-hygiene.gif"
   },
   {
     "title": "Fall Prevention: The Call Light",
@@ -109,7 +110,8 @@
         "hint": "Every staff member is responsible for call lights.",
         "explanation": "Answering promptly prevents residents from getting up alone and falling."
       }
-    ]
+    ],
+    "image": "/samples/call-light.gif"
   },
   {
     "title": "Fire Safety: RACE",
@@ -139,7 +141,8 @@
         "hint": "It's the A in PASS.",
         "explanation": "Aiming at the base puts out the fuel that is burning."
       }
-    ]
+    ],
+    "image": "/samples/fire-race.gif"
   },
   {
     "title": "Abuse Reporting: Your Duty",
@@ -343,7 +346,8 @@
         "hint": "It's the same temperature poultry is cooked to.",
         "explanation": "Reheating to 165°F within 2 hours kills bacteria that may have grown."
       }
-    ]
+    ],
+    "image": "/samples/food-danger-zone.gif"
   },
   {
     "title": "Residents Who Self-Administer Medications",
@@ -419,7 +423,8 @@
         "hint": "Redness that doesn't fade can be the first stage of a pressure injury.",
         "explanation": "Early reporting lets the nurse start treatment before the skin breaks down."
       }
-    ]
+    ],
+    "image": "/samples/reposition.gif"
   },
   {
     "title": "Culture: Greet Every Resident by Name",

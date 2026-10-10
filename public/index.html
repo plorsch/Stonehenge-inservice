@@ -485,7 +485,8 @@
   function showResult(r) {
     const more = s.idx < s.items.length - 1;
     $('result-title').textContent = r.firstTryCorrect ? 'Correct!' : `That's right.`;
-    $('result-sub').textContent = more ? 'Your answer has been recorded. You have more to finish.' : `Thank you, ${s.who.firstName}. Your in-service has been recorded.`;
+    $('result-sub').textContent = more ? 'You have more to finish.' : '';
+    $('result-sub').hidden = !more;
     $('result-explain').innerHTML = r.explanation ? escapeHtml(r.explanation) : '';
     $('result-explain').hidden = !r.explanation;
     $('result-next').textContent = more ? 'Next' : 'Done';
