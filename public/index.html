@@ -35,6 +35,11 @@
   .brand { font-weight: 700; font-size: 20px; color: var(--brand); display: flex; align-items: center; }
   .brand .logo { height: 58px; width: auto; display: block; }
   .brand-emoji { font-size: 34px; margin-left: 14px; line-height: 1; }
+  .brand-emoji.left { margin: 0 14px 0 0; display: none; }
+  /* Home screen: logo centered between two decorations */
+  body.on-home header { justify-content: center; }
+  body.on-home .who { display: none; }
+  body.on-home .brand-emoji.left:not([hidden]) { display: inline; }
   .end-logo { display: block; width: 260px; max-width: 70%; margin: 0 auto 18px; }
   .closing { font-size: 26px; font-weight: 700; color: var(--brand); margin: 22px 0 4px; line-height: 1.3; }
   .who { font-size: 16px; color: var(--muted); }
@@ -177,7 +182,7 @@
 <div id="decor" aria-hidden="true"></div>
 <div class="app">
   <header>
-    <div class="brand"><img src="logo.png" alt="" class="logo"><span class="brand-emoji" id="decor-emoji" aria-hidden="true" hidden></span><span id="facility" hidden>Stonehenge</span></div>
+    <div class="brand"><span class="brand-emoji left" id="decor-emoji-left" aria-hidden="true" hidden></span><img src="logo.png" alt="" class="logo"><span class="brand-emoji" id="decor-emoji" aria-hidden="true" hidden></span><span id="facility" hidden>Stonehenge</span></div>
     <div class="who" id="who-label"></div>
   </header>
   <main>
@@ -389,7 +394,9 @@
     document.body.className = document.body.className.replace(/\btint-\w+/g, '').trim();
     if (d && d.color && d.color !== 'none') document.body.classList.add('tint-' + d.color);
     const msg = d && d.message ? `${emoji[0] || ''} ${d.message} ${emoji[1] || emoji[0] || ''}`.trim() : '';
-    $('decor-emoji').textContent = emoji[0] || '';
+    $('decor-emoji-left').textContent = emoji[0] || '';
+    $('decor-emoji-left').hidden = !emoji.length;
+    $('decor-emoji').textContent = emoji[1] || emoji[0] || '';
     $('decor-emoji').hidden = !emoji.length;
     $('decor-msg').textContent = msg;
     $('decor-msg').hidden = !msg;
@@ -410,7 +417,9 @@
   }
 
   // ----- announcements, birthdays, anniversaries -----
-  const celebLine = c => c.type === 'birthday' ? `🎂 Happy birthday, ${c.name}!` : `🎉 ${c.name}: ${c.years} year${c.years === 1 ? '' : 's'} with us today!`;
+  const BDAY = ['🎉', '🎂', '🥳', '🎈', '🎊'];
+  const bday = () => BDAY[Math.floor(Math.random() * BDAY.length)];
+  const celebLine = c => c.type === 'birthday' ? `${bday()} Happy birthday, ${c.name}!` : `🎉 ${c.name}: ${c.years} year${c.years === 1 ? '' : 's'} with us today!`;
   // Everything for this person: all-staff and their department's announcements, then today's celebrations (not their own).
   function newsFor(who) {
     const dept = who && who.department;
@@ -422,7 +431,7 @@
     const mine = who && who.employeeId && (s.config.celebrations || []).filter(c => c.id === who.employeeId);
     if (!mine || !mine.length) return '';
     const first = (who.name || '').split(' ')[0];
-    return mine.map(c => c.type === 'birthday' ? `🎂 Happy birthday, ${first}!` : `🎉 Happy ${c.years}-year anniversary, ${first}! Thank you for being here.`).join(' ');
+    return mine.map(c => c.type === 'birthday' ? `${bday()} Happy birthday, ${first}!` : `🎉 Happy ${c.years}-year anniversary, ${first}! Thank you for being here.`).join(' ');
   }
   // Home screen: all-staff items only, one at a time.
   let newsIdx = 0;
