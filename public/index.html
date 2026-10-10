@@ -103,6 +103,7 @@
   .required-banner { background: var(--req-soft); color: var(--req); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 17px; }
   .required-banner strong { display: block; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; }
   .lesson { font-size: 20px; line-height: 1.6; }
+  .lesson-img { display: block; max-width: 100%; max-height: 40vh; margin: 4px auto 18px; border-radius: 14px; object-fit: contain; }
   .lesson p { margin: 0 0 14px; }
   .lesson ul { margin: 0 0 14px; padding-left: 26px; }
   .lesson li { margin-bottom: 6px; }
@@ -217,6 +218,7 @@
         <div class="required-banner" id="lesson-required" hidden></div>
         <div class="kicker" id="lesson-kicker"></div>
         <h2 id="lesson-title"></h2>
+        <img class="lesson-img" id="lesson-img" alt="" hidden>
         <div class="lesson" id="lesson-body"></div>
         <div class="row">
           <button class="btn secondary" data-action="home">Cancel</button>
@@ -405,6 +407,8 @@
     $('lesson-kicker').textContent = (it.kind === 'scheduled' ? 'Topic of the week' : (it.topic.category || 'Lesson')) + (it.kind === 'required' ? '' : multi);
     $('lesson-title').textContent = it.topic.title;
     $('lesson-body').innerHTML = formatLesson(it.topic.lesson);
+    $('lesson-img').hidden = !it.topic.image;
+    if (it.topic.image) $('lesson-img').src = it.topic.image; else $('lesson-img').removeAttribute('src');
     $('tryagain').hidden = true;
     $('question-kicker').textContent = 'Question' + multi;
     renderQuestion();

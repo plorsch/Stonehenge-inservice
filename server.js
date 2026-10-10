@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const ROOT = __dirname;
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const MEDIA_DIR = path.join(DATA_DIR, 'media');   // pictures and GIFs uploaded for topics
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const SEED_FILE = path.join(ROOT, 'seed-topics.json');
@@ -214,6 +215,12 @@ function validateTopicInput(input) {
     inRotation: input.inRotation !== false,
     questions: []
   };
+  // Optional picture or GIF shown above the lesson: an uploaded file (/media/...) or an https link.
+  // Left out entirely when the input has no image field, so a spreadsheet import keeps the existing picture.
+  if ('image' in input) {
+    const img = cleanText(input.image, 1000);
+    t.image = /^\/media\/[\w-]+\.(png|jpe?g|gif|webp)$/i.test(img) || /^https:\/\/\S+$/i.test(img) ? img : '';
+  }
   if (!t.title) errors.push('Title is required.');
   if (!t.lesson) errors.push('Lesson text is required.');
   const qs = Array.isArray(input.questions) ? input.questions.slice(0, 30) : [];
@@ -340,7 +347,7 @@ function pendingRequiredFor(emp) {
 function kioskItem(topic, employeeId, extra) {
   const q = pickQuestion(topic, employeeId);
   return Object.assign({
-    topic: { id: topic.id, title: topic.title, category: topic.category, lesson: topic.lesson },
+    topic: { id: topic.id, title: topic.title, category: topic.category, lesson: topic.lesson, image: topic.image || '' },
     question: { id: q.id, type: q.type, text: q.text, answers: shuffle([...q.correctAnswers, ...q.wrongAnswers]) }
   }, extra);
 }
@@ -384,7 +391,8 @@ function shortName(name) {
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
+  '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp'
 };
 
 function send(res, status, body, type = 'application/json', extra = {}) {
@@ -747,6 +755,19 @@ async function adminRoutes(req, res, p, m, url) {
     }
   }
 
+  if (m === 'POST' && p === '/api/admin/media') {
+    // A picture or GIF for a topic, sent as a data: URL from the admin page.
+    const b = await readBody(req, 14e6);
+    const mm = String(b.dataUrl || '').match(/^data:image\/(png|jpeg|gif|webp);base64,([A-Za-z0-9+/=]+)$/);
+    if (!mm) return send(res, 400, { error: 'Please choose a PNG, JPG, GIF or WebP picture.' });
+    const data = Buffer.from(mm[2], 'base64');
+    if (data.length > 10e6) return send(res, 400, { error: 'That picture is over 10 MB. Please use a smaller one.' });
+    fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    const file = `${newId()}.${mm[1] === 'jpeg' ? 'jpg' : mm[1]}`;
+    fs.writeFileSync(path.join(MEDIA_DIR, file), data);
+    return send(res, 200, { url: `/media/${file}` });
+  }
+
   if (m === 'PUT' && p === '/api/admin/settings') {
     const b = await readBody(req);
     const s = db.settings;
@@ -839,6 +860,14 @@ async function handle(req, res) {
     return send(res, 404, { error: 'Not found' });
   }
   if (m === 'GET' && /^\/[\w.-]+\.(js|css|png|svg|ico)$/.test(p) && !p.startsWith('/admin')) return serveStatic(res, p.slice(1));
+  const media = m === 'GET' && p.match(/^\/media\/([\w-]+\.(png|jpe?g|gif|webp))$/i);
+  if (media) {
+    // Uploaded files get a new name each time, so the iPad can cache them for good.
+    return fs.readFile(path.join(MEDIA_DIR, media[1]), (err, data) => {
+      if (err) return send(res, 404, 'Not found', 'text/plain');
+      send(res, 200, data, MIME[path.extname(media[1]).toLowerCase()], { 'Cache-Control': 'public, max-age=31536000, immutable' });
+    });
+  }
 
   if (p === '/admin' || p.startsWith('/admin/') || p === '/admin.js' || p.startsWith('/api/admin/')) {
     if (!requireAdmin(req, res)) return;

@@ -320,6 +320,9 @@
     $('f-title').value = t ? t.title : '';
     $('f-category').value = t ? t.category || '' : '';
     $('f-lesson').value = t ? t.lesson : '';
+    $('f-image').value = t ? t.image || '' : '';
+    $('f-image-file').value = ''; $('f-image-status').textContent = '';
+    updateImagePreview();
     $('f-rotation').checked = t ? !!t.inRotation : true;
     renderChecks($('f-depts'), t ? t.departments : []);
     $('f-questions').innerHTML = '';
@@ -329,6 +332,25 @@
     $('editor').showModal();
     $('f-title').focus();
   }
+  function updateImagePreview() {
+    const v = $('f-image').value.trim();
+    $('f-image-preview').style.display = v ? 'block' : 'none';
+    if (v) $('f-image-preview').src = v;
+  }
+  $('f-image').addEventListener('input', updateImagePreview);
+  $('f-image-clear').addEventListener('click', () => { $('f-image').value = ''; $('f-image-file').value = ''; updateImagePreview(); });
+  $('f-image-file').addEventListener('change', async () => {
+    const f = $('f-image-file').files[0];
+    if (!f) return;
+    if (f.size > 10e6) { $('f-image-status').textContent = 'That picture is over 10 MB. Please use a smaller one.'; return; }
+    $('f-image-status').textContent = 'Uploading...';
+    try {
+      const dataUrl = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = bad; r.readAsDataURL(f); });
+      const r = await post('/api/admin/media', { dataUrl });
+      $('f-image').value = r.url; updateImagePreview();
+      $('f-image-status').textContent = 'Uploaded. Click Save to keep it.';
+    } catch (err) { $('f-image-status').textContent = err.message; }
+  });
   function updateLessonPreview() { $('f-preview').innerHTML = formatLesson($('f-lesson').value); }
   $('f-lesson').addEventListener('input', updateLessonPreview);
   $('f-add-q').addEventListener('click', () => addQuestionCard());
@@ -338,7 +360,7 @@
   const splitLines = v => v.split('\n').map(x => x.trim()).filter(Boolean);
   async function saveTopic(draft) {
     const body = {
-      draft, title: $('f-title').value, category: $('f-category').value, lesson: $('f-lesson').value,
+      draft, title: $('f-title').value, category: $('f-category').value, lesson: $('f-lesson').value, image: $('f-image').value.trim(),
       departments: checked($('f-depts')), inRotation: $('f-rotation').checked,
       questions: [...$('f-questions').children].map(c => ({
         id: c.dataset.qid || undefined,
@@ -428,7 +450,8 @@
         hint: findCol(header, [/^hint$/i]),
         explanation: findCol(header, [/^explanation$/i]),
         lastUsed: findCol(header, [/^last.?used/i]),
-        status: findCol(header, [/^status$/i])
+        status: findCol(header, [/^status$/i]),
+        image: findCol(header, [/^(image|picture|gif)/i])
       };
       if (col.title < 0 || col.question < 0) throw new Error('The first row needs column headings, including "Topic title" and "Question".');
       const get = (r, k) => col[k] >= 0 ? String(r[col[k]] || '').trim() : '';
@@ -443,6 +466,7 @@
           byTitle.set(title.toLowerCase(), t);
         }
         if (!t.lesson && get(r, 'lesson')) t.lesson = get(r, 'lesson');
+        if (col.image >= 0 && !t.image && get(r, 'image')) t.image = get(r, 'image');
         const lu = get(r, 'lastUsed').slice(0, 10);
         if (/^\d{4}-\d{2}-\d{2}$/.test(lu) && lu > t.lastUsedDate) t.lastUsedDate = lu;
         const text = get(r, 'question');

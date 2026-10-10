@@ -310,6 +310,14 @@
       <label class="block" for="f-lesson">Lesson <span class="hint">keep it short. Blank line = new paragraph, "- " starts a bullet, **word** makes bold</span></label>
       <textarea id="f-lesson" rows="8" required></textarea>
       <details style="margin-top:6px"><summary class="muted small" style="cursor:pointer">Preview lesson</summary><div class="lesson-preview" id="f-preview"></div></details>
+      <label class="block">Picture or GIF <span class="hint">optional, shown above the lesson. Upload one, or paste a link to an image that starts with https://</span></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="file" id="f-image-file" accept="image/png,image/jpeg,image/gif,image/webp">
+        <input type="text" id="f-image" placeholder="https://..." style="flex:1;min-width:200px">
+        <button type="button" class="btn subtle" id="f-image-clear">Remove</button>
+      </div>
+      <div class="small muted" id="f-image-status"></div>
+      <img id="f-image-preview" alt="" style="display:none;max-width:100%;max-height:220px;margin-top:8px;border-radius:10px">
       <label class="block">Questions <span class="hint">add several so staff get a different one each shift</span></label>
       <div id="f-questions"></div>
       <button type="button" class="btn ghost" id="f-add-q">+ Add question</button>
