@@ -881,6 +881,8 @@
         <td><button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
     }).join('') || '<tr><td colspan="4" class="muted">No announcements yet.</td></tr>';
     $('an-celebrate').checked = state.settings.celebrations !== false;
+    if (document.activeElement !== $('an-bday-msgs')) $('an-bday-msgs').value = (state.settings.birthdayMessages || []).join('\n');
+    if (document.activeElement !== $('an-anniv-msgs')) $('an-anniv-msgs').value = (state.settings.anniversaryMessages || []).join('\n');
     const up = state.upcomingCelebrations || [];
     $('an-upcoming').innerHTML = up.length
       ? up.map(c => `<div>${fmtDate(c.date)}: ${c.type === 'birthday' ? '🎂' : '🎉'} ${escapeHtml(c.name)}${c.department ? ` <span class="muted">(${escapeHtml(c.department)})</span>` : ''} ${c.type === 'birthday' ? 'birthday' : `${c.years} year${c.years === 1 ? '' : 's'} at work`}</div>`).join('')
@@ -901,6 +903,12 @@
     if (!b || !confirm('Remove this announcement?')) return;
     try { await api('/api/admin/announcements/' + b.dataset.delAnn, { method: 'DELETE' }); toast('Removed'); await refresh(); }
     catch (err) { fail(err); }
+  });
+  $('an-save-msgs').addEventListener('click', async () => {
+    try {
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ birthdayMessages: splitLines($('an-bday-msgs').value), anniversaryMessages: splitLines($('an-anniv-msgs').value) }) });
+      toast('Messages saved'); await refresh();
+    } catch (err) { fail(err); }
   });
   $('an-celebrate').addEventListener('change', async () => {
     try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ celebrations: $('an-celebrate').checked }) }); toast('Saved'); await refresh(); }

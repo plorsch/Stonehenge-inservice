@@ -431,7 +431,11 @@
     const mine = who && who.employeeId && (s.config.celebrations || []).filter(c => c.id === who.employeeId);
     if (!mine || !mine.length) return '';
     const first = (who.name || '').split(' ')[0];
-    return mine.map(c => c.type === 'birthday' ? `${bday()} Happy birthday, ${first}!` : `🎉 Happy ${c.years}-year anniversary, ${first}! Thank you for being here.`).join(' ');
+    const pick = (list, fallback) => { const l = (list || []).filter(Boolean); return l.length ? l[Math.floor(Math.random() * l.length)] : fallback; };
+    return mine.map(c => c.type === 'birthday'
+      ? `${bday()} ${pick(s.config.birthdayMessages, 'Happy birthday, {name}!')}`
+      : `🎉 ${pick(s.config.anniversaryMessages, 'Happy {years}-year anniversary, {name}!')}`)
+      .map(t => t.replace(/\{name\}/gi, first).replace(/\{years\}/gi, (mine.find(c => c.type === 'anniversary') || {}).years || '')).join(' ');
   }
   // Home screen: all-staff items only, one at a time.
   let newsIdx = 0;
