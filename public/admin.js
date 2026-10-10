@@ -845,6 +845,7 @@
     $('set-leaders').value = Object.entries(s.leaders || {}).map(([d, l]) => `${d}: ${l}`).join('\n');
     $('set-unlisted').checked = !!s.allowUnlisted;
     $('set-closing').value = (s.closingMessages || []).join('\n');
+    $('set-news-seconds').value = s.newsSeconds || 3;
     $('pw-env').hidden = !state.passwordFromEnv;
     renderDecor();
     $('pw-form').hidden = !!state.passwordFromEnv;
@@ -856,7 +857,8 @@
         departments: splitLines($('set-depts').value),
         leaders: Object.fromEntries(splitLines($('set-leaders').value).map(l => l.split(/\s*[:=]\s*/)).filter(x => x.length > 1 && x[0] && x[1])),
         allowUnlisted: $('set-unlisted').checked,
-        closingMessages: splitLines($('set-closing').value)
+        closingMessages: splitLines($('set-closing').value),
+        newsSeconds: Number($('set-news-seconds').value)
       }) });
       $('sc-depts').dataset.init = ''; $('rq-depts').dataset.init = ''; $('an-depts').dataset.init = '';
       toast('Settings saved');

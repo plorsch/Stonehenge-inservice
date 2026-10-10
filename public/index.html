@@ -379,7 +379,7 @@
       $('unlisted-link').hidden = !s.config.allowUnlisted;
       renderDepts();
       renderDecor(s.config.decor);
-      rotateNews();
+      rotateNews(); scheduleNews();
     } catch { /* keep last known config */ }
   }
 
@@ -446,7 +446,14 @@
     el.classList.add('fade');
     setTimeout(() => { el.textContent = text; el.classList.remove('fade'); }, el.textContent ? 400 : 0);
   }
-  setInterval(rotateNews, 7000);
+  // Restarts whenever the seconds setting changes.
+  let newsTimer = null, newsEvery = 0;
+  function scheduleNews() {
+    const sec = Math.max(1, Number(s.config.newsSeconds) || 3);
+    if (sec === newsEvery) return;
+    newsEvery = sec; clearInterval(newsTimer);
+    newsTimer = setInterval(rotateNews, sec * 1000);
+  }
 
   // ----- keypad -----
   function renderPin() {

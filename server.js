@@ -113,6 +113,7 @@ function defaultSettings() {
     leaders: {},              // { department: leader name }, for the Clock-in check follow-up lists
     decor: defaultDecor(),    // home screen decorations, one set per month
     celebrations: true,       // show staff birthdays and work anniversaries on the kiosk
+    newsSeconds: 3,           // how long each announcement shows in the home screen banner
     // Sign-off lines shown on the kiosk's final screen; one is picked at random each time.
     closingMessages: ["Have a great shift!", "Thank you for what you do for our residents!", "Go give someone a shout out today, would ya?", "You make a difference!", "Our residents are lucky to have you.", "Thanks for learning something new today.", "Small moments of kindness add up. Thank you!", "You're the reason this place feels like home.", "Go make someone smile today!", "Teamwork makes the dream work. Have a great one!", "Thanks for showing up for our residents today.", "Your care matters more than you know.", "Proud to work alongside you!", "Take a deep breath. You've got this!", "Remember to drink some water today, too!", "Someone's day is better because you're here.", "Thanks for being part of the Stonehenge family.", "Kindness is contagious. Spread some today!", "You did it! Now go be awesome.", "Every resident you greet by name feels at home. Thank you!", "Thanks for keeping our residents safe.", "High five! Have a wonderful shift."],
     dailyPicks: {},           // { department: { date, topicId } }
@@ -567,7 +568,7 @@ async function kioskRoutes(req, res, p, m) {
     const month = Number(new URL(req.url, 'http://localhost').searchParams.get('month')) || new Date().getMonth() + 1;
     const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
     return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages, decor,
-      announcements: todaysAnnouncements(), celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
+      announcements: todaysAnnouncements(), newsSeconds: s.newsSeconds || 3, celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
   }
 
   // Step 1: last 4 of Workday ID -> who might this be?
@@ -983,6 +984,7 @@ async function adminRoutes(req, res, p, m, url) {
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
     if ('celebrations' in b) s.celebrations = !!b.celebrations;
+    if ('newsSeconds' in b) { const n = Number(b.newsSeconds); if (n >= 1 && n <= 60) s.newsSeconds = Math.round(n); }
     if (Array.isArray(b.closingMessages)) s.closingMessages = cleanList(b.closingMessages, 200, 100);
     if (b.decor && typeof b.decor === 'object' && Array.isArray(b.decor.months) && b.decor.months.length === 12) {
       s.decor = { on: !!b.decor.on, months: b.decor.months.map(x => ({
