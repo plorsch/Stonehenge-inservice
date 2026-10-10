@@ -11,6 +11,7 @@
     if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
     return data;
   }
+  const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}) });
   function toast(msg) {
     const t = $('toast');
@@ -161,7 +162,8 @@
       const pct = total ? Math.round(100 * q.doneCount / total) : 0;
       return `<tr class="${q.active ? '' : 'dim'}">
         <td>${t ? `<a href="#" data-preview="${t.id}">${escapeHtml(t.title)}</a>` : 'Deleted topic'} ${q.active ? '<span class="pill req">Open</span>' : '<span class="pill">Closed</span>'}
-          ${q.reason ? `<div class="muted small">${escapeHtml(q.reason)}</div>` : ''}</td>
+          ${q.reason ? `<div class="muted small">${escapeHtml(q.reason)}</div>` : ''}
+          ${q.endDate ? `<div class="small ${q.endDate < todayStr() ? 'muted' : ''}">${q.endDate < todayStr() ? 'Ended' : 'Shows until'} ${escapeHtml(q.endDate)}</div>` : ''}</td>
         <td>${whoLabel(q.departments)}</td>
         <td style="white-space:nowrap">${fmtWhen(q.createdAt)}</td>
         <td><div class="progress-bar"><span style="width:${pct}%"></span></div><div class="small">${q.doneCount} of ${total} done</div></td>
@@ -177,8 +179,8 @@
     const t = topicById($('rq-topic').value);
     if (t && !confirm(`Require "${t.title}" for ${d.length ? d.join(', ') : 'all staff'}? Each person will get it the next time they clock in.`)) return;
     try {
-      await post('/api/admin/required', { topicId: $('rq-topic').value, departments: d, reason: $('rq-reason').value });
-      $('rq-reason').value = '';
+      await post('/api/admin/required', { topicId: $('rq-topic').value, departments: d, reason: $('rq-reason').value, endDate: $('rq-end').value || null });
+      $('rq-reason').value = ''; $('rq-end').value = '';
       toast('Required education added');
       await refresh();
     } catch (err) { $('rq-error').textContent = err.message; }
@@ -667,6 +669,7 @@
     $('set-facility').value = s.facilityName || '';
     $('set-depts').value = depts().join('\n');
     $('set-unlisted').checked = !!s.allowUnlisted;
+    $('set-closing').value = (s.closingMessages || []).join('\n');
     $('pw-env').hidden = !state.passwordFromEnv;
     $('pw-form').hidden = !!state.passwordFromEnv;
   }
@@ -675,7 +678,8 @@
       await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({
         facilityName: $('set-facility').value,
         departments: splitLines($('set-depts').value),
-        allowUnlisted: $('set-unlisted').checked
+        allowUnlisted: $('set-unlisted').checked,
+        closingMessages: splitLines($('set-closing').value)
       }) });
       $('sc-depts').dataset.init = ''; $('rq-depts').dataset.init = '';
       toast('Settings saved');

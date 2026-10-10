@@ -170,6 +170,8 @@
           <select id="rq-topic" style="width:100%"></select>
           <label class="block" for="rq-reason">Message shown to staff <span class="hint">optional</span></label>
           <input type="text" id="rq-reason" style="width:100%" placeholder="e.g. Please review after a recent fall">
+          <label class="block" for="rq-end">Show until <span class="hint">optional; after this date it stops appearing for anyone who hasn't done it</span></label>
+          <input type="date" id="rq-end">
         </div>
         <div>
           <label class="block">Who must complete it <span class="hint">none ticked = all staff</span></label>
@@ -269,6 +271,8 @@
         <input type="text" id="set-facility" style="width:100%">
         <label class="block" for="set-depts">Departments <span class="hint">one per line</span></label>
         <textarea id="set-depts" rows="8"></textarea>
+        <label class="block" for="set-closing">End-screen messages <span class="hint">one per line; the iPad shows one at random after each in-service</span></label>
+        <textarea id="set-closing" rows="10"></textarea>
         <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px"><input type="checkbox" id="set-unlisted" style="margin-top:4px"> <span>Let staff who aren't on the roster type their name instead<br><span class="hint">They are marked "not on roster" in responses and do not get required education.</span></span></label>
         <div style="margin-top:14px"><button class="btn" id="save-settings">Save</button></div>
       </div>

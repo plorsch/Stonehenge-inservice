@@ -75,6 +75,8 @@ function defaultSettings() {
     cultureDay: 5,
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
+    // Sign-off lines shown on the kiosk's final screen; one is picked at random each time.
+    closingMessages: ["Have a great shift!", "Thank you for what you do for our residents!", "Go give someone a shout out today, would ya?", "You make a difference!", "Our residents are lucky to have you.", "Thanks for learning something new today.", "Small moments of kindness add up. Thank you!", "You're the reason this place feels like home.", "Go make someone smile today!", "Teamwork makes the dream work. Have a great one!", "Thanks for showing up for our residents today.", "Your care matters more than you know.", "Proud to work alongside you!", "Take a deep breath. You've got this!", "Remember to drink some water today, too!", "Someone's day is better because you're here.", "Thanks for being part of the Stonehenge family.", "Kindness is contagious. Spread some today!", "You did it! Now go be awesome.", "Every resident you greet by name feels at home. Thank you!", "Thanks for keeping our residents safe.", "High five! Have a wonderful shift."],
     dailyPicks: {},           // { department: { date, topicId } }
     weeklyPicks: {}           // { department or 'culture|department': { week, topicId } }
   };
@@ -340,7 +342,7 @@ function requiredDoneBy(employeeId, reqId) {
 
 function pendingRequiredFor(emp) {
   return db.required
-    .filter(q => q.active && isLive(findTopic(q.topicId)) && forDepartment(q.departments, emp.department) && !requiredDoneBy(emp.id, q.id))
+    .filter(q => q.active && (!q.endDate || q.endDate >= today()) && isLive(findTopic(q.topicId)) && forDepartment(q.departments, emp.department) && !requiredDoneBy(emp.id, q.id))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
@@ -463,7 +465,7 @@ function filterResponses(q) {
 async function kioskRoutes(req, res, p, m) {
   if (m === 'GET' && p === '/api/kiosk/config') {
     const s = db.settings;
-    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted });
+    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages });
   }
 
   // Step 1: last 4 of Workday ID -> who might this be?
@@ -736,7 +738,8 @@ async function adminRoutes(req, res, p, m, url) {
   // Required education
   if (m === 'POST' && p === '/api/admin/required') {
     const b = await readBody(req);
-    const q = { id: newId(), topicId: cleanText(b.topicId, 20), departments: cleanList(b.departments), reason: cleanText(b.reason, 300), active: true, createdAt: nowIso(), closedAt: null };
+    const q = { id: newId(), topicId: cleanText(b.topicId, 20), departments: cleanList(b.departments), reason: cleanText(b.reason, 300), endDate: cleanDate(b.endDate), active: true, createdAt: nowIso(), closedAt: null };
+    if (q.endDate && q.endDate < today()) return send(res, 400, { error: 'The "show until" date has already passed.' });
     if (!isLive(findTopic(q.topicId))) return send(res, 400, { error: 'Choose an active topic.' });
     db.required.push(q);
     saveDb();
@@ -776,6 +779,7 @@ async function adminRoutes(req, res, p, m, url) {
     if ('facilityName' in b) s.facilityName = cleanText(b.facilityName, 100) || 'Stonehenge';
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
+    if (Array.isArray(b.closingMessages)) s.closingMessages = cleanList(b.closingMessages, 200, 100);
     saveDb();
     return send(res, 200, { settings: s });
   }
