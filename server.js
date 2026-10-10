@@ -19,6 +19,8 @@ const SEED_STAFF_FILE = path.join(ROOT, 'seed-staff.json');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const BACKUPS_TO_KEEP = 60;
 const DB_VERSION = 2;
+// Changes with every deploy; open kiosk pages reload themselves when it does.
+const BUILD_ID = process.env.RENDER_GIT_COMMIT || String(Date.now());
 
 // ---------- Small helpers ----------
 
@@ -500,7 +502,7 @@ function filterResponses(q) {
 async function kioskRoutes(req, res, p, m) {
   if (m === 'GET' && p === '/api/kiosk/config') {
     const s = db.settings;
-    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages });
+    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages, build: BUILD_ID });
   }
 
   // Step 1: last 4 of Workday ID -> who might this be?

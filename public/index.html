@@ -317,7 +317,10 @@
 
   async function loadConfig() {
     try {
-      s.config = await api('/api/kiosk/config');
+      const cfg = await api('/api/kiosk/config');
+      // A new version of the site was deployed: reload so the iPad picks it up without anyone touching it.
+      if (s.config && s.config.build && cfg.build !== s.config.build && $('s-home').classList.contains('active')) return location.reload();
+      s.config = cfg;
       $('facility').textContent = s.config.facilityName || 'Stonehenge';
       $('unlisted-link').hidden = !s.config.allowUnlisted;
       renderDepts();
@@ -516,7 +519,7 @@
   document.addEventListener('keydown', bumpIdle, true);
 
   loadConfig();
-  setInterval(() => { if ($('s-home').classList.contains('active')) loadConfig(); }, 5 * 60000);
+  setInterval(() => { if ($('s-home').classList.contains('active')) loadConfig(); }, 60000);
   setInterval(() => { if ($('s-home').classList.contains('active') && Date.now() - loadedAt > RELOAD_EVERY_MS) location.reload(); }, 10 * 60000);
 })();
 </script>
