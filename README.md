@@ -107,7 +107,7 @@ Add a birthday (month and day only) and hire date on the Staff tab, or as Birthd
 
 ### Home screen decor and forgotten codes
 
-- **Settings → Home screen decor** sets decorations, a message and a background color for each month. The iPad switches on the 1st. Use **Preview** to see any month.
+- **Settings → Home screen decor** sets decorations, a message and a background color for each month. The color and the first decoration stay on every screen (the color as the background, the decoration in the header). The iPad switches on the 1st. Use **Preview** to see any month.
 - **Forgot your code?** under the keypad lets staff type their first and last name to see their last 4, then tap their name to start. It needs both names and shows at most 3 people.
 
 ## 4. Data and backups
