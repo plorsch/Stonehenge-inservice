@@ -99,6 +99,11 @@ The kiosk can't see the time clock, so the check works from your export. Export 
 - The default view lists people to follow up with, grouped by leader: shifts missed, dates, and who never did it. Set leaders on the Settings tab ("Dietary: Andi"), or import the roster from a sheet with a Leader column.
 - The export is only compared, never saved.
 
+### Home screen decor and forgotten codes
+
+- **Settings → Home screen decor** sets decorations, a message and a background color for each month. The iPad switches on the 1st. Use **Preview** to see any month.
+- **Forgot your code?** under the keypad lets staff type their first and last name to see their last 4, then tap their name to start. It needs both names and shows at most 3 people.
+
 ## 4. Data and backups
 
 Everything is in `data/db.json` (or in `DATA_DIR` on a hosting service). A copy is saved automatically once a day in `backups/`, and the last 60 days are kept. On the Settings tab you can:

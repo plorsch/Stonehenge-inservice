@@ -839,6 +839,7 @@
     $('set-unlisted').checked = !!s.allowUnlisted;
     $('set-closing').value = (s.closingMessages || []).join('\n');
     $('pw-env').hidden = !state.passwordFromEnv;
+    renderDecor();
     $('pw-form').hidden = !!state.passwordFromEnv;
   }
   $('save-settings').addEventListener('click', async () => {
@@ -852,6 +853,31 @@
       }) });
       $('sc-depts').dataset.init = ''; $('rq-depts').dataset.init = '';
       toast('Settings saved');
+      await refresh();
+    } catch (err) { fail(err); }
+  });
+  // ---------- home screen decor ----------
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const DECOR_COLORS = ['none', 'blue', 'pink', 'green', 'purple', 'yellow', 'red', 'orange'];
+  function renderDecor() {
+    const d = state.settings.decor || { on: false, months: [] };
+    $('decor-on').checked = !!d.on;
+    const now = new Date().getMonth();
+    $('decor-rows').innerHTML = MONTHS.map((name, i) => {
+      const x = d.months[i] || {};
+      return `<tr${i === now ? ' style="background:var(--brand-soft,#e4f0f5)"' : ''}><td><strong>${name}</strong>${i === now ? '<div class="muted small">now</div>' : ''}</td>
+        <td><input type="text" data-decor="emoji" value="${escapeHtml(x.emoji || '')}" style="width:150px;font-size:20px"></td>
+        <td><input type="text" data-decor="message" value="${escapeHtml(x.message || '')}" style="width:100%;min-width:220px"></td>
+        <td><select data-decor="color">${DECOR_COLORS.map(c => `<option${c === (x.color || 'none') ? ' selected' : ''}>${c}</option>`).join('')}</select></td>
+        <td><a href="/?month=${i + 1}" target="_blank" rel="noopener">Preview</a></td></tr>`;
+    }).join('');
+  }
+  $('save-decor').addEventListener('click', async () => {
+    const months = [...$('decor-rows').querySelectorAll('tr')].map(tr => ({
+      emoji: tr.querySelector('[data-decor=emoji]').value, message: tr.querySelector('[data-decor=message]').value, color: tr.querySelector('[data-decor=color]').value }));
+    try {
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ decor: { on: $('decor-on').checked, months } }) });
+      toast('Decor saved. The iPad picks it up within a few minutes.');
       await refresh();
     } catch (err) { fail(err); }
   });

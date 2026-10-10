@@ -66,6 +66,25 @@ const sameText = (a, b) => String(a).trim().toLowerCase() === String(b).trim().t
 
 // ---------- Storage ----------
 
+// Home screen decorations by month (January first). Emoji float behind the keypad; the message shows above it.
+const DECOR_COLORS = ['none', 'blue', 'pink', 'green', 'purple', 'yellow', 'red', 'orange'];
+function defaultDecor() {
+  return { on: true, months: [
+    { emoji: '❄️ ⛄ 🧤', message: 'Happy New Year! Stay warm out there.', color: 'blue' },
+    { emoji: '❤️ 💕 🌹', message: 'Happy Valentine\'s month!', color: 'pink' },
+    { emoji: '🍀 ☘️ 🌈', message: 'Lucky to work with you!', color: 'green' },
+    { emoji: '🌷 🐣 🌸', message: 'Happy spring!', color: 'purple' },
+    { emoji: '🌼 🐝 🌻', message: 'Spring is in full bloom!', color: 'yellow' },
+    { emoji: '☀️ 🌻 🕶️', message: 'Hello, summer!', color: 'yellow' },
+    { emoji: '🎆 ⭐ 🇺🇸', message: 'Happy Independence Day month!', color: 'red' },
+    { emoji: '🍉 ☀️ 🌊', message: 'Stay cool and drink your water!', color: 'blue' },
+    { emoji: '🍎 🍂 🌻', message: 'Hello, fall!', color: 'orange' },
+    { emoji: '🎃 🍂 🍁', message: 'Happy fall, y\'all!', color: 'orange' },
+    { emoji: '🦃 🍁 🥧', message: 'Thankful for you!', color: 'orange' },
+    { emoji: '🎄 ❄️ 🎁', message: 'Happy holidays!', color: 'red' }
+  ] };
+}
+
 function defaultSettings() {
   return {
     facilityName: 'Stonehenge',
@@ -78,6 +97,7 @@ function defaultSettings() {
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
     leaders: {},              // { department: leader name }, for the Clock-in check follow-up lists
+    decor: defaultDecor(),    // home screen decorations, one set per month
     // Sign-off lines shown on the kiosk's final screen; one is picked at random each time.
     closingMessages: ["Have a great shift!", "Thank you for what you do for our residents!", "Go give someone a shout out today, would ya?", "You make a difference!", "Our residents are lucky to have you.", "Thanks for learning something new today.", "Small moments of kindness add up. Thank you!", "You're the reason this place feels like home.", "Go make someone smile today!", "Teamwork makes the dream work. Have a great one!", "Thanks for showing up for our residents today.", "Your care matters more than you know.", "Proud to work alongside you!", "Take a deep breath. You've got this!", "Remember to drink some water today, too!", "Someone's day is better because you're here.", "Thanks for being part of the Stonehenge family.", "Kindness is contagious. Spread some today!", "You did it! Now go be awesome.", "Every resident you greet by name feels at home. Thank you!", "Thanks for keeping our residents safe.", "High five! Have a wonderful shift."],
     dailyPicks: {},           // { department: { date, topicId } }
@@ -503,7 +523,10 @@ function filterResponses(q) {
 async function kioskRoutes(req, res, p, m) {
   if (m === 'GET' && p === '/api/kiosk/config') {
     const s = db.settings;
-    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages, build: BUILD_ID });
+    // ?month=10 previews another month's decor from the admin page.
+    const month = Number(new URL(req.url, 'http://localhost').searchParams.get('month')) || new Date().getMonth() + 1;
+    const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
+    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages, decor, build: BUILD_ID });
   }
 
   // Step 1: last 4 of Workday ID -> who might this be?
@@ -895,6 +918,11 @@ async function adminRoutes(req, res, p, m, url) {
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
     if (Array.isArray(b.closingMessages)) s.closingMessages = cleanList(b.closingMessages, 200, 100);
+    if (b.decor && typeof b.decor === 'object' && Array.isArray(b.decor.months) && b.decor.months.length === 12) {
+      s.decor = { on: !!b.decor.on, months: b.decor.months.map(x => ({
+        emoji: cleanText(x && x.emoji, 60), message: cleanText(x && x.message, 100),
+        color: DECOR_COLORS.includes(x && x.color) ? x.color : 'none' })) };
+    }
     if (b.leaders && typeof b.leaders === 'object') {
       s.leaders = {};
       for (const [d, l] of Object.entries(b.leaders).slice(0, 50)) if (cleanText(d, 60) && cleanText(l, 60)) s.leaders[cleanText(d, 60)] = cleanText(l, 60);

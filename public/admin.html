@@ -344,6 +344,16 @@
         <div class="muted small">Replaces all current data with the backup file. A copy of the current data is saved first.</div>
         <div style="margin-top:8px"><input type="file" id="restore-file" accept=".json,application/json"></div>
       </div>
+      <div class="card" style="grid-column:1/-1">
+        <h2>Home screen decor</h2>
+        <div class="muted small">The iPad's home screen changes with the month: the decorations float in the background, the message shows above the keypad, and the color tints the screen. Separate decorations with spaces. Leave a month blank for no decor.</div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="decor-on"> Show seasonal decor</label>
+        <div class="table-wrap" style="margin-top:8px"><table>
+          <thead><tr><th>Month</th><th>Decorations</th><th>Message</th><th>Color</th><th></th></tr></thead>
+          <tbody id="decor-rows"></tbody>
+        </table></div>
+        <div style="margin-top:14px"><button class="btn" id="save-decor">Save decor</button></div>
+      </div>
     </div>
   </section>
 </main>
