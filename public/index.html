@@ -91,6 +91,9 @@
   .match .avatar { flex: none; width: 54px; height: 54px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 22px; font-weight: 700; }
   .match .nm { font-size: 24px; font-weight: 700; }
   .match .dp { color: var(--muted); font-size: 17px; }
+  .match .code { margin-left: auto; text-align: right; }
+  .match .code b { display: block; font-size: 34px; letter-spacing: 6px; color: var(--brand); }
+  .match .code small { color: var(--muted); font-size: 15px; }
   .match .go { margin-left: auto; color: var(--brand); font-weight: 700; font-size: 18px; white-space: nowrap; }
 
   label.field { display: block; font-weight: 650; margin: 0 0 8px; }
@@ -161,6 +164,7 @@
             <h1>Enter the last 4 digits of your Workday ID</h1>
             <div class="pin" id="pin"><span></span><span></span><span></span><span></span></div>
             <div class="error" id="pin-error"></div>
+            <button class="btn link" data-action="forgot">Forgot your code? Tap here</button>
           </div>
           <div>
             <div class="keypad" id="keypad">
@@ -193,6 +197,21 @@
         <p class="muted">Check the last 4 digits of your Workday ID and try again.</p>
         <div class="row"><button class="btn" data-action="home">Try again</button></div>
         <div id="unlisted-link" style="margin-top:10px"><button class="btn link" data-action="unlisted">I'm new or not in the system</button></div>
+      </div>
+    </section>
+
+    <!-- Forgot code: type name, see last 4 -->
+    <section class="screen" id="s-forgot">
+      <div class="card">
+        <div class="kicker">Forgot your code</div>
+        <h2>Type your first and last name</h2>
+        <input type="text" id="forgot-name" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+        <div class="error" id="forgot-error"></div>
+        <div id="forgot-matches"></div>
+        <div class="row">
+          <button class="btn secondary" data-action="home">Back</button>
+          <button class="btn" id="forgot-go">Find my code</button>
+        </div>
       </div>
     </section>
 
@@ -298,8 +317,8 @@
   }
   function goHome() {
     Object.assign(s, { pin: '', dept: '', who: null, items: [], idx: 0, answers: [], choice: null, responseId: null });
-    $('name').value = '';
-    ['pin-error', 'unlisted-error', 'question-error'].forEach(id => { $(id).textContent = ''; });
+    $('name').value = ''; $('forgot-name').value = ''; $('forgot-matches').innerHTML = '';
+    ['pin-error', 'unlisted-error', 'question-error', 'forgot-error'].forEach(id => { $(id).textContent = ''; });
     $('who-label').textContent = '';
     renderPin(); renderDepts();
     show('home');
@@ -366,6 +385,31 @@
   }
 
   $('matches').addEventListener('click', e => {
+    const b = e.target.closest('[data-emp]');
+    if (b) begin({ employeeId: b.dataset.emp });
+  });
+
+  // ----- forgot code -----
+  async function forgotLookup() {
+    if (s.busy) return;
+    $('forgot-error').textContent = ''; $('forgot-matches').innerHTML = '';
+    s.busy = true;
+    try {
+      const { matches } = await api('/api/kiosk/lookup', { name: $('forgot-name').value });
+      if (!matches.length) { $('forgot-error').textContent = "We couldn't find that name. Try your full first and last name, or ask your supervisor."; return; }
+      $('forgot-name').blur();
+      $('forgot-matches').innerHTML = '<p class="muted" style="margin:14px 0 10px">Your code is below. Tap your name to start.</p>' + matches.map(m => `
+        <button class="match" data-emp="${escapeHtml(m.id)}">
+          <span class="avatar">${escapeHtml(m.displayName[0] || '?')}</span>
+          <span><div class="nm">${escapeHtml(m.displayName)}</div><div class="dp">${escapeHtml(m.department || '')}</div></span>
+          <span class="code"><small>Your code</small><b>${escapeHtml(m.last4)}</b></span>
+        </button>`).join('');
+    } catch (err) { $('forgot-error').textContent = err.message; }
+    finally { s.busy = false; }
+  }
+  $('forgot-go').addEventListener('click', forgotLookup);
+  $('forgot-name').addEventListener('keydown', e => { if (e.key === 'Enter') forgotLookup(); });
+  $('forgot-matches').addEventListener('click', e => {
     const b = e.target.closest('[data-emp]');
     if (b) begin({ employeeId: b.dataset.emp });
   });
@@ -514,6 +558,7 @@
     if (act === 'home') goHome();
     if (act === 'lesson') show('lesson');
     if (act === 'unlisted') { renderDepts(); show('unlisted'); setTimeout(() => $('name').focus(), 250); }
+    if (act === 'forgot') { show('forgot'); setTimeout(() => $('forgot-name').focus(), 250); }
   });
   document.addEventListener('pointerdown', bumpIdle, true);
   document.addEventListener('keydown', bumpIdle, true);

@@ -514,6 +514,18 @@ async function kioskRoutes(req, res, p, m) {
     return send(res, 200, { matches });
   }
 
+  // Forgot code: first and last name -> their last 4. Needs at least two names so nobody can browse the roster.
+  if (m === 'POST' && p === '/api/kiosk/lookup') {
+    const words = s => String(s || '').toLowerCase().replace(/[^a-z\s,'-]/g, '').split(/[\s,]+/).map(w => w.replace(/['-]/g, '')).filter(Boolean);
+    const typed = words(cleanText((await readBody(req)).name, 100)).filter(w => w.length > 1);
+    if (typed.length < 2) return send(res, 400, { error: 'Type your first and last name.' });
+    const matches = db.employees.filter(e => e.active && e.last4).filter(e => {
+      const parts = words(e.name);
+      return typed.every(t => parts.some(x => x === t || (t.length > 2 && x.startsWith(t))));
+    }).slice(0, 3).map(e => ({ id: e.id, displayName: shortName(e.name), department: e.department, last4: e.last4 }));
+    return send(res, 200, { matches });
+  }
+
   // Step 2: confirmed person -> what they need to do this visit.
   if (m === 'POST' && p === '/api/kiosk/start') {
     const b = await readBody(req);
