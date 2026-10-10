@@ -42,6 +42,7 @@
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 600; }
+  tr.group th { background: var(--bg, #f3f6f8); color: var(--ink, #1d2b36); font-size: 14px; text-transform: none; letter-spacing: 0; padding-top: 14px; }
   tr.dim td { color: var(--muted); }
   .table-wrap { overflow-x: auto; }
   .pill { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--bg); color: var(--muted); white-space: nowrap; }
@@ -255,7 +256,7 @@
   <section class="tab" id="tab-clockcheck">
     <div class="card">
       <h2>Who clocked in but didn't do the in-service</h2>
-      <div class="muted small">Export clock-ins from Workday (Excel or CSV) and choose the file here. Each person's first punch of the day counts as one shift. A shift is covered if they finished an in-service that day, or by noon the next day for clock-ins at 6 pm or later. The export is only compared, never saved.</div>
+      <div class="muted small">Export the time clock from Power BI or Workday (Excel or CSV) and choose the file here. If the workbook has a "Time Clock" tab, that tab is used. Each person's first punch of the day counts as one shift. A shift is covered if they finished an in-service that day, or by noon the next day for clock-ins at 6 pm or later. The export is only compared, never saved.</div>
       <div class="toolbar" style="margin-top:12px"><input type="file" id="cc-file" accept=".xlsx,.xls,.csv,text/csv"></div>
       <div id="cc-map" hidden>
         <div class="muted small" style="margin:6px 0">Check that these columns are right:</div>
@@ -264,10 +265,13 @@
           <label>Name <select id="cc-col-name"></select></label>
           <label>Date or clock-in time <select id="cc-col-date"></select></label>
           <label>Time <span class="hint">if separate</span> <select id="cc-col-time"></select></label>
+          <label>Paycode <span class="hint">to skip sick and vacation</span> <select id="cc-col-pay"></select></label>
+          <label>Job <span class="hint">for people not on Staff</span> <select id="cc-col-job"></select></label>
           <button class="btn" id="cc-run">Check</button>
         </div>
       </div>
       <div class="err" id="cc-error"></div>
+      <div class="muted small" id="cc-notes"></div>
     </div>
     <div class="card" id="cc-results" hidden>
       <div class="stats" style="margin-bottom:14px">
@@ -275,13 +279,18 @@
         <div><div class="stat" id="cc-done" style="color:var(--good)">0</div><div class="muted small">did the in-service</div></div>
         <div><div class="stat" id="cc-missed" style="color:var(--warn)">0</div><div class="muted small">missed it</div></div>
         <div><div class="stat" id="cc-unfinished">0</div><div class="muted small">started but didn't finish</div></div>
+        <div><div class="stat" id="cc-never" style="color:var(--warn)">0</div><div class="muted small">people who never did it</div></div>
       </div>
       <div class="toolbar">
-        <select id="cc-filter"><option value="problems">Missed or unfinished</option><option value="all">All shifts</option><option value="done">Completed</option></select>
+        <select id="cc-filter"><option value="people">People to follow up, by leader</option><option value="problems">Missed or unfinished shifts</option><option value="all">All shifts</option><option value="done">Completed</option></select>
         <span class="grow"></span>
         <button class="btn" id="cc-csv">Download as CSV</button>
       </div>
-      <div class="table-wrap"><table>
+      <div class="table-wrap" id="cc-people-table"><table>
+        <thead><tr><th>Name</th><th>Department</th><th>Shifts missed</th><th>Dates missed</th></tr></thead>
+        <tbody id="cc-people-rows"></tbody>
+      </table></div>
+      <div class="table-wrap" id="cc-shift-table" hidden><table>
         <thead><tr><th>Date</th><th>Clock-in</th><th>Name</th><th>Workday last 4</th><th>Department</th><th>Result</th></tr></thead>
         <tbody id="cc-rows"></tbody>
       </table></div>
@@ -309,6 +318,8 @@
         <input type="text" id="set-facility" style="width:100%">
         <label class="block" for="set-depts">Departments <span class="hint">one per line</span></label>
         <textarea id="set-depts" rows="8"></textarea>
+        <label class="block" for="set-leaders">Department leaders <span class="hint">one per line, like "Dietary: Andi". Used to group the Clock-in check follow-up list.</span></label>
+        <textarea id="set-leaders" rows="6"></textarea>
         <label class="block" for="set-closing">End-screen messages <span class="hint">one per line; the iPad shows one at random after each in-service</span></label>
         <textarea id="set-closing" rows="10"></textarea>
         <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px"><input type="checkbox" id="set-unlisted" style="margin-top:4px"> <span>Let staff who aren't on the roster type their name instead<br><span class="hint">They are marked "not on roster" in responses and do not get required education.</span></span></label>

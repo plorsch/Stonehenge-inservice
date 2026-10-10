@@ -568,6 +568,16 @@
 
   // staff import
   let staffRows = null;
+  // Excel drops leading zeros, so 147 in a "last 4" column means 0147.
+  const padId = v => { const d = String(v == null ? '' : v).replace(/\D/g, ''); return d && d.length < 4 ? d.padStart(4, '0') : d; };
+  // "Breinholt, John Philip" -> "John Philip Breinholt", so the kiosk shows "John B."
+  const firstLast = n => { const m = n.match(/^([^,]+),\s*(.+)$/); return m ? `${m[2]} ${m[1]}`.replace(/\s+/g, ' ').trim() : n; };
+  // The leader most people in each department report to.
+  function staffLeaders(rows) {
+    const count = {};
+    rows.filter(r => r.department && r.leader).forEach(r => { const c = count[r.department] = count[r.department] || {}; c[r.leader] = (c[r.leader] || 0) + 1; });
+    return Object.fromEntries(Object.entries(count).map(([d, c]) => [d, Object.keys(c).sort((a, b) => c[b] - c[a])[0]]));
+  }
   $('staff-import-btn').addEventListener('click', () => {
     staffRows = null;
     $('imp-file').value = ''; $('imp-text').value = ''; $('imp-preview').innerHTML = ''; $('imp-error').textContent = ''; $('imp-go').disabled = true;
@@ -576,16 +586,24 @@
   function previewStaff(rows) {
     $('imp-error').textContent = ''; $('imp-go').disabled = true; staffRows = null;
     if (!rows.length) { $('imp-preview').innerHTML = ''; return; }
-    let header = rows[0];
-    let nameC = findCol(header, [/name/i]), idC = findCol(header, [/workday|employee|id|last ?4/i]), deptC = findCol(header, [/dep|role|position|job/i]);
-    let body = rows.slice(1);
-    if (nameC < 0 || idC < 0) { nameC = 0; idC = 1; deptC = header.length > 2 ? 2 : -1; body = rows; } // no header row
-    staffRows = body.map(r => ({ name: String(r[nameC] || '').trim(), last4: String(r[idC] || '').trim(), department: deptC >= 0 ? String(r[deptC] || '').trim() : '' }))
+    // Some sheets put a title above the column headings; use the first row that names a name or worker column.
+    const hi = Math.max(0, rows.slice(0, 10).findIndex(r => r.some(c => /name|worker/i.test(String(c)))));
+    let header = rows[hi].map(c => String(c).trim());
+    let nameC = findCol(header, [/name/i, /^worker$/i, /^employee$/i]), idC = findCol(header, [/workday|employee.?id|ee.?id|\bid\b|last ?4/i]);
+    let deptC = findCol(header, [/^dep/i]);
+    if (deptC < 0) deptC = findCol(header, [/dep|role|position|job/i]);
+    let leaderC = findCol(header, [/^(leader|supervisor|manager)$/i]);
+    let body = rows.slice(hi + 1);
+    if (nameC < 0 || idC < 0) { nameC = 0; idC = 1; deptC = header.length > 2 ? 2 : -1; leaderC = -1; body = rows; } // no header row
+    staffRows = body.map(r => ({ name: firstLast(String(r[nameC] || '').trim()), last4: padId(r[idC]),
+      department: deptC >= 0 ? String(r[deptC] || '').trim() : '', leader: leaderC >= 0 ? String(r[leaderC] || '').trim() : '' }))
       .filter(r => r.name || r.last4);
     const bad = staffRows.filter(r => !r.name || String(r.last4).replace(/\D/g, '').length < 4).length;
     const newDepts = [...new Set(staffRows.map(r => r.department).filter(d => d && !depts().some(x => x.toLowerCase() === d.toLowerCase())))];
+    const leaders = Object.entries(staffLeaders(staffRows));
     $('imp-preview').innerHTML = `<strong>${staffRows.length} people found.</strong>${bad ? ` <span class="err">${bad} are missing a name or ID and will be skipped.</span>` : ''}
       ${newDepts.length ? `<div class="muted" style="margin-top:4px">New departments that will be added to Settings: ${newDepts.map(escapeHtml).join(', ')}</div>` : ''}
+      ${leaders.length ? `<div class="muted" style="margin-top:4px">Leaders for the Clock-in check: ${leaders.map(([d, l]) => `${escapeHtml(d)}: ${escapeHtml(l)}`).join(', ')}</div>` : ''}
       <div class="table-wrap" style="max-height:200px;margin-top:8px"><table><thead><tr><th>Name</th><th>Last 4</th><th>Department</th></tr></thead><tbody>
       ${staffRows.slice(0, 30).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(String(r.last4).replace(/\D/g, '').slice(-4))}</td><td>${escapeHtml(r.department)}</td></tr>`).join('')}
       </tbody></table></div>`;
@@ -594,14 +612,15 @@
   $('imp-file').addEventListener('change', async e => {
     const f = e.target.files[0];
     if (!f) return;
-    try { previewStaff(await readSheet(f, /staff|roster|employee/i)); } catch (err) { $('imp-error').textContent = err.message; }
+    try { previewStaff(await readSheet(f, /id ref|staff|roster|employee/i)); } catch (err) { $('imp-error').textContent = err.message; }
   });
   $('imp-text').addEventListener('input', () => previewStaff(parseCsv($('imp-text').value)));
   $('imp-go').addEventListener('click', async () => {
     try {
       $('imp-go').disabled = true;
       const newDepts = [...new Set(staffRows.map(r => r.department).filter(d => d && !depts().some(x => x.toLowerCase() === d.toLowerCase())))];
-      if (newDepts.length) await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ departments: [...depts(), ...newDepts] }) });
+      const leaders = staffLeaders(staffRows);
+      if (newDepts.length || Object.keys(leaders).length) await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ departments: [...depts(), ...newDepts], leaders: Object.assign({}, state.settings.leaders, leaders) }) });
       const r = await post('/api/admin/employees/import', { rows: staffRows });
       $('staff-import').close();
       alert(`Added ${r.added}, updated ${r.updated}.${r.skipped.length ? `\n\nSkipped ${r.skipped.length}:\n` + r.skipped.slice(0, 10).join('\n') : ''}`);
@@ -690,7 +709,8 @@
       if (/\.xlsx?$/i.test(file.name)) {
         await loadXlsx();
         const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
-        rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+        const sheet = wb.SheetNames.find(n => /time ?clock|punch|clock/i.test(n)) || wb.SheetNames[0];
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { header: 1, raw: true, defval: '' });
       } else rows = parseCsv((await file.text()).replace(/^﻿/, ''));
       rows = rows.filter(r => r.some(c => String(c).trim()));
       // Some exports put a title above the column headings; use the first row that names an ID column.
@@ -699,23 +719,29 @@
       ccRows = rows.slice(hi + 1);
       ccOptions($('cc-col-id'), findCol(ccHeader, [/workday/i, /employee.?id/i, /worker.?id/i, /\bid\b/i, /last ?4/i]));
       ccOptions($('cc-col-name'), findCol(ccHeader, [/^name$/i, /worker$/i, /employee( name)?$/i, /name/i]), true);
-      ccOptions($('cc-col-date'), findCol(ccHeader, [/clock.?in/i, /time.?in/i, /in.?punch/i, /^date$/i, /date/i, /start/i]));
+      ccOptions($('cc-col-date'), findCol(ccHeader, [/start shift date/i, /shift date/i, /clock.?in/i, /time.?in/i, /in.?punch/i, /^date$/i, /date/i, /start/i]));
       ccOptions($('cc-col-time'), (() => { const d = Number($('cc-col-date').value); const t = findCol(ccHeader, [/^(time )?in$/i, /in time/i, /clock.?in time/i, /start time/i]); return t === d ? -1 : t; })(), true);
+      ccOptions($('cc-col-pay'), findCol(ccHeader, [/pay ?code/i, /^pay ?type$/i, /time ?type/i]), true);
+      ccOptions($('cc-col-job'), findCol(ccHeader, [/job/i, /position/i]), true);
       $('cc-map').hidden = false;
       runClockCheck();
     } catch (err) { $('cc-error').textContent = err.message; }
   });
   async function runClockCheck() {
-    $('cc-error').textContent = '';
-    const ci = Number($('cc-col-id').value), cn = Number($('cc-col-name').value), cd = Number($('cc-col-date').value), ct = Number($('cc-col-time').value);
+    $('cc-error').textContent = ''; $('cc-notes').textContent = '';
+    const col = id => Number($(id).value);
+    const ci = col('cc-col-id'), cn = col('cc-col-name'), cd = col('cc-col-date'), ct = col('cc-col-time'), cp = col('cc-col-pay'), cj = col('cc-col-job');
     const punches = [];
-    let skipped = 0;
+    let skipped = 0, noTime = 0;
     for (const r of ccRows) {
+      const id = padId(r[ci]);
+      if (!id && !String(r[cd] || '').trim()) continue; // blank row
       const when = parseWhen(r[cd]);
       const time = ct >= 0 ? parseTime(r[ct]) : when.time;
-      const id = String(r[ci] || '').replace(/\D/g, '');
       if (!when.date || id.length < 4) { skipped++; continue; }
-      punches.push({ last4: id.slice(-4), name: cn >= 0 ? String(r[cn] || '') : '', date: when.date, time });
+      if (ct >= 0 && !time) { noTime++; continue; } // no clock-in time: usually sick or vacation hours
+      punches.push({ last4: id.slice(-4), name: cn >= 0 ? String(r[cn] || '') : '', date: when.date, time,
+        paycode: cp >= 0 ? String(r[cp] || '') : '', department: cj >= 0 ? String(r[cj] || '').replace(/\s+-\s+(Hourly|Salaried)$/i, '').trim() : '' });
     }
     if (!punches.length) { $('cc-error').textContent = 'No clock-ins found. Check the columns above.'; $('cc-results').hidden = true; return; }
     try {
@@ -724,7 +750,13 @@
       $('cc-done').textContent = ccResult.done;
       $('cc-missed').textContent = ccResult.missed;
       $('cc-unfinished').textContent = ccResult.unfinished;
-      if (skipped) $('cc-error').textContent = `${skipped} row${skipped === 1 ? ' was' : 's were'} skipped because the ID or date couldn't be read.`;
+      $('cc-never').textContent = ccPeople().filter(x => !x.done).length;
+      const notes = [];
+      if (!ccResult.firstDay) notes.push('Nobody has done an in-service on the iPad yet, so there is nothing to compare.');
+      else if (ccResult.before) notes.push(`${ccResult.before} clock-in${ccResult.before === 1 ? '' : 's'} before the iPad's first in-service (${fmtDate(ccResult.firstDay)}) ${ccResult.before === 1 ? 'was' : 'were'} not counted.`);
+      if (ccResult.leave + noTime) notes.push(`${ccResult.leave + noTime} time-off row${ccResult.leave + noTime === 1 ? '' : 's'} (sick, vacation, or no clock-in time) skipped.`);
+      if (skipped) notes.push(`${skipped} row${skipped === 1 ? '' : 's'} skipped because the ID or date couldn't be read.`);
+      $('cc-notes').textContent = notes.join(' ');
       $('cc-results').hidden = false;
       renderClockCheck();
     } catch (err) { $('cc-error').textContent = err.message; }
@@ -734,7 +766,36 @@
     const f = $('cc-filter').value;
     return ccResult.results.filter(r => f === 'all' || (f === 'done' ? r.status === 'done' : r.status !== 'done'));
   }
+  const shortDay = d => { const [, m, day] = d.split('-'); return `${Number(m)}/${Number(day)}`; };
+  // One row per person who missed at least one shift, grouped by leader.
+  function ccPeople() {
+    const by = new Map();
+    for (const r of ccResult.results) {
+      const k = `${r.last4}|${r.name.toLowerCase()}`;
+      const p = by.get(k) || { name: r.name, last4: r.last4, department: r.department, leader: r.leader || (r.onRoster ? '' : 'Not on roster'), onRoster: r.onRoster, shifts: 0, done: 0, missedDates: [] };
+      p.shifts++;
+      if (r.status === 'done') p.done++; else p.missedDates.push(r.date);
+      by.set(k, p);
+    }
+    return [...by.values()].filter(p => p.missedDates.length)
+      .sort((a, b) => (!a.leader - !b.leader) || a.leader.localeCompare(b.leader) || b.missedDates.length - a.missedDates.length || a.name.localeCompare(b.name));
+  }
   function renderClockCheck() {
+    const people = $('cc-filter').value === 'people';
+    $('cc-shift-table').hidden = people; $('cc-people-table').hidden = !people;
+    if (people) {
+      const list = ccPeople();
+      let lastLeader = null;
+      $('cc-people-rows').innerHTML = list.map(p => {
+        const head = p.leader !== lastLeader ? `<tr class="group"><th colspan="4">${escapeHtml(p.leader || 'No leader set')} <span class="muted small">(${list.filter(x => x.leader === p.leader).length} to follow up)</span></th></tr>` : '';
+        lastLeader = p.leader;
+        return head + `<tr><td>${escapeHtml(p.name)}${p.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}<div class="muted small">${escapeHtml(p.last4)}</div></td>
+          <td>${escapeHtml(p.department || '')}</td>
+          <td><strong>${p.missedDates.length}</strong> of ${p.shifts}${p.done ? '' : ' <span class="pill warn">Never did it</span>'}</td>
+          <td>${p.missedDates.map(shortDay).join(', ')}</td></tr>`;
+      }).join('') || '<tr><td colspan="4" class="muted">Nobody to follow up with. Everyone did their in-service.</td></tr>';
+      return;
+    }
     $('cc-rows').innerHTML = ccFiltered().map(r => `<tr>
       <td style="white-space:nowrap">${fmtDate(r.date)}</td><td>${escapeHtml(r.time || '')}</td>
       <td>${escapeHtml(r.name)}${r.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}${r.ambiguous ? ' <span class="pill warn" title="Several staff share these last 4 digits">Shared ID</span>' : ''}</td>
@@ -742,13 +803,16 @@
       <td>${ccLabel[r.status]}${r.status === 'done' ? `<div class="muted small">${fmtWhen(r.completedAt)}</div>` : ''}</td></tr>`).join('')
       || '<tr><td colspan="6" class="muted">Nothing to show. Everyone did their in-service.</td></tr>';
   }
-  ['cc-col-id', 'cc-col-name', 'cc-col-date', 'cc-col-time'].forEach(id => $(id).addEventListener('change', runClockCheck));
+  ['cc-col-id', 'cc-col-name', 'cc-col-date', 'cc-col-time', 'cc-col-pay', 'cc-col-job'].forEach(id => $(id).addEventListener('change', runClockCheck));
   $('cc-run').addEventListener('click', runClockCheck);
   $('cc-filter').addEventListener('change', renderClockCheck);
   $('cc-csv').addEventListener('click', () => {
     const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const lines = [['Date', 'Clock-in', 'Name', 'Workday last 4', 'Department', 'Result', 'On roster', 'Finished at'].join(',')]
-      .concat(ccFiltered().map(r => [r.date, r.time, r.name, r.last4, r.department, r.status, r.onRoster ? 'yes' : 'no', r.completedAt || ''].map(cell).join(',')));
+    const lines = $('cc-filter').value === 'people'
+      ? [['Leader', 'Name', 'Workday last 4', 'Department', 'Shifts missed', 'Shifts worked', 'Never did it', 'Dates missed'].join(',')]
+        .concat(ccPeople().map(p => [p.leader, p.name, p.last4, p.department, p.missedDates.length, p.shifts, p.done ? '' : 'yes', p.missedDates.map(shortDay).join(' ')].map(cell).join(',')))
+      : [['Date', 'Clock-in', 'Name', 'Workday last 4', 'Department', 'Leader', 'Result', 'On roster', 'Finished at'].join(',')]
+        .concat(ccFiltered().map(r => [r.date, r.time, r.name, r.last4, r.department, r.leader, r.status, r.onRoster ? 'yes' : 'no', r.completedAt || ''].map(cell).join(',')));
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' }));
     a.download = `clock-in-check-${isoDay(new Date())}.csv`;
@@ -771,6 +835,7 @@
     const s = state.settings;
     $('set-facility').value = s.facilityName || '';
     $('set-depts').value = depts().join('\n');
+    $('set-leaders').value = Object.entries(s.leaders || {}).map(([d, l]) => `${d}: ${l}`).join('\n');
     $('set-unlisted').checked = !!s.allowUnlisted;
     $('set-closing').value = (s.closingMessages || []).join('\n');
     $('pw-env').hidden = !state.passwordFromEnv;
@@ -781,6 +846,7 @@
       await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({
         facilityName: $('set-facility').value,
         departments: splitLines($('set-depts').value),
+        leaders: Object.fromEntries(splitLines($('set-leaders').value).map(l => l.split(/\s*[:=]\s*/)).filter(x => x.length > 1 && x[0] && x[1])),
         allowUnlisted: $('set-unlisted').checked,
         closingMessages: splitLines($('set-closing').value)
       }) });

@@ -77,6 +77,7 @@ function defaultSettings() {
     cultureDay: 5,
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
+    leaders: {},              // { department: leader name }, for the Clock-in check follow-up lists
     // Sign-off lines shown on the kiosk's final screen; one is picked at random each time.
     closingMessages: ["Have a great shift!", "Thank you for what you do for our residents!", "Go give someone a shout out today, would ya?", "You make a difference!", "Our residents are lucky to have you.", "Thanks for learning something new today.", "Small moments of kindness add up. Thank you!", "You're the reason this place feels like home.", "Go make someone smile today!", "Teamwork makes the dream work. Have a great one!", "Thanks for showing up for our residents today.", "Your care matters more than you know.", "Proud to work alongside you!", "Take a deep breath. You've got this!", "Remember to drink some water today, too!", "Someone's day is better because you're here.", "Thanks for being part of the Stonehenge family.", "Kindness is contagious. Spread some today!", "You did it! Now go be awesome.", "Every resident you greet by name feels at home. Thank you!", "Thanks for keeping our residents safe.", "High five! Have a wonderful shift."],
     dailyPicks: {},           // { department: { date, topicId } }
@@ -620,17 +621,25 @@ function addDays(date, n) {
 // One shift per person per day (the earliest punch), so lunch and clock-out punches don't count twice.
 // A shift counts as covered when that person finished an in-service the same day, or, for a clock-in
 // at 6 pm or later, the next morning before noon (night shift finishing after midnight).
+// Time clock rows for time off, not time worked.
+const LEAVE_PAYCODE = /sick|vacation|\bpto\b|paid time off|holiday|bereave|jury|leave|absen|unpaid|fmla|no ?show/i;
+
 function clockCheck(punches) {
   const shifts = new Map();
+  // Like the old audit sheet: clock-ins before the kiosk's first in-service don't count.
+  const firstDay = db.responses.reduce((min, r) => (!min || r.date < min ? r.date : min), '');
+  let leave = 0, before = 0;
   for (const raw of punches) {
     const last4 = cleanLast4(raw.last4);
     const date = cleanDate(raw.date);
     if (!last4 || !date) continue;
+    if (raw.paycode && LEAVE_PAYCODE.test(raw.paycode)) { leave++; continue; }
+    if (!firstDay || date < firstDay) { before++; continue; }
     const time = /^\d{2}:\d{2}$/.test(raw.time || '') ? raw.time : '';
     const key = `${last4}|${cleanText(raw.name, 100).toLowerCase()}|${date}`;
     const prev = shifts.get(key);
     if (!prev || (time && (!prev.time || time < prev.time))) {
-      shifts.set(key, { last4, name: cleanText(raw.name, 100), date, time, department: cleanText(raw.department, 60) });
+      shifts.set(key, { last4, name: cleanText(raw.name, 100), date, time, department: cleanText(raw.department, 100) });
     }
   }
   const results = [];
@@ -644,6 +653,7 @@ function clockCheck(punches) {
       if (best > 0) candidates = candidates.filter(e => score(e) === best);
     }
     const emp = candidates.length === 1 ? candidates[0] : null;
+    const department = (emp && emp.department) || sh.department;
     const nightNext = sh.time && sh.time >= '18:00' ? addDays(sh.date, 1) : null;
     const mine = r => emp ? r.employeeId === emp.id : r.last4 === sh.last4;
     const onShift = r => r.date === sh.date || (nightNext && r.date === nightNext && new Date(r.submittedAt).getHours() < 12);
@@ -655,14 +665,14 @@ function clockCheck(punches) {
     else status = 'missed';
     results.push({
       date: sh.date, time: sh.time, last4: sh.last4,
-      name: emp ? emp.name : sh.name, department: emp ? emp.department : sh.department,
+      name: emp ? emp.name : sh.name, department, leader: (emp && db.settings.leaders && db.settings.leaders[department]) || '',
       onRoster: !!emp, ambiguous: candidates.length > 1,
       status, completedAt: done ? done.completedAt : null, topic: done ? done.topicTitle : (rs[0] ? rs[0].topicTitle : '')
     });
   }
   results.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
   const count = st => results.filter(r => r.status === st).length;
-  return { shifts: results.length, done: count('done'), missed: count('missed'), unfinished: count('unfinished'), results };
+  return { shifts: results.length, done: count('done'), missed: count('missed'), unfinished: count('unfinished'), leave, before, firstDay, results };
 }
 
 // ---------- Admin routes ----------
@@ -885,6 +895,10 @@ async function adminRoutes(req, res, p, m, url) {
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
     if (Array.isArray(b.closingMessages)) s.closingMessages = cleanList(b.closingMessages, 200, 100);
+    if (b.leaders && typeof b.leaders === 'object') {
+      s.leaders = {};
+      for (const [d, l] of Object.entries(b.leaders).slice(0, 50)) if (cleanText(d, 60) && cleanText(l, 60)) s.leaders[cleanText(d, 60)] = cleanText(l, 60);
+    }
     saveDb();
     return send(res, 200, { settings: s });
   }

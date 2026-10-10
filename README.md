@@ -88,12 +88,15 @@ You need columns for the name, the Workday ID (the full ID or the last 4) and th
 
 ### Catching clock-ins without an in-service
 
-The kiosk can't see the time clock, so the check works from your export. Export clock-ins from Workday for the period you want (a day, a week, a pay period) and choose the file on the **Clock-in check** tab. The page picks the Workday ID, name and clock-in columns, and you can change them if it guesses wrong.
+The kiosk can't see the time clock, so the check works from your export. Export the time clock from Power BI or Workday for the period you want (a day, a week, a pay period) and choose the file on the **Clock-in check** tab. If the workbook has a "Time Clock" tab, that tab is read. The page picks the Employee ID, name, Start Shift Date, Start Time, Paycode and Job Profile columns, and you can change them if it guesses wrong.
 
 - Each person's first punch of a day counts as one shift, so lunch and clock-out punches aren't counted twice.
 - A shift is covered when the person finished an in-service that day. For clock-ins at 6 pm or later, the next morning before noon also counts.
 - People are matched by the last 4 digits of their Workday ID. If two staff share the same last 4, the name in the export decides.
 - Results are **Done**, **Missed**, or **Started, didn't finish**. IDs that aren't on the Staff tab are flagged so you can add them.
+- Rows for time off (sick, vacation, PTO, bereavement and similar paycodes, or rows with no start time) are skipped. Orientation and In Service hours count as shifts.
+- Clock-ins before the iPad's first in-service aren't counted.
+- The default view lists people to follow up with, grouped by leader: shifts missed, dates, and who never did it. Set leaders on the Settings tab ("Dietary: Andi"), or import the roster from a sheet with a Leader column.
 - The export is only compared, never saved.
 
 ## 4. Data and backups
