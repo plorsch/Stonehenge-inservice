@@ -1,0 +1,293 @@
+[
+  {
+    "title": "Change in Condition: Stop and Watch",
+    "category": "Clinical",
+    "departments": [],
+    "lesson": "You know your residents best. A small change can be the first sign of something serious, like an infection, dehydration, or a stroke.\n\nWatch for changes such as:\n- **Seems different** than usual, or more confused or sleepy\n- **Talks or communicates less**\n- **Eats or drinks less**\n- New pain, weakness, or a fall\n- Changes in skin color, breathing, or bathroom habits\n\nIf you notice a change, **tell the nurse right away**. Don't wait until the end of your shift. The nurse assesses the resident, uses **SBAR** to call the provider, and notifies the family or representative.",
+    "questions": [
+      {
+        "text": "A resident who is usually chatty is suddenly quiet and sleepy. What should you do?",
+        "correctAnswer": "Tell the nurse right away",
+        "wrongAnswers": ["Let them rest and mention it at the end of your shift", "Wait a day to see if it continues", "Ask another CNA what they think and move on"],
+        "hint": "Changes should be reported as soon as you notice them, not later.",
+        "explanation": "A sudden change in alertness can be an early sign of infection or another serious problem. Early reporting gets the resident help sooner."
+      },
+      {
+        "text": "What does SBAR stand for?",
+        "correctAnswer": "Situation, Background, Assessment, Recommendation",
+        "wrongAnswers": ["Symptoms, Blood pressure, Alertness, Response", "Safety, Behavior, Activity, Rest", "Situation, Breathing, Appetite, Review"],
+        "hint": "It starts with what is happening now and ends with what you are asking for.",
+        "explanation": "SBAR keeps a change-in-condition report clear and complete when the nurse calls the provider."
+      },
+      {
+        "text": "Which of these is a change in condition that should be reported?",
+        "correctAnswer": "Eating less than half of meals for two days",
+        "wrongAnswers": ["Choosing a different TV channel", "Asking for an extra blanket on a cold day", "Preferring to shower in the evening"],
+        "hint": "Look for a change in a basic need like eating, drinking, or sleeping.",
+        "explanation": "A drop in appetite can signal illness, pain, or dehydration."
+      },
+      {
+        "text": "After the nurse confirms a significant change in condition, who must be notified?",
+        "correctAnswer": "The provider and the resident's family or representative",
+        "wrongAnswers": ["Only the Director of Nursing", "No one, if the resident seems fine later", "Only the next shift during report"],
+        "hint": "Two groups need to know: the person who treats the resident and the person who speaks for them.",
+        "explanation": "Federal rules require prompt notification of the physician and the resident's representative when there is a significant change."
+      }
+    ]
+  },
+  {
+    "title": "Hand Hygiene: When to Use Soap and Water",
+    "category": "Infection Control",
+    "departments": [],
+    "lesson": "Alcohol-based hand rub is the preferred method for most routine hand hygiene because it is fast and kills most germs.\n\nHowever, alcohol does **not** reliably kill C. difficile spores. When caring for a resident on contact precautions for C. diff, and any time hands are visibly soiled, wash with **soap and water**.\n\n- Wet hands, apply soap, and scrub all surfaces for at least 20 seconds\n- Rinse, dry with a clean towel, and use the towel to turn off the faucet",
+    "questions": [
+      {
+        "text": "After caring for a resident with C. diff, which hand hygiene method should you use?",
+        "correctAnswer": "Soap and water",
+        "wrongAnswers": ["Alcohol-based hand rub", "Gloves only, no hand hygiene needed", "A quick rinse with water"],
+        "hint": "Alcohol does not kill C. diff spores.",
+        "explanation": "Soap and water physically washes the spores off your hands."
+      },
+      {
+        "text": "How long should you scrub your hands with soap?",
+        "correctAnswer": "At least 20 seconds",
+        "wrongAnswers": ["About 5 seconds", "Only until the soap foams", "There is no minimum"],
+        "hint": "It's about as long as singing Happy Birthday twice.",
+        "explanation": "Scrubbing for at least 20 seconds removes germs from all surfaces of the hands."
+      }
+    ]
+  },
+  {
+    "title": "Fall Prevention: The Call Light",
+    "category": "Safety",
+    "departments": [],
+    "lesson": "Most resident falls happen when a resident tries to get up alone, often to use the bathroom.\n\nBefore leaving any room:\n- Place the call light **within the resident's reach**\n- Make sure the bed is in the lowest position with brakes locked\n- Keep frequently used items (water, glasses, phone) close by\n- Make sure footwear is non-skid\n\nAnswer call lights promptly, even if the resident is not on your assignment.",
+    "questions": [
+      {
+        "text": "What is the most important thing to check before leaving a resident's room?",
+        "correctAnswer": "The call light is within the resident's reach",
+        "wrongAnswers": ["The TV remote is on the nightstand", "The door is fully closed", "The window blinds are open"],
+        "hint": "Think about how the resident would ask for help.",
+        "explanation": "A reachable call light lets residents ask for help instead of getting up alone."
+      },
+      {
+        "text": "A call light is on for a resident who is not on your assignment. What should you do?",
+        "correctAnswer": "Answer it and help or find the right person",
+        "wrongAnswers": ["Ignore it, since it's not your resident", "Turn it off and tell them someone will come", "Wait to see if their aide answers it"],
+        "hint": "Every staff member is responsible for call lights.",
+        "explanation": "Answering promptly prevents residents from getting up alone and falling."
+      }
+    ]
+  },
+  {
+    "title": "Fire Safety: RACE",
+    "category": "Safety",
+    "departments": [],
+    "lesson": "If you discover a fire, remember **RACE**:\n\n- **R**escue anyone in immediate danger\n- **A**larm: pull the nearest fire alarm and call for help\n- **C**ontain: close doors to keep smoke and fire from spreading\n- **E**xtinguish or Evacuate: use an extinguisher only if the fire is small and you are trained\n\nTo use an extinguisher, remember **PASS**: Pull the pin, Aim at the base, Squeeze the handle, Sweep side to side.",
+    "questions": [
+      {
+        "text": "What is the FIRST step in RACE?",
+        "correctAnswer": "Rescue anyone in immediate danger",
+        "wrongAnswers": ["Extinguish the fire", "Call the family", "Open windows to let smoke out"],
+        "hint": "People come first.",
+        "explanation": "Rescue anyone in immediate danger, then sound the alarm."
+      },
+      {
+        "text": "When using a fire extinguisher, where should you aim?",
+        "correctAnswer": "At the base of the fire",
+        "wrongAnswers": ["At the top of the flames", "At the smoke", "At the ceiling above the fire"],
+        "hint": "It's the A in PASS.",
+        "explanation": "Aiming at the base puts out the fuel that is burning."
+      }
+    ]
+  },
+  {
+    "title": "Abuse Reporting: Your Duty",
+    "category": "Resident Rights",
+    "departments": [],
+    "lesson": "Every staff member is a mandated reporter. If you see, hear, or suspect abuse, neglect, exploitation, or mistreatment of a resident, you must report it.\n\n- Make sure the resident is safe\n- Report **immediately** to your supervisor and the Administrator (Abuse Coordinator)\n- Do not investigate on your own or confront the person involved\n\nReporting in good faith is protected. You will not be punished for reporting a concern.",
+    "questions": [
+      {
+        "text": "You suspect a coworker is mistreating a resident. What should you do?",
+        "correctAnswer": "Make sure the resident is safe and report it immediately",
+        "wrongAnswers": ["Wait until you have proof before saying anything", "Talk to the coworker privately first", "Mention it at your next annual evaluation"],
+        "hint": "You do not need proof to report.",
+        "explanation": "Suspected abuse must be reported right away to the Administrator."
+      },
+      {
+        "text": "Who is the facility's Abuse Coordinator?",
+        "correctAnswer": "The Administrator",
+        "wrongAnswers": ["The resident's family", "The most senior CNA on the shift", "The maintenance director"],
+        "hint": "It's the person in charge of the whole building.",
+        "explanation": "Reports go to your supervisor and the Administrator, who is the Abuse Coordinator."
+      }
+    ]
+  },
+  {
+    "title": "Dignity While Making Beds",
+    "category": "Resident Rights",
+    "departments": ["CNA"],
+    "lesson": "Making a bed is part of caring for the resident, not just the room.\n\n- **Knock, introduce yourself, and explain** what you are going to do\n- Close the door and curtain, and **keep the resident covered** during an occupied bed change\n- Talk **to** the resident, not over them to a coworker\n- Ask about preferences, like how they like their pillows and blankets\n- Hold linens away from your uniform, **never shake linens**, and never put them on the floor\n- Leave the bed in the lowest position with the call light in reach",
+    "questions": [
+      {
+        "text": "During an occupied bed change, how do you protect the resident's dignity?",
+        "correctAnswer": "Keep them covered and explain each step",
+        "wrongAnswers": ["Work quickly without talking so it's over sooner", "Leave the curtain open so others can help", "Talk with your coworker about your weekend"],
+        "hint": "Think privacy and communication.",
+        "explanation": "Covering the resident and explaining what you are doing protects privacy and helps them feel safe."
+      },
+      {
+        "text": "What should you do with used linens?",
+        "correctAnswer": "Hold them away from your uniform and place them in the linen bag",
+        "wrongAnswers": ["Shake them out so crumbs fall off", "Put them on the floor until you're done", "Set them on the roommate's bed"],
+        "hint": "Germs spread when linens touch you, the floor, or are shaken.",
+        "explanation": "Handling soiled linens carefully prevents the spread of infection."
+      },
+      {
+        "text": "A resident likes two pillows and the blanket folded at the foot of the bed. What should you do?",
+        "correctAnswer": "Make the bed the way they prefer",
+        "wrongAnswers": ["Make it the standard way for every resident", "Ask the nurse if it's allowed first", "Remove the extra pillow to keep it neat"],
+        "hint": "Residents have the right to make choices about their own space.",
+        "explanation": "Honoring personal preferences is part of person-centered, dignified care."
+      }
+    ]
+  },
+  {
+    "title": "Locking the Housekeeping Cart",
+    "category": "Safety",
+    "departments": ["Housekeeping"],
+    "lesson": "Cleaning chemicals can seriously harm a resident who drinks or touches them. Residents with dementia may not recognize that a bottle is dangerous.\n\n- **Lock the chemical compartment every time** you step away from the cart, even for a moment\n- Keep the cart **in your sight** and out of walkways\n- Never leave chemicals or spray bottles on a resident's sink, table, or windowsill\n- Keep every container labeled\n- Know where the **Safety Data Sheets (SDS)** are kept",
+    "questions": [
+      {
+        "text": "You need to step into a room for one minute. What do you do with your cart?",
+        "correctAnswer": "Lock the chemical compartment before stepping away",
+        "wrongAnswers": ["Leave it open since you'll be right back", "Ask a resident to watch it", "Take only the spray bottle you need and leave the rest open"],
+        "hint": "It only takes a moment for a resident to reach a chemical.",
+        "explanation": "Locking the cart every time keeps chemicals away from residents who may not know they are dangerous."
+      },
+      {
+        "text": "Where can you find information about a chemical's hazards and first aid?",
+        "correctAnswer": "The Safety Data Sheet (SDS)",
+        "wrongAnswers": ["The resident's care plan", "The menu board", "The supply invoice"],
+        "hint": "It's a sheet every chemical has, by law.",
+        "explanation": "The SDS lists hazards, protective equipment, and first aid for each chemical."
+      },
+      {
+        "text": "You find an unlabeled spray bottle on your cart. What should you do?",
+        "correctAnswer": "Don't use it, and tell your supervisor",
+        "wrongAnswers": ["Smell it to figure out what it is", "Use it if it looks like your usual cleaner", "Leave it in a resident's bathroom for later"],
+        "hint": "If you don't know what's in it, it isn't safe to use.",
+        "explanation": "Every chemical container must be labeled so staff know what it is and how to use it safely."
+      }
+    ]
+  },
+  {
+    "title": "IDDSI Diet Textures",
+    "category": "Dietary",
+    "departments": ["Dietary", "CNA", "Nursing"],
+    "lesson": "IDDSI is the standard for describing diet textures and liquid thickness. Serving the wrong texture can cause choking or aspiration.\n\n**Drinks:** Level 0 Thin, 1 Slightly Thick, 2 Mildly Thick, 3 Moderately Thick, 4 Extremely Thick.\n\n**Foods:** Level 3 Liquidised, 4 Pureed, 5 Minced & Moist, 6 Soft & Bite-Sized, 7 Regular.\n\n- **Always check the diet order or tray card** before serving\n- Minced & Moist pieces are no bigger than **4 mm** for adults\n- Soft & Bite-Sized pieces are no bigger than **1.5 cm** for adults\n- Pureed food is smooth, holds its shape on a spoon, and has no lumps",
+    "questions": [
+      {
+        "text": "In IDDSI, what is food Level 4?",
+        "correctAnswer": "Pureed",
+        "wrongAnswers": ["Regular", "Soft & Bite-Sized", "Minced & Moist"],
+        "hint": "It is the smoothest food level that still holds its shape on a spoon.",
+        "explanation": "Level 4 is Pureed: smooth, no lumps, and holds its shape."
+      },
+      {
+        "text": "For adults, how large can pieces be in a Soft & Bite-Sized (Level 6) diet?",
+        "correctAnswer": "No bigger than 1.5 cm",
+        "wrongAnswers": ["No bigger than 4 mm", "Any size, as long as it's soft", "About 5 cm"],
+        "hint": "It's about the size of an adult thumbnail.",
+        "explanation": "Level 6 pieces are no bigger than 1.5 cm so they can be chewed and swallowed safely."
+      },
+      {
+        "text": "What should you do before serving a tray?",
+        "correctAnswer": "Check the diet order or tray card for the texture and liquid level",
+        "wrongAnswers": ["Ask the resident what texture they usually get", "Serve what the roommate is having", "Use your memory from last week"],
+        "hint": "Diet orders can change. Check the official source every time.",
+        "explanation": "Checking every time prevents serving a texture that could cause choking."
+      }
+    ]
+  },
+  {
+    "title": "Food Temperatures and the Danger Zone",
+    "category": "Dietary",
+    "departments": ["Dietary"],
+    "lesson": "Bacteria grow fastest between **41°F and 135°F**, the temperature danger zone.\n\n- Hold hot foods at **135°F or higher**\n- Hold cold foods at **41°F or lower**\n- Reheat leftovers to **165°F** within 2 hours\n- Cool cooked food from 135°F to 70°F within 2 hours, then to 41°F within the next 4 hours\n- Use a clean, sanitized, calibrated thermometer and **log temperatures**",
+    "questions": [
+      {
+        "text": "What is the minimum hot-holding temperature?",
+        "correctAnswer": "135°F",
+        "wrongAnswers": ["100°F", "120°F", "41°F"],
+        "hint": "It's the top of the danger zone.",
+        "explanation": "Hot food must stay at 135°F or higher to keep bacteria from growing."
+      },
+      {
+        "text": "What is the maximum cold-holding temperature?",
+        "correctAnswer": "41°F",
+        "wrongAnswers": ["50°F", "32°F is the only safe temperature", "60°F"],
+        "hint": "It's the bottom of the danger zone.",
+        "explanation": "Cold food must stay at 41°F or lower."
+      },
+      {
+        "text": "To what temperature must leftovers be reheated for hot holding?",
+        "correctAnswer": "165°F",
+        "wrongAnswers": ["135°F", "145°F", "Just until warm to the touch"],
+        "hint": "It's the same temperature poultry is cooked to.",
+        "explanation": "Reheating to 165°F within 2 hours kills bacteria that may have grown."
+      }
+    ]
+  },
+  {
+    "title": "Residents Who Self-Administer Medications",
+    "category": "Nursing",
+    "departments": ["Nursing"],
+    "lesson": "Some residents are allowed to take some of their own medications. This is only safe when the right steps are in place.\n\n- The **interdisciplinary team assesses** the resident and finds it clinically appropriate\n- There is a **provider order** and it is written in the **care plan**, listing which medications\n- Medications kept at the bedside are **stored securely** as the care plan describes\n- Nurses still **monitor and document** that the resident takes them correctly\n\nKnow who in the building is on self-administration. Check the current list at the start of every shift, and **report any change** in the resident's ability.",
+    "questions": [
+      {
+        "text": "What must be in place before a resident may self-administer a medication?",
+        "correctAnswer": "An IDT assessment, a provider order, and the care plan",
+        "wrongAnswers": ["Only the resident's request", "Only a family member's permission", "A nurse's verbal OK"],
+        "hint": "Three things: an assessment, an order, and documentation.",
+        "explanation": "Self-administration requires an interdisciplinary assessment, an order, and a care plan."
+      },
+      {
+        "text": "A resident on self-administration seems newly confused. What should you do?",
+        "correctAnswer": "Report it so the team can reassess self-administration",
+        "wrongAnswers": ["Nothing, since they're approved to self-administer", "Take away all their medications permanently", "Let the family decide"],
+        "hint": "Approval depends on the resident's current ability.",
+        "explanation": "A change in condition means the team must reassess whether self-administration is still safe."
+      },
+      {
+        "text": "Where should you confirm which residents are on self-administration?",
+        "correctAnswer": "The current list and each resident's care plan",
+        "wrongAnswers": ["Ask the residents at med pass", "From memory of last month", "The activities calendar"],
+        "hint": "Use the official, up-to-date record.",
+        "explanation": "The list can change. Check the current list and the care plan every shift."
+      }
+    ]
+  },
+  {
+    "title": "Pressure Injury Prevention: Repositioning",
+    "category": "Skin Care",
+    "departments": ["CNA", "Nursing"],
+    "lesson": "Pressure injuries form when skin and tissue over a bony area are squeezed for too long. Residents who cannot move on their own are at highest risk.\n\n- Reposition bed-bound residents **at least every 2 hours**, or as the care plan states\n- Check heels, hips, tailbone, and elbows for redness that does not fade\n- Keep skin clean and dry, especially after incontinence\n- Use pillows or wedges to keep bony areas from touching\n\nReport any new redness or open skin to the nurse.",
+    "questions": [
+      {
+        "text": "How often should a bed-bound resident generally be repositioned?",
+        "correctAnswer": "At least every 2 hours, or as the care plan states",
+        "wrongAnswers": ["Once per shift", "Only when the resident asks", "Once a day during bathing"],
+        "hint": "It's more often than once a shift.",
+        "explanation": "Frequent repositioning relieves pressure before tissue damage begins."
+      },
+      {
+        "text": "You notice redness on a resident's heel that does not fade. What should you do?",
+        "correctAnswer": "Report it to the nurse",
+        "wrongAnswers": ["Massage the area firmly", "Wait until the next bath to check again", "Cover it with a bandage and say nothing"],
+        "hint": "Redness that doesn't fade can be the first stage of a pressure injury.",
+        "explanation": "Early reporting lets the nurse start treatment before the skin breaks down."
+      }
+    ]
+  }
+]

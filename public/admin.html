@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In-Service Admin</title>
+<style>
+  :root {
+    --bg: #f3f6f8; --card: #fff; --ink: #1d2b36; --muted: #5b6b78; --line: #dbe3e9;
+    --brand: #1f5f7a; --brand-soft: #e4f0f5; --good: #1e7a4c; --good-soft: #e3f4ea;
+    --warn: #a4521b; --warn-soft: #fbeee2; --req: #8a2c4b; --req-soft: #f8e6ec; --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 0 20px; display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+  header .brand { font-weight: 700; color: var(--brand); font-size: 17px; padding: 14px 0; }
+  nav { display: flex; gap: 2px; flex-wrap: wrap; }
+  nav button { background: none; border: 0; font: inherit; color: var(--muted); padding: 16px 11px; cursor: pointer; border-bottom: 3px solid transparent; }
+  nav button.on { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+  main { max-width: 1200px; margin: 0 auto; padding: 22px 16px 64px; }
+  .tab { display: none; } .tab.on { display: block; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px; }
+  h2 { font-size: 19px; margin: 0 0 12px; } h3 { font-size: 15px; margin: 0 0 8px; }
+  .muted { color: var(--muted); } .small { font-size: 13px; }
+  .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat { font-size: 28px; font-weight: 700; color: var(--brand); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--brand); background: var(--brand); color: #fff; border-radius: 8px; padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+  .btn.ghost { background: #fff; color: var(--brand); }
+  .btn.subtle { background: none; border-color: transparent; color: var(--brand); padding: 4px 8px; font-weight: 500; }
+  .btn.danger { color: var(--warn); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar .grow { flex: 1; }
+  input[type=text], input[type=date], input[type=password], select, textarea {
+    font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); max-width: 100%;
+  }
+  textarea { width: 100%; resize: vertical; }
+  label.block { display: block; font-weight: 600; margin: 12px 0 5px; }
+  .hint { font-weight: 400; color: var(--muted); font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 600; }
+  tr.dim td { color: var(--muted); }
+  .table-wrap { overflow-x: auto; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--bg); color: var(--muted); white-space: nowrap; }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.brand { background: var(--brand-soft); color: var(--brand); }
+  .pill.req { background: var(--req-soft); color: var(--req); }
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .checks label { display: inline-flex; gap: 6px; align-items: center; }
+  .qcard { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 14px; margin-bottom: 12px; background: #fbfcfd; }
+  .qcard .qhead { display: flex; align-items: center; justify-content: space-between; }
+  dialog { border: 0; border-radius: 14px; padding: 0; width: min(900px, 96vw); max-height: 92vh; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  dialog::backdrop { background: rgba(20,35,45,.45); }
+  .dlg-head, .dlg-foot { padding: 14px 22px; display: flex; align-items: center; gap: 10px; }
+  .dlg-head { border-bottom: 1px solid var(--line); } .dlg-foot { border-top: 1px solid var(--line); justify-content: flex-end; }
+  .dlg-body { padding: 4px 22px 18px; overflow-y: auto; max-height: calc(92vh - 130px); }
+  .lesson-preview { background: var(--bg); border-radius: 10px; padding: 12px 16px; font-size: 15px; }
+  .lesson-preview ul { padding-left: 22px; }
+  .err { color: var(--warn); font-weight: 600; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+  .toast.show { opacity: 1; }
+  code { background: var(--bg); padding: 2px 6px; border-radius: 5px; }
+  .progress-bar { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; min-width: 120px; }
+  .progress-bar span { display: block; height: 100%; background: var(--good); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Micro In-Service Admin</div>
+  <nav id="nav">
+    <button data-tab="today" class="on">Today</button>
+    <button data-tab="schedule">Schedule</button>
+    <button data-tab="required">Required education</button>
+    <button data-tab="topics">Topic library</button>
+    <button data-tab="staff">Staff</button>
+    <button data-tab="responses">Responses</button>
+    <button data-tab="history">Usage history</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+</header>
+<main>
+  <!-- Today -->
+  <section class="tab on" id="tab-today">
+    <div class="card">
+      <div class="stats">
+        <div><div class="stat" id="stat-today">0</div><div class="muted small">completed today</div></div>
+        <div><div class="stat" id="stat-missed">0</div><div class="muted small">missed on first try today</div></div>
+        <div><div class="stat" id="stat-required">0</div><div class="muted small">open required education</div></div>
+        <div><div class="stat" id="stat-staff">0</div><div class="muted small">active staff on roster</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>What each department gets today</h2>
+      <div class="muted small" style="margin-bottom:8px">Required education always comes first. Otherwise staff get their department's scheduled topic, or a topic from the rotation, with a different question from that topic each shift.</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Department</th><th>Topic</th><th>Why</th><th></th></tr></thead>
+        <tbody id="today-rows"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h3>iPad address</h3>
+      <div id="kiosk-urls" class="small"></div>
+      <div class="muted small" style="margin-top:6px">Open this on the iPad once. It never changes when you change topics.</div>
+    </div>
+  </section>
+
+  <!-- Schedule -->
+  <section class="tab" id="tab-schedule">
+    <div class="card">
+      <h2>Schedule a topic</h2>
+      <div class="muted small">Use this for a topic of the week, or to give each department its own topic. Each time someone clocks in, they get a different question from the topic, with the answers shuffled.</div>
+      <div class="grid" style="margin-top:6px">
+        <div>
+          <label class="block" for="sc-topic">Topic</label>
+          <select id="sc-topic" style="width:100%"></select>
+          <label class="block">Dates</label>
+          <div class="toolbar"><input type="date" id="sc-start"> to <input type="date" id="sc-end"> <span class="hint">leave the end empty to run until you remove it</span></div>
+          <div class="toolbar">
+            <button class="btn subtle" data-week="0">This week</button>
+            <button class="btn subtle" data-week="1">Next week</button>
+          </div>
+        </div>
+        <div>
+          <label class="block">Who gets it <span class="hint">none ticked = all staff</span></label>
+          <div class="checks" id="sc-depts"></div>
+          <label class="block" for="sc-note">Note <span class="hint">optional, for you only</span></label>
+          <input type="text" id="sc-note" style="width:100%">
+        </div>
+      </div>
+      <div style="margin-top:14px"><button class="btn" id="sc-add">Add to schedule</button> <span class="err" id="sc-error"></span></div>
+    </div>
+    <div class="card">
+      <div class="toolbar"><h2 style="margin:0" class="grow">Scheduled topics</h2>
+        <label class="small"><input type="checkbox" id="sc-show-past"> Show past</label></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Topic</th><th>Who</th><th>Dates</th><th>Questions</th><th></th></tr></thead>
+        <tbody id="sc-rows"></tbody>
+      </table></div>
+      <div class="muted small" style="margin-top:8px">If two schedules overlap, the one for a specific department wins over an all-staff one, and the newer start date wins after that.</div>
+    </div>
+    <div class="card">
+      <h2>When nothing is scheduled</h2>
+      <label style="display:flex;gap:8px;margin-bottom:6px"><input type="radio" name="fallback" value="daily"> <span><strong>Topic of the day</strong> <span class="muted">for each department, chosen from the rotation, favoring topics unused the longest</span></span></label>
+      <label style="display:flex;gap:8px"><input type="radio" name="fallback" value="random"> <span><strong>Random each time</strong> <span class="muted">from the rotation, favoring the least recently used</span></span></label>
+      <div style="margin-top:12px"><button class="btn" id="save-fallback">Save</button></div>
+    </div>
+  </section>
+
+  <!-- Required -->
+  <section class="tab" id="tab-required">
+    <div class="card">
+      <h2>Require education for everyone</h2>
+      <div class="muted small">Use this after an incident or for anything everyone must see. Each person gets it the next time they clock in, even if that's weeks away (for PRN staff). If someone has several pending, they complete them all in a row, oldest first, before their regular topic.</div>
+      <div class="grid" style="margin-top:6px">
+        <div>
+          <label class="block" for="rq-topic">Topic</label>
+          <select id="rq-topic" style="width:100%"></select>
+          <label class="block" for="rq-reason">Message shown to staff <span class="hint">optional</span></label>
+          <input type="text" id="rq-reason" style="width:100%" placeholder="e.g. Please review after a recent fall">
+        </div>
+        <div>
+          <label class="block">Who must complete it <span class="hint">none ticked = all staff</span></label>
+          <div class="checks" id="rq-depts"></div>
+        </div>
+      </div>
+      <div style="margin-top:14px"><button class="btn" id="rq-add">Require this topic</button> <span class="err" id="rq-error"></span></div>
+    </div>
+    <div class="card">
+      <h2>Required education</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Topic</th><th>Who</th><th>Started</th><th>Progress</th><th></th></tr></thead>
+        <tbody id="rq-rows"></tbody>
+      </table></div>
+      <div class="muted small" style="margin-top:8px">Progress counts staff on the roster. Close an item when you no longer need it; closed items stop appearing on the iPad.</div>
+    </div>
+  </section>
+
+  <!-- Topics -->
+  <section class="tab" id="tab-topics">
+    <div class="card">
+      <div class="toolbar">
+        <input type="text" id="topic-search" placeholder="Search topics" class="grow">
+        <select id="topic-filter">
+          <option value="active">Active topics</option>
+          <option value="rotation">In rotation only</option>
+          <option value="draft">Needs work</option>
+          <option value="retired">Retired topics</option>
+          <option value="all">All topics</option>
+        </select>
+        <button class="btn ghost" id="topic-import-btn">Import from spreadsheet</button>
+        <button class="btn" id="new-topic">+ New topic</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Topic</th><th>For</th><th>Questions</th><th>In rotation</th><th>Last used</th><th>Responses</th><th>Right first try</th><th></th></tr></thead>
+        <tbody id="topic-rows"></tbody>
+      </table></div>
+      <div class="muted small" style="margin-top:10px">Retiring hides a topic from the iPad but keeps it and its history. You can restore it any time.</div>
+    </div>
+  </section>
+
+  <!-- Staff -->
+  <section class="tab" id="tab-staff">
+    <div class="card">
+      <div class="toolbar">
+        <input type="text" id="staff-search" placeholder="Search staff" class="grow">
+        <select id="staff-filter"><option value="active">Active staff</option><option value="inactive">Inactive</option><option value="all">All</option></select>
+        <button class="btn ghost" id="staff-import-btn">Import from spreadsheet</button>
+        <button class="btn" id="staff-add-btn">+ Add staff</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>Workday last 4</th><th>Department</th><th>Last in-service</th><th>Pending required</th><th></th></tr></thead>
+        <tbody id="staff-rows"></tbody>
+      </table></div>
+      <div class="muted small" style="margin-top:8px">Staff sign in on the iPad with the last 4 digits of their Workday ID, then tap their name to confirm. If two people share the same last 4, both names appear and each taps their own.</div>
+    </div>
+  </section>
+
+  <!-- Responses -->
+  <section class="tab" id="tab-responses">
+    <div class="card">
+      <div class="toolbar">
+        <label>From <input type="date" id="resp-from"></label>
+        <label>To <input type="date" id="resp-to"></label>
+        <select id="resp-dept"><option value="">All departments</option></select>
+        <select id="resp-topic"><option value="">All topics</option></select>
+        <label><input type="checkbox" id="resp-missed"> Missed first try only</label>
+        <span class="grow"></span>
+        <a class="btn" id="resp-csv" href="/api/admin/responses.csv">Download CSV</a>
+      </div>
+      <div class="muted" id="resp-summary" style="margin-bottom:8px"></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>Name</th><th>Dept</th><th>Type</th><th>Topic and question</th><th>First answer</th><th>Result</th></tr></thead>
+        <tbody id="resp-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- History -->
+  <section class="tab" id="tab-history">
+    <div class="card">
+      <h2>Usage history</h2>
+      <div class="muted small" style="margin-bottom:10px">Each row is a day a topic was used on the iPad.</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Topic</th><th>Responses that day</th></tr></thead>
+        <tbody id="usage-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section class="tab" id="tab-settings">
+    <div class="grid">
+      <div class="card">
+        <h2>Kiosk</h2>
+        <label class="block" for="set-facility">Facility name <span class="hint">shown at the top of the iPad</span></label>
+        <input type="text" id="set-facility" style="width:100%">
+        <label class="block" for="set-depts">Departments <span class="hint">one per line</span></label>
+        <textarea id="set-depts" rows="8"></textarea>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px"><input type="checkbox" id="set-unlisted" style="margin-top:4px"> <span>Let staff who aren't on the roster type their name instead<br><span class="hint">They are marked "not on roster" in responses and do not get required education.</span></span></label>
+        <div style="margin-top:14px"><button class="btn" id="save-settings">Save</button></div>
+      </div>
+      <div class="card">
+        <h2>Admin password</h2>
+        <div id="pw-env" class="muted small" hidden>The password is set by the hosting service (ADMIN_PASSWORD), so it can't be changed here.</div>
+        <div id="pw-form">
+          <div class="muted small">Used to open this admin page. The username is <code>admin</code>.</div>
+          <label class="block" for="set-pw">New password</label>
+          <input type="password" id="set-pw" style="width:100%" autocomplete="new-password">
+          <div style="margin-top:10px"><button class="btn" id="save-pw">Change password</button></div>
+        </div>
+        <h2 style="margin-top:24px">Backup</h2>
+        <div class="muted small">Download a copy at least weekly and keep it somewhere safe.</div>
+        <div class="toolbar" style="margin-top:10px">
+          <a class="btn ghost" href="/api/admin/backup">Download full backup</a>
+          <a class="btn ghost" href="/api/admin/responses.csv">Download all responses (CSV)</a>
+        </div>
+        <h3 style="margin-top:16px">Restore from a backup</h3>
+        <div class="muted small">Replaces all current data with the backup file. A copy of the current data is saved first.</div>
+        <div style="margin-top:8px"><input type="file" id="restore-file" accept=".json,application/json"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Topic editor -->
+<dialog id="editor">
+  <form method="dialog" id="editor-form">
+    <div class="dlg-head"><h2 style="margin:0" id="editor-heading">Edit topic</h2></div>
+    <div class="dlg-body">
+      <div class="grid" style="gap:0 18px">
+        <div><label class="block" for="f-title">Title</label><input type="text" id="f-title" style="width:100%" required></div>
+        <div><label class="block" for="f-category">Category <span class="hint">optional</span></label><input type="text" id="f-category" style="width:100%" list="category-list"></div>
+      </div>
+      <datalist id="category-list"></datalist>
+      <label class="block">For <span class="hint">none ticked = all staff</span></label>
+      <div class="checks" id="f-depts"></div>
+      <label class="block" for="f-lesson">Lesson <span class="hint">keep it short. Blank line = new paragraph, "- " starts a bullet, **word** makes bold</span></label>
+      <textarea id="f-lesson" rows="8" required></textarea>
+      <details style="margin-top:6px"><summary class="muted small" style="cursor:pointer">Preview lesson</summary><div class="lesson-preview" id="f-preview"></div></details>
+      <label class="block">Questions <span class="hint">add several so staff get a different one each shift</span></label>
+      <div id="f-questions"></div>
+      <button type="button" class="btn ghost" id="f-add-q">+ Add question</button>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" id="f-rotation"> Include in the automatic rotation</label>
+      <div class="err" id="f-error" style="margin-top:8px"></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn ghost" id="f-cancel">Cancel</button>
+      <button type="button" class="btn ghost" id="f-draft">Save as draft</button>
+      <button type="submit" class="btn" id="f-save">Save topic</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Staff editor -->
+<dialog id="staff-editor" style="width:min(520px,96vw)">
+  <form method="dialog" id="staff-form">
+    <div class="dlg-head"><h2 style="margin:0" id="staff-heading">Add staff</h2></div>
+    <div class="dlg-body">
+      <label class="block" for="st-name">Full name</label><input type="text" id="st-name" style="width:100%">
+      <label class="block" for="st-last4">Last 4 of Workday ID</label><input type="text" id="st-last4" inputmode="numeric" maxlength="12" style="width:160px">
+      <label class="block" for="st-dept">Department</label><select id="st-dept" style="width:100%"></select>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" id="st-active"> Active</label>
+      <div class="err" id="st-error" style="margin-top:8px"></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button>
+      <button type="submit" class="btn">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Staff import -->
+<dialog id="staff-import">
+  <div class="dlg-head"><h2 style="margin:0">Import staff from a spreadsheet</h2></div>
+  <div class="dlg-body">
+    <p class="muted small">Choose an Excel or CSV file, or copy the columns from Excel and paste them below. You need three columns: <strong>name</strong>, <strong>Workday ID</strong> (full ID or last 4), and <strong>department</strong>. Staff already on the roster with the same name and last 4 are updated, not duplicated.</p>
+    <input type="file" id="imp-file" accept=".xlsx,.xls,.csv,text/csv,text/plain">
+    <label class="block" for="imp-text">Or paste here</label>
+    <textarea id="imp-text" rows="6" placeholder="Name, Workday ID, Department"></textarea>
+    <div class="grid" style="gap:10px;margin-top:8px" id="imp-map"></div>
+    <div id="imp-preview" class="small" style="margin-top:10px"></div>
+    <div class="err" id="imp-error"></div>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn" id="imp-go" disabled>Import</button>
+  </div>
+</dialog>
+
+<!-- Topic import -->
+<dialog id="topic-import">
+  <div class="dlg-head"><h2 style="margin:0">Import topics from a spreadsheet</h2></div>
+  <div class="dlg-body">
+    <p class="muted small">Choose an Excel (.xlsx) or CSV file with one row per question and these column headings: <strong>Topic title</strong>, <strong>Question</strong>, <strong>Correct answer</strong>, <strong>Wrong answers</strong>. Optional: Lesson text, Department, Hint, Explanation, Category, Last-used date. Separate several answers in one cell with <code>|</code>. Rows with the same topic title become one topic with several questions. A question containing "select all" becomes select-all-that-apply. Topics already in your library with the same title are updated.</p>
+    <input type="file" id="ti-file" accept=".xlsx,.xls,.csv,text/csv">
+    <div id="ti-preview" class="small" style="margin-top:12px"></div>
+    <div class="err" id="ti-error"></div>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn" id="ti-go" disabled>Import</button>
+  </div>
+</dialog>
+
+<!-- Generic viewer (preview, progress) -->
+<dialog id="viewer">
+  <div class="dlg-head"><h2 style="margin:0" id="vw-title"></h2></div>
+  <div class="dlg-body" id="vw-body"></div>
+  <div class="dlg-foot"><button class="btn" onclick="this.closest('dialog').close()">Close</button></div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+<script src="/format.js"></script>
+<script src="/admin.js"></script>
+</body>
+</html>

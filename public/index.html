@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="In-Service">
+<title>Daily In-Service</title>
+<style>
+  :root {
+    --bg: #f3f6f8; --card: #ffffff; --ink: #1d2b36; --muted: #5b6b78; --line: #dbe3e9;
+    --brand: #1f5f7a; --brand-dark: #174a60; --brand-soft: #e4f0f5;
+    --good: #1e7a4c; --good-soft: #e3f4ea; --warn: #a4521b; --warn-soft: #fbeee2;
+    --req: #8a2c4b; --req-soft: #f8e6ec;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 19px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-user-select: none; user-select: none; overscroll-behavior: none;
+  }
+  input { -webkit-user-select: text; user-select: text; }
+  .app { min-height: 100%; display: flex; flex-direction: column; }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 24px; padding-top: max(12px, env(safe-area-inset-top));
+    background: var(--card); border-bottom: 1px solid var(--line);
+  }
+  .brand { font-weight: 700; font-size: 20px; color: var(--brand); }
+  .who { font-size: 16px; color: var(--muted); }
+  main { flex: 1; display: flex; justify-content: center; align-items: flex-start; padding: 20px 16px 32px; }
+  .screen { width: 100%; max-width: 760px; display: none; animation: fade .2s ease; }
+  .screen.active { display: block; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px 32px; }
+  h1 { font-size: 32px; line-height: 1.2; margin: 0 0 10px; }
+  h2 { font-size: 26px; line-height: 1.25; margin: 0 0 16px; }
+  .kicker { text-transform: uppercase; letter-spacing: 1.4px; font-size: 14px; font-weight: 700; color: var(--brand); margin-bottom: 6px; }
+  .muted { color: var(--muted); }
+  .center { text-align: center; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    min-height: 64px; padding: 0 28px; border-radius: 14px; border: 0;
+    font: inherit; font-size: 21px; font-weight: 650; cursor: pointer;
+    background: var(--brand); color: #fff; transition: transform .08s, background .15s;
+  }
+  .btn:active { transform: scale(.98); background: var(--brand-dark); }
+  .btn[disabled] { background: #a9b8c2; }
+  .btn.secondary { background: var(--brand-soft); color: var(--brand); }
+  .btn.link { background: none; color: var(--brand); min-height: 48px; font-weight: 600; font-size: 18px; }
+  .btn.wide { width: 100%; }
+  .row { display: flex; gap: 14px; margin-top: 22px; }
+  .row .btn { flex: 1; }
+
+  /* Keypad */
+  .pin { display: flex; justify-content: center; gap: 14px; margin: 18px 0 22px; }
+  .pin span {
+    width: 64px; height: 76px; border-radius: 14px; border: 2px solid var(--line); background: #fff;
+    display: grid; place-items: center; font-size: 38px; font-weight: 700;
+  }
+  .pin span.filled { border-color: var(--brand); }
+  .pin.shake { animation: shake .35s; }
+  @keyframes shake { 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: 380px; margin: 0 auto; }
+  .key {
+    min-height: 72px; border-radius: 16px; border: 1px solid var(--line); background: #fff;
+    font: inherit; font-size: 30px; font-weight: 600; color: var(--ink); cursor: pointer;
+  }
+  .key:active { background: var(--brand-soft); }
+  .key.fn { font-size: 18px; color: var(--muted); background: var(--bg); }
+
+  /* Identity confirm */
+  .match {
+    display: flex; align-items: center; gap: 18px; width: 100%; text-align: left;
+    min-height: 88px; padding: 14px 22px; margin-bottom: 12px; border-radius: 16px; border: 2px solid var(--brand);
+    background: var(--brand-soft); font: inherit; color: var(--ink); cursor: pointer;
+  }
+  .match .avatar { flex: none; width: 54px; height: 54px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 22px; font-weight: 700; }
+  .match .nm { font-size: 24px; font-weight: 700; }
+  .match .dp { color: var(--muted); font-size: 17px; }
+  .match .go { margin-left: auto; color: var(--brand); font-weight: 700; font-size: 18px; white-space: nowrap; }
+
+  label.field { display: block; font-weight: 650; margin: 0 0 8px; }
+  input[type=text] {
+    width: 100%; min-height: 64px; font: inherit; font-size: 24px; padding: 0 18px;
+    border: 2px solid var(--line); border-radius: 14px; background: #fff; color: var(--ink); outline: none;
+  }
+  input[type=text]:focus { border-color: var(--brand); }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip { min-height: 54px; padding: 0 20px; border-radius: 27px; border: 2px solid var(--line); background: #fff; font: inherit; font-size: 18px; color: var(--ink); cursor: pointer; }
+  .chip.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 650; }
+
+  .required-banner { background: var(--req-soft); color: var(--req); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 17px; }
+  .required-banner strong { display: block; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; }
+  .lesson { font-size: 20px; line-height: 1.6; }
+  .lesson p { margin: 0 0 14px; }
+  .lesson ul { margin: 0 0 14px; padding-left: 26px; }
+  .lesson li { margin-bottom: 6px; }
+
+  .answers { display: grid; gap: 12px; margin-top: 6px; }
+  .answer {
+    display: flex; align-items: center; gap: 16px; text-align: left;
+    min-height: 72px; padding: 12px 18px; border-radius: 14px; border: 2px solid var(--line);
+    background: #fff; font: inherit; font-size: 20px; color: var(--ink); cursor: pointer;
+  }
+  .answer .letter { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); font-weight: 700; color: var(--muted); }
+  .answer.on { border-color: var(--brand); background: var(--brand-soft); }
+  .answer.on .letter { background: var(--brand); color: #fff; }
+  .select-all { display: inline-block; background: var(--brand-soft); color: var(--brand); font-weight: 700; border-radius: 8px; padding: 4px 12px; margin: -6px 0 12px; font-size: 17px; }
+  .answer.multi .letter { border-radius: 8px; border: 2px solid var(--line); background: #fff; color: #fff; }
+  .answer.multi.on .letter { background: var(--brand); border-color: var(--brand); }
+  .tryagain { background: var(--warn-soft); color: var(--warn); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; font-size: 18px; }
+  .tryagain strong { display: block; font-size: 20px; }
+
+  .badge { width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 16px; font-size: 50px; font-weight: 700; background: var(--good-soft); color: var(--good); }
+  .explain { text-align: left; background: var(--bg); border-radius: 14px; padding: 16px 20px; margin: 20px 0 0; font-size: 19px; }
+  .error { color: var(--warn); font-weight: 600; min-height: 28px; margin-top: 10px; text-align: center; }
+  .countdown { margin-top: 14px; font-size: 16px; text-align: center; }
+
+  /* iPad mini landscape: keypad beside the instructions */
+  @media (min-width: 900px) and (max-height: 820px) {
+    .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: center; }
+    .home-grid .pin { margin-bottom: 0; }
+  }
+  @media (max-width: 600px) {
+    body { font-size: 17px; }
+    .card { padding: 22px 18px; }
+    h1 { font-size: 26px; } h2 { font-size: 22px; }
+    .row { flex-direction: column-reverse; }
+    .pin span { width: 54px; height: 66px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand" id="facility">Stonehenge</div>
+    <div class="who" id="who-label"></div>
+  </header>
+  <main>
+    <!-- Home: Workday ID keypad -->
+    <section class="screen active" id="s-home">
+      <div class="card">
+        <div class="home-grid">
+          <div class="center">
+            <div class="kicker">Daily In-Service</div>
+            <h1>Enter the last 4 digits of your Workday ID</h1>
+            <div class="pin" id="pin"><span></span><span></span><span></span><span></span></div>
+            <div class="error" id="pin-error"></div>
+          </div>
+          <div>
+            <div class="keypad" id="keypad">
+              <button class="key" data-k="1">1</button><button class="key" data-k="2">2</button><button class="key" data-k="3">3</button>
+              <button class="key" data-k="4">4</button><button class="key" data-k="5">5</button><button class="key" data-k="6">6</button>
+              <button class="key" data-k="7">7</button><button class="key" data-k="8">8</button><button class="key" data-k="9">9</button>
+              <button class="key fn" data-k="clear">Clear</button><button class="key" data-k="0">0</button><button class="key fn" data-k="back">⌫ Back</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Confirm identity -->
+    <section class="screen" id="s-confirm">
+      <div class="card">
+        <div class="kicker">Confirm it's you</div>
+        <h2 id="confirm-title">Tap your name</h2>
+        <div id="matches"></div>
+        <div class="row">
+          <button class="btn secondary" data-action="home">That's not me</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ID not found -->
+    <section class="screen" id="s-notfound">
+      <div class="card center">
+        <h1>We couldn't find that ID</h1>
+        <p class="muted">Check the last 4 digits of your Workday ID and try again.</p>
+        <div class="row"><button class="btn" data-action="home">Try again</button></div>
+        <div id="unlisted-link" style="margin-top:10px"><button class="btn link" data-action="unlisted">I'm new or not in the system</button></div>
+      </div>
+    </section>
+
+    <!-- Not on roster: type name -->
+    <section class="screen" id="s-unlisted">
+      <div class="card">
+        <div class="kicker">Not in the system yet</div>
+        <h2>Enter your name and department</h2>
+        <label class="field" for="name">First and last name</label>
+        <input type="text" id="name" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
+        <div style="margin-top:20px" id="dept-block">
+          <label class="field">Department</label>
+          <div class="chips" id="depts"></div>
+        </div>
+        <div class="error" id="unlisted-error"></div>
+        <div class="row">
+          <button class="btn secondary" data-action="home">Cancel</button>
+          <button class="btn" id="unlisted-go">Continue</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Lesson -->
+    <section class="screen" id="s-lesson">
+      <div class="card">
+        <div class="required-banner" id="lesson-required" hidden></div>
+        <div class="kicker" id="lesson-kicker"></div>
+        <h2 id="lesson-title"></h2>
+        <div class="lesson" id="lesson-body"></div>
+        <div class="row">
+          <button class="btn secondary" data-action="home">Cancel</button>
+          <button class="btn" id="to-question">I've read this</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Question (and retries) -->
+    <section class="screen" id="s-question">
+      <div class="card">
+        <div class="tryagain" id="tryagain" hidden></div>
+        <div class="kicker" id="question-kicker">Question</div>
+        <h2 id="question-text"></h2>
+        <div class="select-all" id="select-all" hidden>Select all that apply</div>
+        <div class="answers" id="answers"></div>
+        <div class="error" id="question-error"></div>
+        <div class="row">
+          <button class="btn secondary" data-action="lesson">Review lesson</button>
+          <button class="btn" id="submit" disabled>Submit answer</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Correct -->
+    <section class="screen" id="s-result">
+      <div class="card center">
+        <div class="badge">✓</div>
+        <h1 id="result-title"></h1>
+        <p class="muted" id="result-sub"></p>
+        <div class="explain" id="result-explain" hidden></div>
+        <div class="row"><button class="btn wide" id="result-next">Done</button></div>
+        <div class="countdown muted" id="countdown"></div>
+      </div>
+    </section>
+
+    <!-- Nothing scheduled -->
+    <section class="screen" id="s-empty">
+      <div class="card center">
+        <h1>No in-service is scheduled for you right now</h1>
+        <p class="muted">Please let your supervisor know.</p>
+        <button class="btn secondary" data-action="home">OK</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="format.js"></script>
+<script>
+(() => {
+  const IDLE_RESET_MS = 60000;          // back to the keypad after 1 minute without a touch
+  const RESULT_RESET_S = 15;            // final screen returns to the keypad after this many seconds
+  const RELOAD_EVERY_MS = 6 * 3600000;  // refresh the page every 6 hours while idle
+
+  const $ = id => document.getElementById(id);
+  const s = { pin: '', config: { departments: [], allowUnlisted: true }, dept: '', who: null, items: [], idx: 0,
+    answers: [], choice: null, responseId: null, busy: false };
+  let idleTimer = null, countdownTimer = null;
+  const loadedAt = Date.now();
+
+  const item = () => s.items[s.idx];
+
+  function show(name) {
+    document.querySelectorAll('.screen').forEach(el => el.classList.toggle('active', el.id === 's-' + name));
+    window.scrollTo(0, 0);
+    clearInterval(countdownTimer);
+    bumpIdle();
+  }
+  function bumpIdle() {
+    clearTimeout(idleTimer);
+    if (!$('s-home').classList.contains('active')) idleTimer = setTimeout(goHome, IDLE_RESET_MS);
+  }
+  function goHome() {
+    Object.assign(s, { pin: '', dept: '', who: null, items: [], idx: 0, answers: [], choice: null, responseId: null });
+    $('name').value = '';
+    ['pin-error', 'unlisted-error', 'question-error'].forEach(id => { $(id).textContent = ''; });
+    $('who-label').textContent = '';
+    renderPin(); renderDepts();
+    show('home');
+    if (Date.now() - loadedAt > RELOAD_EVERY_MS) location.reload();
+  }
+
+  async function api(path, body) {
+    const opts = { cache: 'no-store', headers: { 'Content-Type': 'application/json' } };
+    if (body) { opts.method = 'POST'; opts.body = JSON.stringify(body); }
+    const res = await fetch(path, opts);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
+    return data;
+  }
+
+  async function loadConfig() {
+    try {
+      s.config = await api('/api/kiosk/config');
+      $('facility').textContent = s.config.facilityName || 'Stonehenge';
+      $('unlisted-link').hidden = !s.config.allowUnlisted;
+      renderDepts();
+    } catch { /* keep last known config */ }
+  }
+
+  // ----- keypad -----
+  function renderPin() {
+    $('pin').querySelectorAll('span').forEach((el, i) => {
+      el.textContent = s.pin[i] ? '•' : '';
+      el.classList.toggle('filled', !!s.pin[i]);
+    });
+  }
+  $('keypad').addEventListener('click', e => {
+    const k = e.target.closest('[data-k]');
+    if (!k || s.busy) return;
+    $('pin-error').textContent = '';
+    if (k.dataset.k === 'clear') s.pin = '';
+    else if (k.dataset.k === 'back') s.pin = s.pin.slice(0, -1);
+    else if (s.pin.length < 4) s.pin += k.dataset.k;
+    renderPin();
+    if (s.pin.length === 4) identify();
+  });
+
+  async function identify() {
+    s.busy = true;
+    try {
+      const { matches } = await api('/api/kiosk/identify', { last4: s.pin });
+      if (!matches.length) { show('notfound'); return; }
+      $('confirm-title').textContent = matches.length > 1 ? 'Tap your name' : 'Is this you?';
+      $('matches').innerHTML = matches.map(m => `
+        <button class="match" data-emp="${escapeHtml(m.id)}">
+          <span class="avatar">${escapeHtml(m.displayName[0] || '?')}</span>
+          <span><div class="nm">${escapeHtml(m.displayName)}</div><div class="dp">${escapeHtml(m.department || '')}</div></span>
+          <span class="go">Yes, this is me ›</span>
+        </button>`).join('');
+      show('confirm');
+    } catch (err) {
+      $('pin-error').textContent = err.message;
+      $('pin').classList.add('shake'); setTimeout(() => $('pin').classList.remove('shake'), 400);
+      s.pin = ''; renderPin();
+    } finally { s.busy = false; }
+  }
+
+  $('matches').addEventListener('click', e => {
+    const b = e.target.closest('[data-emp]');
+    if (b) begin({ employeeId: b.dataset.emp });
+  });
+
+  // ----- not on roster -----
+  function renderDepts() {
+    const d = s.config.departments || [];
+    $('dept-block').hidden = !d.length;
+    $('depts').innerHTML = d.map(x => `<button class="chip${x === s.dept ? ' on' : ''}" data-dept="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join('');
+  }
+  $('depts').addEventListener('click', e => {
+    const c = e.target.closest('[data-dept]');
+    if (c) { s.dept = c.dataset.dept; renderDepts(); }
+  });
+  $('name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('name').blur(); } });
+  $('unlisted-go').addEventListener('click', () => {
+    const name = $('name').value.trim().replace(/\s+/g, ' ');
+    if (name.length < 3 || !name.includes(' ')) { $('unlisted-error').textContent = 'Please enter your first and last name.'; return; }
+    if ((s.config.departments || []).length && !s.dept) { $('unlisted-error').textContent = 'Please choose your department.'; return; }
+    $('name').blur();
+    begin({ name, department: s.dept, last4: s.pin });
+  });
+
+  // ----- the in-service itself -----
+  async function begin(identity) {
+    if (s.busy) return;
+    s.busy = true;
+    try {
+      const r = await api('/api/kiosk/start', identity);
+      s.who = r.who; s.items = r.items; s.idx = 0;
+      $('who-label').textContent = `${r.who.firstName}${r.who.department ? ' · ' + r.who.department : ''}`;
+      if (!s.items.length) { show('empty'); return; }
+      openItem();
+    } catch (err) {
+      alert(err.message);
+      goHome();
+    } finally { s.busy = false; }
+  }
+
+  function openItem() {
+    const it = item();
+    s.answers = it.question.answers; s.responseId = null; clearChoice();
+    const multi = s.items.length > 1 ? ` · ${s.idx + 1} of ${s.items.length}` : '';
+    $('lesson-required').hidden = it.kind !== 'required';
+    $('lesson-required').innerHTML = it.kind === 'required'
+      ? `<strong>Required education${multi}</strong>${escapeHtml(it.reason || 'Please complete this before continuing.')}` : '';
+    $('lesson-kicker').textContent = (it.kind === 'scheduled' ? 'Topic of the week' : (it.topic.category || 'Lesson')) + (it.kind === 'required' ? '' : multi);
+    $('lesson-title').textContent = it.topic.title;
+    $('lesson-body').innerHTML = formatLesson(it.topic.lesson);
+    $('tryagain').hidden = true;
+    $('question-kicker').textContent = 'Question' + multi;
+    renderQuestion();
+    show('lesson');
+  }
+
+  // s.choice is an index for single-answer questions, or a Set of indexes for "select all that apply".
+  const isMulti = () => item().question.type === 'multi';
+  const picked = i => isMulti() ? s.choice.has(i) : s.choice === i;
+  function renderQuestion() {
+    $('question-text').textContent = item().question.text;
+    $('select-all').hidden = !isMulti();
+    $('answers').innerHTML = s.answers.map((a, i) =>
+      `<button class="answer${picked(i) ? ' on' : ''}${isMulti() ? ' multi' : ''}" data-i="${i}"><span class="letter">${isMulti() ? (picked(i) ? '✓' : '') : 'ABCDEFGH'[i]}</span><span>${escapeHtml(a)}</span></button>`).join('');
+    $('submit').disabled = isMulti() ? s.choice.size === 0 : s.choice === null;
+  }
+  function clearChoice() { s.choice = isMulti() ? new Set() : null; }
+  $('answers').addEventListener('click', e => {
+    const a = e.target.closest('.answer');
+    if (!a) return;
+    const i = Number(a.dataset.i);
+    if (isMulti()) { s.choice.has(i) ? s.choice.delete(i) : s.choice.add(i); } else s.choice = i;
+    $('question-error').textContent = '';
+    renderQuestion();
+  });
+  $('to-question').addEventListener('click', () => show('question'));
+
+  $('submit').addEventListener('click', async () => {
+    if ($('submit').disabled || s.busy) return;
+    s.busy = true; $('submit').disabled = true;
+    const it = item();
+    try {
+      const r = await api('/api/kiosk/answer', {
+        responseId: s.responseId, answer: isMulti() ? [...s.choice].map(i => s.answers[i]) : s.answers[s.choice],
+        topicId: it.topic.id, questionId: it.question.id, kind: it.kind,
+        requiredId: it.requiredId || null, scheduleId: it.scheduleId || null,
+        who: { employeeId: s.who.employeeId, name: s.who.name, department: s.who.department, last4: s.who.last4 }
+      });
+      s.responseId = r.responseId;
+      if (!r.correct) {
+        // Wrong: show a hint, remove that choice, and shuffle the rest.
+        s.answers = r.answers; clearChoice();
+        $('tryagain').innerHTML = `<strong>Not quite. Please try again.</strong>${r.hint ? 'Hint: ' + escapeHtml(r.hint) : 'The answer choices have been shuffled.'}`;
+        $('tryagain').hidden = false;
+        renderQuestion();
+        window.scrollTo(0, 0);
+        return;
+      }
+      showResult(r);
+    } catch (err) {
+      $('question-error').textContent = err.message;
+      $('submit').disabled = false;
+    } finally { s.busy = false; }
+  });
+
+  function showResult(r) {
+    const more = s.idx < s.items.length - 1;
+    $('result-title').textContent = r.firstTryCorrect ? 'Correct!' : `That's right.`;
+    $('result-sub').textContent = more ? 'Your answer has been recorded. You have more to finish.' : `Thank you, ${s.who.firstName}. Your in-service has been recorded.`;
+    $('result-explain').innerHTML = r.explanation ? escapeHtml(r.explanation) : '';
+    $('result-explain').hidden = !r.explanation;
+    $('result-next').textContent = more ? 'Next' : 'Done';
+    show('result');
+    if (more) return;
+    let left = RESULT_RESET_S;
+    const tick = () => { $('countdown').textContent = `Returning to start in ${left} seconds`; };
+    tick();
+    countdownTimer = setInterval(() => { left -= 1; tick(); if (left <= 0) goHome(); }, 1000);
+  }
+  $('result-next').addEventListener('click', () => {
+    if (s.idx < s.items.length - 1) { s.idx += 1; openItem(); } else goHome();
+  });
+
+  document.addEventListener('click', e => {
+    const a = e.target.closest('[data-action]');
+    if (!a) return;
+    const act = a.dataset.action;
+    if (act === 'home') goHome();
+    if (act === 'lesson') show('lesson');
+    if (act === 'unlisted') { renderDepts(); show('unlisted'); setTimeout(() => $('name').focus(), 250); }
+  });
+  document.addEventListener('pointerdown', bumpIdle, true);
+  document.addEventListener('keydown', bumpIdle, true);
+
+  loadConfig();
+  setInterval(() => { if ($('s-home').classList.contains('active')) loadConfig(); }, 5 * 60000);
+  setInterval(() => { if ($('s-home').classList.contains('active') && Date.now() - loadedAt > RELOAD_EVERY_MS) location.reload(); }, 10 * 60000);
+})();
+</script>
+</body>
+</html>

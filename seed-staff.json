@@ -1,0 +1,7 @@
+[
+  { "name": "Sample CNA", "last4": "1111", "department": "CNA" },
+  { "name": "Sample Nurse", "last4": "2222", "department": "Nursing" },
+  { "name": "Sample Dietary", "last4": "3333", "department": "Dietary" },
+  { "name": "Sample Housekeeper", "last4": "4444", "department": "Housekeeping" },
+  { "name": "Another Sample", "last4": "1111", "department": "Therapy" }
+]
