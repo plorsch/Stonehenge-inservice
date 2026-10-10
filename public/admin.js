@@ -57,7 +57,7 @@
 
   async function refresh() {
     state = await api('/api/admin/state');
-    renderToday(); renderSchedule(); renderRequired(); renderTopics(); renderStaff(); renderFilters();
+    renderToday(); renderSchedule(); renderRequired(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters();
   }
 
   // ---------- today ----------
@@ -546,6 +546,8 @@
     $('st-last4').value = e ? e.last4 : '';
     $('st-dept').value = e ? e.department : '';
     $('st-active').checked = e ? e.active : true;
+    $('st-birthday').value = e && e.birthday ? e.birthday.split('-').map(Number).join('/') : '';
+    $('st-hire').value = e && e.hireDate ? e.hireDate : '';
     $('st-error').textContent = '';
     $('staff-editor').showModal();
     $('st-name').focus();
@@ -557,7 +559,10 @@
   });
   $('staff-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const body = { name: $('st-name').value, last4: $('st-last4').value, department: $('st-dept').value, active: $('st-active').checked };
+    const body = { name: $('st-name').value, last4: $('st-last4').value, department: $('st-dept').value, active: $('st-active').checked,
+      birthday: $('st-birthday').value, hireDate: $('st-hire').value };
+    if (body.birthday.trim() && !/^\d{1,2}\s*\/\s*\d{1,2}(\s*\/\s*\d{2,4})?$/.test(body.birthday.trim())) { $('st-error').textContent = 'Write the birthday as month/day, like 3/7.'; return; }
+    body.birthday = body.birthday.replace(/\s/g, '');
     try {
       await api(editingStaffId ? `/api/admin/employees/${editingStaffId}` : '/api/admin/employees', { method: editingStaffId ? 'PUT' : 'POST', body: JSON.stringify(body) });
       $('staff-editor').close();
@@ -593,10 +598,12 @@
     let deptC = findCol(header, [/^dep/i]);
     if (deptC < 0) deptC = findCol(header, [/dep|role|position|job/i]);
     let leaderC = findCol(header, [/^(leader|supervisor|manager)$/i]);
+    let bdayC = findCol(header, [/birth/i]), hireC = findCol(header, [/hire/i, /anniversary/i, /^start date$/i]);
     let body = rows.slice(hi + 1);
-    if (nameC < 0 || idC < 0) { nameC = 0; idC = 1; deptC = header.length > 2 ? 2 : -1; leaderC = -1; body = rows; } // no header row
+    if (nameC < 0 || idC < 0) { nameC = 0; idC = 1; deptC = header.length > 2 ? 2 : -1; leaderC = bdayC = hireC = -1; body = rows; } // no header row
     staffRows = body.map(r => ({ name: firstLast(String(r[nameC] || '').trim()), last4: padId(r[idC]),
-      department: deptC >= 0 ? String(r[deptC] || '').trim() : '', leader: leaderC >= 0 ? String(r[leaderC] || '').trim() : '' }))
+      department: deptC >= 0 ? String(r[deptC] || '').trim() : '', leader: leaderC >= 0 ? String(r[leaderC] || '').trim() : '',
+      ...(bdayC >= 0 ? { birthday: String(r[bdayC] || '').trim(), keepBlank: true } : {}), ...(hireC >= 0 ? { hireDate: String(r[hireC] || '').trim(), keepBlank: true } : {}) }))
       .filter(r => r.name || r.last4);
     const bad = staffRows.filter(r => !r.name || String(r.last4).replace(/\D/g, '').length < 4).length;
     const newDepts = [...new Set(staffRows.map(r => r.department).filter(d => d && !depts().some(x => x.toLowerCase() === d.toLowerCase())))];
@@ -851,11 +858,53 @@
         allowUnlisted: $('set-unlisted').checked,
         closingMessages: splitLines($('set-closing').value)
       }) });
-      $('sc-depts').dataset.init = ''; $('rq-depts').dataset.init = '';
+      $('sc-depts').dataset.init = ''; $('rq-depts').dataset.init = ''; $('an-depts').dataset.init = '';
       toast('Settings saved');
       await refresh();
     } catch (err) { fail(err); }
   });
+  // ---------- announcements ----------
+  function renderAnnouncements() {
+    if (!$('an-depts').dataset.init) { renderChecks($('an-depts'), []); $('an-depts').dataset.init = 1; }
+    if (!$('an-start').value) $('an-start').value = state.todayDate;
+    const showPast = $('an-show-past').checked;
+    const rows = (state.announcements || [])
+      .filter(a => showPast || !a.endDate || a.endDate >= state.todayDate)
+      .sort((a, b) => b.startDate.localeCompare(a.startDate));
+    $('an-rows').innerHTML = rows.map(a => {
+      const live = a.startDate <= state.todayDate && (!a.endDate || a.endDate >= state.todayDate);
+      const status = live ? ' <span class="pill good">Showing now</span>' : a.startDate > state.todayDate ? ' <span class="pill">Upcoming</span>' : ' <span class="pill">Ended</span>';
+      return `<tr class="${!live && a.startDate < state.todayDate ? 'dim' : ''}"><td>${escapeHtml(a.text)}${status}</td><td>${whoLabel(a.departments)}</td>
+        <td style="white-space:nowrap">${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'}</td>
+        <td><button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
+    }).join('') || '<tr><td colspan="4" class="muted">No announcements yet.</td></tr>';
+    $('an-celebrate').checked = state.settings.celebrations !== false;
+    const up = state.upcomingCelebrations || [];
+    $('an-upcoming').innerHTML = up.length
+      ? up.map(c => `<div>${fmtDate(c.date)}: ${c.type === 'birthday' ? '🎂' : '🎉'} ${escapeHtml(c.name)}${c.department ? ` <span class="muted">(${escapeHtml(c.department)})</span>` : ''} ${c.type === 'birthday' ? 'birthday' : `${c.years} year${c.years === 1 ? '' : 's'} at work`}</div>`).join('')
+      : '<span class="muted">None. Add birthdays and hire dates on the Staff tab.</span>';
+  }
+  $('an-show-past').addEventListener('change', renderAnnouncements);
+  $('an-add').addEventListener('click', async () => {
+    $('an-error').textContent = '';
+    try {
+      await post('/api/admin/announcements', { text: $('an-text').value, departments: checked($('an-depts')), startDate: $('an-start').value, endDate: $('an-end').value });
+      $('an-text').value = ''; $('an-end').value = ''; $('an-depts').dataset.init = '';
+      toast('Announcement added. The iPad shows it within a minute.');
+      await refresh();
+    } catch (err) { $('an-error').textContent = err.message; }
+  });
+  $('an-rows').addEventListener('click', async e => {
+    const b = e.target.closest('[data-del-ann]');
+    if (!b || !confirm('Remove this announcement?')) return;
+    try { await api('/api/admin/announcements/' + b.dataset.delAnn, { method: 'DELETE' }); toast('Removed'); await refresh(); }
+    catch (err) { fail(err); }
+  });
+  $('an-celebrate').addEventListener('change', async () => {
+    try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ celebrations: $('an-celebrate').checked }) }); toast('Saved'); await refresh(); }
+    catch (err) { fail(err); }
+  });
+
   // ---------- home screen decor ----------
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const DECOR_COLORS = ['none', 'blue', 'pink', 'green', 'purple', 'yellow', 'red', 'orange'];

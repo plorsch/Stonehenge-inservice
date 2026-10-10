@@ -84,6 +84,12 @@
 
   .forgot { display: flex; width: 100%; max-width: 380px; margin: 16px auto 0; min-height: 56px; font-size: 19px; }
 
+  /* Announcements: one rotating line on the home screen, a short list on the end screen */
+  .news { margin-top: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 20px; font-size: 19px; font-weight: 600; text-align: center; transition: opacity .4s; }
+  .news.fade { opacity: 0; }
+  .news-list { text-align: left; margin: 20px 0 0; border-top: 1px solid var(--line); padding-top: 14px; }
+  .news-list div { font-size: 19px; padding: 6px 0; }
+
   /* Seasonal decor (home screen only) */
   #decor { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; display: none; }
   body.on-home #decor { display: block; }
@@ -196,6 +202,7 @@
           </div>
         </div>
       </div>
+      <div class="news" id="news-home" hidden></div>
     </section>
 
     <!-- Confirm identity -->
@@ -294,6 +301,7 @@
         <p class="muted" id="result-sub"></p>
         <div class="explain" id="result-explain" hidden></div>
         <div class="closing" id="result-closing" hidden></div>
+        <div class="news-list" id="result-news" hidden></div>
         <div class="row"><button class="btn wide" id="result-next">Done</button></div>
         <div class="countdown muted" id="countdown"></div>
       </div>
@@ -365,6 +373,7 @@
       $('unlisted-link').hidden = !s.config.allowUnlisted;
       renderDepts();
       renderDecor(s.config.decor);
+      rotateNews();
     } catch { /* keep last known config */ }
   }
 
@@ -396,6 +405,36 @@
       $('decor').appendChild(el);
     }
   }
+
+  // ----- announcements, birthdays, anniversaries -----
+  const celebLine = c => c.type === 'birthday' ? `🎂 Happy birthday, ${c.name}!` : `🎉 ${c.name}: ${c.years} year${c.years === 1 ? '' : 's'} with us today!`;
+  // Everything for this person: all-staff and their department's announcements, then today's celebrations (not their own).
+  function newsFor(who) {
+    const dept = who && who.department;
+    const ann = (s.config.announcements || []).filter(a => !a.departments.length || (dept && a.departments.includes(dept))).map(a => a.text);
+    const cel = (s.config.celebrations || []).filter(c => !who || c.id !== who.employeeId).map(celebLine);
+    return ann.concat(cel);
+  }
+  function personalLine(who) {
+    const mine = who && who.employeeId && (s.config.celebrations || []).filter(c => c.id === who.employeeId);
+    if (!mine || !mine.length) return '';
+    const first = (who.name || '').split(' ')[0];
+    return mine.map(c => c.type === 'birthday' ? `🎂 Happy birthday, ${first}!` : `🎉 Happy ${c.years}-year anniversary, ${first}! Thank you for being here.`).join(' ');
+  }
+  // Home screen: all-staff items only, one at a time.
+  let newsIdx = 0;
+  function rotateNews() {
+    const items = (s.config.announcements || []).filter(a => !a.departments.length).map(a => a.text)
+      .concat((s.config.celebrations || []).map(celebLine));
+    const el = $('news-home');
+    el.hidden = !items.length;
+    if (!items.length) return;
+    const text = items[newsIdx++ % items.length];
+    if (el.textContent === text) return;
+    el.classList.add('fade');
+    setTimeout(() => { el.textContent = text; el.classList.remove('fade'); }, el.textContent ? 400 : 0);
+  }
+  setInterval(rotateNews, 7000);
 
   // ----- keypad -----
   function renderPin() {
@@ -590,10 +629,13 @@
     $('result-next').textContent = more ? 'Next' : 'Done';
     $('end-logo').hidden = more;
     $('result-closing').hidden = more;
-    if (!more) $('result-closing').textContent = closingLine();
+    const news = more ? [] : newsFor(s.who);
+    if (!more) $('result-closing').textContent = personalLine(s.who) || closingLine();
+    $('result-news').innerHTML = news.slice(0, 4).map(t => `<div>${escapeHtml(t)}</div>`).join('');
+    $('result-news').hidden = !news.length;
     show('result');
     if (more) return;
-    let left = RESULT_RESET_S;
+    let left = RESULT_RESET_S + (news.length ? 5 : 0);
     const tick = () => { $('countdown').textContent = `Returning to start in ${left} seconds`; };
     tick();
     countdownTimer = setInterval(() => { left -= 1; tick(); if (left <= 0) goHome(); }, 1000);

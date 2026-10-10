@@ -41,6 +41,20 @@ function cleanText(v, max = 5000) {
 function cleanList(v, max = 60, limit = 40) {
   return (Array.isArray(v) ? v : []).map(x => cleanText(x, max)).filter(Boolean).slice(0, limit);
 }
+// Birthday as "MM-DD" (no year kept). Accepts 2026-03-07, 3/7, 03/07/1990, 3-7.
+function cleanMonthDay(v) {
+  const s = cleanText(v, 20);
+  let m = s.match(/^\d{4}-(\d{1,2})-(\d{1,2})/) || s.match(/^(\d{1,2})[/-](\d{1,2})(?:[/-]\d{2,4})?$/);
+  if (!m) return '';
+  const mo = Number(m[1]), d = Number(m[2]);
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? `${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}` : '';
+}
+// Hire date as YYYY-MM-DD. Accepts 2019-03-07 or 3/7/2019.
+function cleanFullDate(v) {
+  const s = cleanText(v, 20);
+  const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  return us ? `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}` : (cleanDate(s.slice(0, 10)) || '');
+}
 function cleanDate(v) {
   const s = cleanText(v, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
@@ -98,6 +112,7 @@ function defaultSettings() {
     allowUnlisted: true,      // staff not on the roster can type their name instead
     leaders: {},              // { department: leader name }, for the Clock-in check follow-up lists
     decor: defaultDecor(),    // home screen decorations, one set per month
+    celebrations: true,       // show staff birthdays and work anniversaries on the kiosk
     // Sign-off lines shown on the kiosk's final screen; one is picked at random each time.
     closingMessages: ["Have a great shift!", "Thank you for what you do for our residents!", "Go give someone a shout out today, would ya?", "You make a difference!", "Our residents are lucky to have you.", "Thanks for learning something new today.", "Small moments of kindness add up. Thank you!", "You're the reason this place feels like home.", "Go make someone smile today!", "Teamwork makes the dream work. Have a great one!", "Thanks for showing up for our residents today.", "Your care matters more than you know.", "Proud to work alongside you!", "Take a deep breath. You've got this!", "Remember to drink some water today, too!", "Someone's day is better because you're here.", "Thanks for being part of the Stonehenge family.", "Kindness is contagious. Spread some today!", "You did it! Now go be awesome.", "Every resident you greet by name feels at home. Thank you!", "Thanks for keeping our residents safe.", "High five! Have a wonderful shift."],
     dailyPicks: {},           // { department: { date, topicId } }
@@ -138,6 +153,7 @@ function upgradeDb(d) {
   d.employees = Array.isArray(d.employees) ? d.employees : [];
   d.schedules = Array.isArray(d.schedules) ? d.schedules : [];
   d.required = Array.isArray(d.required) ? d.required : [];
+  d.announcements = Array.isArray(d.announcements) ? d.announcements : [];
   const old = d.settings || {};
   d.settings = Object.assign(defaultSettings(), old);
   if (Array.isArray(old.roles) && !old.departments) d.settings.departments = old.roles;
@@ -435,6 +451,9 @@ function validateEmployee(input) {
     department: cleanText(input.department, 60),
     active: input.active !== false
   };
+  // Only touch these when given, so a roster import without them keeps what was entered by hand.
+  if ('birthday' in input && (input.birthday || !input.keepBlank)) e.birthday = cleanMonthDay(input.birthday);
+  if ('hireDate' in input && (input.hireDate || !input.keepBlank)) e.hireDate = cleanFullDate(input.hireDate);
   const errors = [];
   if (!e.name) errors.push('Name is required.');
   if (!e.last4) errors.push('Enter the last 4 digits of the Workday ID.');
@@ -518,6 +537,27 @@ function filterResponses(q) {
   );
 }
 
+function todaysAnnouncements() {
+  const d = today();
+  return db.announcements.filter(a => a.startDate <= d && (!a.endDate || a.endDate >= d))
+    .sort((a, b) => b.startDate.localeCompare(a.startDate)).map(a => ({ text: a.text, departments: a.departments }));
+}
+// Birthdays and work anniversaries for a day ("MM-DD"). Feb 29 birthdays show on Feb 28 in other years.
+function celebrationsOn(date) {
+  const md = date.slice(5), year = Number(date.slice(0, 4));
+  const leap = new Date(year, 1, 29).getMonth() === 1;
+  const out = [];
+  for (const e of db.employees) {
+    if (!e.active) continue;
+    if (e.birthday && (e.birthday === md || (!leap && md === '02-28' && e.birthday === '02-29'))) out.push({ type: 'birthday', id: e.id, name: shortName(e.name), department: e.department });
+    if (e.hireDate && e.hireDate.slice(5) === md && year - Number(e.hireDate.slice(0, 4)) >= 1) {
+      out.push({ type: 'anniversary', id: e.id, name: shortName(e.name), department: e.department, years: year - Number(e.hireDate.slice(0, 4)) });
+    }
+  }
+  return out;
+}
+const todaysCelebrations = () => celebrationsOn(today());
+
 // ---------- Kiosk routes (no login) ----------
 
 async function kioskRoutes(req, res, p, m) {
@@ -526,7 +566,8 @@ async function kioskRoutes(req, res, p, m) {
     // ?month=10 previews another month's decor from the admin page.
     const month = Number(new URL(req.url, 'http://localhost').searchParams.get('month')) || new Date().getMonth() + 1;
     const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
-    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages, decor, build: BUILD_ID });
+    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages, decor,
+      announcements: todaysAnnouncements(), celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
   }
 
   // Step 1: last 4 of Workday ID -> who might this be?
@@ -729,7 +770,8 @@ async function adminRoutes(req, res, p, m, url) {
     }
     return send(res, 200, {
       topics: db.topics.map(t => t.status === 'draft' ? Object.assign({}, t, { problems: topicProblems(t) }) : t),
-      employees: db.employees, schedules: db.schedules, settings: db.settings,
+      employees: db.employees, schedules: db.schedules, settings: db.settings, announcements: db.announcements,
+      upcomingCelebrations: Array.from({ length: 31 }, (_, i) => addDays(today(), i)).flatMap(d => celebrationsOn(d).map(c => Object.assign(c, { date: d }))),
       required: db.required.map(q => { const pr = requiredProgress(q); return Object.assign({}, q, { doneCount: pr.done.length, pendingCount: pr.pending.length }); }),
       today: todayOverview(), todayDate: today(), topicStats,
       responseCountToday: db.responses.filter(r => r.date === today()).length,
@@ -850,6 +892,29 @@ async function adminRoutes(req, res, p, m, url) {
     return send(res, 200, { employee: e });
   }
 
+  // Announcements (no question; shown on the kiosk's home and end screens)
+  if (m === 'POST' && p === '/api/admin/announcements') {
+    const b = await readBody(req);
+    const a = {
+      id: newId(), text: cleanText(b.text, 200).replace(/\s+/g, ' '), departments: cleanList(b.departments),
+      startDate: cleanDate(b.startDate), endDate: cleanDate(b.endDate), createdAt: nowIso()
+    };
+    if (!a.text) return send(res, 400, { error: 'Write the announcement.' });
+    if (!a.startDate) return send(res, 400, { error: 'Choose a start date.' });
+    if (a.endDate && a.endDate < a.startDate) return send(res, 400, { error: 'The end date is before the start date.' });
+    db.announcements.push(a);
+    saveDb();
+    return send(res, 200, { announcement: a });
+  }
+  mt = p.match(/^\/api\/admin\/announcements\/(\w+)$/);
+  if (mt && m === 'DELETE') {
+    const i = db.announcements.findIndex(a => a.id === mt[1]);
+    if (i < 0) return send(res, 404, { error: 'Not found.' });
+    db.announcements.splice(i, 1);
+    saveDb();
+    return send(res, 200, { ok: true });
+  }
+
   // Schedules (topic of the week, department topics)
   if (m === 'POST' && p === '/api/admin/schedules') {
     const b = await readBody(req);
@@ -917,6 +982,7 @@ async function adminRoutes(req, res, p, m, url) {
     if ('facilityName' in b) s.facilityName = cleanText(b.facilityName, 100) || 'Stonehenge';
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
+    if ('celebrations' in b) s.celebrations = !!b.celebrations;
     if (Array.isArray(b.closingMessages)) s.closingMessages = cleanList(b.closingMessages, 200, 100);
     if (b.decor && typeof b.decor === 'object' && Array.isArray(b.decor.months) && b.decor.months.length === 12) {
       s.decor = { on: !!b.decor.on, months: b.decor.months.map(x => ({

@@ -76,6 +76,7 @@
     <button data-tab="today" class="on">Today</button>
     <button data-tab="schedule">Schedule</button>
     <button data-tab="required">Required education</button>
+    <button data-tab="announcements">Announcements</button>
     <button data-tab="topics">Topic library</button>
     <button data-tab="staff">Staff</button>
     <button data-tab="responses">Responses</button>
@@ -107,6 +108,42 @@
       <h3>iPad address</h3>
       <div id="kiosk-urls" class="small"></div>
       <div class="muted small" style="margin-top:6px">Open this on the iPad once. It never changes when you change topics.</div>
+    </div>
+  </section>
+
+  <!-- Announcements -->
+  <section class="tab" id="tab-announcements">
+    <div class="card">
+      <h2>Add an announcement</h2>
+      <div class="muted small">No question, nothing to tap. Announcements show under the keypad on the iPad and on the last screen after someone finishes their in-service. Keep them to one short line.</div>
+      <div class="grid" style="margin-top:6px">
+        <div>
+          <label class="block" for="an-text">Announcement</label>
+          <input type="text" id="an-text" maxlength="200" style="width:100%" placeholder="📅 All-staff meeting Thursday at 2 pm in the dining room">
+          <label class="block">Dates</label>
+          <div class="toolbar"><input type="date" id="an-start"> to <input type="date" id="an-end"> <span class="hint">leave the end empty to run until you remove it</span></div>
+        </div>
+        <div>
+          <label class="block">Who sees it <span class="hint">none ticked = all staff</span></label>
+          <div class="checks" id="an-depts"></div>
+        </div>
+      </div>
+      <div style="margin-top:14px"><button class="btn" id="an-add">Add announcement</button> <span class="err" id="an-error"></span></div>
+    </div>
+    <div class="card">
+      <div class="toolbar"><h2 style="margin:0" class="grow">Announcements</h2>
+        <label class="small"><input type="checkbox" id="an-show-past"> Show past</label></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Announcement</th><th>Who</th><th>Dates</th><th></th></tr></thead>
+        <tbody id="an-rows"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Birthdays and work anniversaries</h2>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="an-celebrate"> Show birthdays and work anniversaries on the iPad (first name and last initial only)</label>
+      <div class="muted small" style="margin-top:6px">Add a birthday (month and day only) and hire date to each person on the Staff tab, or include Birthday and Hire date columns when you import staff. On their day, the person also gets a happy birthday or happy anniversary message after their in-service.</div>
+      <h3 style="margin-top:14px">Coming up in the next 30 days</h3>
+      <div id="an-upcoming" class="small"></div>
     </div>
   </section>
 
@@ -403,6 +440,10 @@
       <label class="block" for="st-name">Full name</label><input type="text" id="st-name" style="width:100%">
       <label class="block" for="st-last4">Last 4 of Workday ID</label><input type="text" id="st-last4" inputmode="numeric" maxlength="12" style="width:160px">
       <label class="block" for="st-dept">Department</label><select id="st-dept" style="width:100%"></select>
+      <div class="toolbar" style="gap:16px">
+        <div><label class="block" for="st-birthday">Birthday <span class="hint">month/day, optional</span></label><input type="text" id="st-birthday" placeholder="3/7" style="width:120px"></div>
+        <div><label class="block" for="st-hire">Hire date <span class="hint">optional</span></label><input type="date" id="st-hire"></div>
+      </div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" id="st-active"> Active</label>
       <div class="err" id="st-error" style="margin-top:8px"></div>
     </div>
