@@ -72,10 +72,12 @@
     $('today-rows').innerHTML = state.today.map(d => {
       const reqs = openReq.filter(q => !q.departments.length || q.departments.includes(d.department));
       const why = d.source === 'schedule' ? '<span class="pill brand">Scheduled</span>'
+        : d.source === 'weekly' ? '<span class="pill">Topic of the week (rotation)</span>'
+        : d.source === 'culture' ? '<span class="pill">Culture day</span>'
         : d.source === 'random' ? `<span class="pill">Random from ${d.poolSize} rotation topics</span>`
         : '<span class="pill">Topic of the day (rotation)</span>';
       const reqNote = reqs.length ? `<div class="small" style="margin-top:4px"><span class="pill req">+ ${reqs.length} required first</span></div>` : '';
-      const swap = d.source === 'daily' && d.topicId ? `<button class="btn subtle" data-swap="${escapeHtml(d.department)}">Pick another</button>` : '';
+      const swap = ['daily', 'weekly', 'culture'].includes(d.source) && d.topicId ? `<button class="btn subtle" data-swap="${escapeHtml(d.department)}">Pick another</button>` : '';
       const title = d.title ? `<a href="#" data-preview="${d.topicId}">${escapeHtml(d.title)}</a>` : (d.source === 'random' ? '<span class="muted">Varies per person</span>' : '<span class="muted">Nothing available</span>');
       return `<tr><td><strong>${escapeHtml(d.department || 'Everyone')}</strong></td><td>${title}${reqNote}</td><td>${why}</td><td>${swap}</td></tr>`;
     }).join('');
@@ -83,7 +85,7 @@
   $('today-rows').addEventListener('click', async e => {
     const sw = e.target.closest('[data-swap]');
     if (sw) {
-      try { await post('/api/admin/pick-new-daily', { department: sw.dataset.swap }); toast('Topic changed for today'); await refresh(); }
+      try { await post('/api/admin/pick-new-daily', { department: sw.dataset.swap }); toast('Topic changed'); await refresh(); }
       catch (err) { fail(err); }
     }
   });
@@ -98,6 +100,7 @@
     if (!$('sc-depts').dataset.init) { renderChecks($('sc-depts'), []); $('sc-depts').dataset.init = 1; }
     if (!$('sc-start').value) setWeek(0);
     document.querySelectorAll('input[name=fallback]').forEach(r => { r.checked = r.value === state.settings.fallbackMode; });
+    $('culture-day').value = Number.isInteger(state.settings.cultureDay) ? String(state.settings.cultureDay) : '';
     const showPast = $('sc-show-past').checked;
     const rows = state.schedules
       .filter(s => showPast || !s.endDate || s.endDate >= state.todayDate)
@@ -142,7 +145,8 @@
   $('save-fallback').addEventListener('click', async () => {
     const v = document.querySelector('input[name=fallback]:checked');
     if (!v) return;
-    try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ fallbackMode: v.value }) }); toast('Saved'); await refresh(); }
+    const cd = $('culture-day').value;
+    try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ fallbackMode: v.value, cultureDay: cd === '' ? null : Number(cd) }) }); toast('Saved'); await refresh(); }
     catch (err) { fail(err); }
   });
 

@@ -420,5 +420,65 @@
         "explanation": "Early reporting lets the nurse start treatment before the skin breaks down."
       }
     ]
+  },
+  {
+    "title": "Culture: Greet Every Resident by Name",
+    "category": "Culture",
+    "departments": [],
+    "lesson": "This is their home, and we are guests in it.\n\n- **Smile and greet** every resident you pass, by name\n- **Knock and wait** before entering\n- Say what you're doing before you do it",
+    "questions": [
+      {
+        "text": "You walk past a resident in the hallway. What do you do?",
+        "correctAnswer": "Smile and greet them by name",
+        "wrongAnswers": [
+          "Keep walking so you're not late",
+          "Nod only if they speak first",
+          "Greet them only if they're on your assignment"
+        ],
+        "hint": "Every resident, every time.",
+        "explanation": "A greeting by name tells residents they're known and welcome in their own home."
+      },
+      {
+        "text": "What should you do before entering a resident's room?",
+        "correctAnswer": "Knock and wait for a response",
+        "wrongAnswers": [
+          "Walk right in if the door is open",
+          "Knock while opening the door",
+          "Only knock if family is visiting"
+        ],
+        "hint": "It's their bedroom.",
+        "explanation": "Knocking and waiting respects the resident's privacy and home."
+      }
+    ]
+  },
+  {
+    "title": "Culture: Help Before You're Asked",
+    "category": "Culture",
+    "departments": [],
+    "lesson": "Great teams don't wait to be asked.\n\n- See a call light? **Answer it**, whatever your role\n- Coworker struggling? **Offer a hand**\n- Can't help? **Find someone who can**",
+    "questions": [
+      {
+        "text": "A coworker is behind on their hall. What's the best response?",
+        "correctAnswer": "Offer to help with a task",
+        "wrongAnswers": [
+          "Let them figure it out",
+          "Tell the supervisor they're slow",
+          "Wait until they ask for help"
+        ],
+        "hint": "Don't wait to be asked.",
+        "explanation": "Helping each other keeps residents safe and makes every shift better."
+      },
+      {
+        "text": "A resident asks you for something you can't do in your role. What do you do?",
+        "correctAnswer": "Find someone who can help them",
+        "wrongAnswers": [
+          "Tell them it's not your job",
+          "Ignore the request",
+          "Tell them to use the call light later"
+        ],
+        "hint": "Every request has an owner. Help them find it.",
+        "explanation": "Connecting residents to the right person shows we all own their care."
+      }
+    ]
   }
 ]

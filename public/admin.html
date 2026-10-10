@@ -144,8 +144,17 @@
     </div>
     <div class="card">
       <h2>When nothing is scheduled</h2>
+      <label style="display:flex;gap:8px;margin-bottom:6px"><input type="radio" name="fallback" value="weekly"> <span><strong>Topic of the week</strong> <span class="muted">for each department, changes every Monday, favoring topics unused the longest. Each shift a person gets a different question from it.</span></span></label>
       <label style="display:flex;gap:8px;margin-bottom:6px"><input type="radio" name="fallback" value="daily"> <span><strong>Topic of the day</strong> <span class="muted">for each department, chosen from the rotation, favoring topics unused the longest</span></span></label>
       <label style="display:flex;gap:8px"><input type="radio" name="fallback" value="random"> <span><strong>Random each time</strong> <span class="muted">from the rotation, favoring the least recently used</span></span></label>
+      <div style="margin-top:14px">
+        <label class="block" for="culture-day"><strong>Culture day</strong> <span class="muted">On this day, staff get a topic from the <strong>Culture</strong> category instead. Culture topics appear only on this day.</span></label>
+        <select id="culture-day">
+          <option value="">No culture day</option>
+          <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option>
+          <option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
+        </select>
+      </div>
       <div style="margin-top:12px"><button class="btn" id="save-fallback">Save</button></div>
     </div>
   </section>

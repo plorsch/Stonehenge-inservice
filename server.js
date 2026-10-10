@@ -21,6 +21,10 @@ const DB_VERSION = 2;
 
 // ---------- Small helpers ----------
 
+// Render's servers run on UTC. Use the facility's time zone there so "today" and "this week"
+// roll over at local midnight. Set the TZ environment variable to override.
+if (process.env.RENDER && !process.env.TZ) process.env.TZ = 'America/Denver';
+
 function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -46,6 +50,14 @@ function shuffle(arr) {
   }
   return a;
 }
+// The Monday that starts the week containing `date` (YYYY-MM-DD).
+function weekStart(date = today()) {
+  const [y, m, d] = date.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+const weekday = (date = today()) => { const [y, m, d] = date.split('-').map(Number); return new Date(y, m - 1, d).getDay(); };
 const pickRandom = arr => arr[crypto.randomInt(arr.length)];
 const sameText = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 
@@ -54,11 +66,16 @@ const sameText = (a, b) => String(a).trim().toLowerCase() === String(b).trim().t
 function defaultSettings() {
   return {
     facilityName: 'Stonehenge',
-    // When no schedule covers someone: 'daily' = one topic per department per day, 'random' = per person.
-    fallbackMode: 'daily',
+    // When no schedule covers someone: 'weekly' = one topic per department per week (changes Monday),
+    // 'daily' = one per department per day, 'random' = per person.
+    fallbackMode: 'weekly',
+    // Day of the week (0 = Sunday ... 6 = Saturday) when a Culture-category topic replaces the regular one.
+    // null = no culture day; Culture topics then rotate like any other topic.
+    cultureDay: 5,
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
-    dailyPicks: {}            // { department: { date, topicId } }
+    dailyPicks: {},           // { department: { date, topicId } }
+    weeklyPicks: {}           // { department or 'culture|department': { week, topicId } }
   };
 }
 
@@ -261,18 +278,42 @@ function activeSchedulesFor(dept, date = today()) {
 
 const lastRandomByDept = {};
 
+const isCulture = t => sameText(t.category || '', 'Culture');
+
+// Keep one pick per key for the whole week; choose a new stalest topic when the week changes.
+function weeklyPick(key, pool) {
+  const picks = db.settings.weeklyPicks;
+  const pick = picks[key];
+  const week = weekStart();
+  if (pick && pick.week === week) {
+    const t = findTopic(pick.topicId);
+    if (isLive(t) && pool.includes(t)) return t;
+  }
+  const t = pickStalest(pool, pick ? pick.topicId : null);
+  if (t) { picks[key] = { week, topicId: t.id }; saveDb(); }
+  return t;
+}
+
 // The regular (non-required) topic for one department right now.
 function regularTopicFor(dept, { peek = false } = {}) {
   const sched = activeSchedulesFor(dept)[0];
   if (sched) return { topic: findTopic(sched.topicId), source: 'schedule', scheduleId: sched.id };
-  const pool = db.topics.filter(t => isLive(t) && t.inRotation && forDepartment(t.departments, dept));
   const key = dept || '(none)';
+  const rotation = db.topics.filter(t => isLive(t) && t.inRotation && forDepartment(t.departments, dept));
+  const cultureOn = Number.isInteger(db.settings.cultureDay);
+  if (cultureOn && weekday() === db.settings.cultureDay) {
+    const t = weeklyPick('culture|' + key, rotation.filter(isCulture));
+    if (t) return { topic: t, source: 'culture' };
+  }
+  // On a culture-day schedule, Culture topics only appear on that day.
+  const pool = cultureOn ? rotation.filter(t => !isCulture(t)) : rotation;
   if (db.settings.fallbackMode === 'random') {
     if (peek) return { topic: null, source: 'random', poolSize: pool.length };
     const t = pickStalest(pool, lastRandomByDept[key]);
     if (t) lastRandomByDept[key] = t.id;
     return { topic: t, source: 'random' };
   }
+  if (db.settings.fallbackMode === 'weekly') return { topic: weeklyPick(key, pool), source: 'weekly' };
   const picks = db.settings.dailyPicks;
   const pick = picks[key];
   if (pick && pick.date === today()) {
@@ -709,7 +750,8 @@ async function adminRoutes(req, res, p, m, url) {
   if (m === 'PUT' && p === '/api/admin/settings') {
     const b = await readBody(req);
     const s = db.settings;
-    if (['daily', 'random'].includes(b.fallbackMode)) s.fallbackMode = b.fallbackMode;
+    if (['weekly', 'daily', 'random'].includes(b.fallbackMode)) s.fallbackMode = b.fallbackMode;
+    if ('cultureDay' in b) s.cultureDay = Number.isInteger(b.cultureDay) && b.cultureDay >= 0 && b.cultureDay <= 6 ? b.cultureDay : null;
     if ('facilityName' in b) s.facilityName = cleanText(b.facilityName, 100) || 'Stonehenge';
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
@@ -718,14 +760,19 @@ async function adminRoutes(req, res, p, m, url) {
   }
 
   if (m === 'POST' && p === '/api/admin/pick-new-daily') {
-    // Swap today's automatic topic for one department.
+    // Swap the current automatic topic (today's, this week's, or this week's culture topic) for one department.
     const dept = cleanText((await readBody(req)).department, 60);
     const key = dept || '(none)';
-    const prev = db.settings.dailyPicks[key];
-    const pool = db.topics.filter(t => isLive(t) && t.inRotation && forDepartment(t.departments, dept));
-    const t = pickStalest(pool, prev ? prev.topicId : null);
+    const cur = regularTopicFor(dept, { peek: true });
+    const rotation = db.topics.filter(t => isLive(t) && t.inRotation && forDepartment(t.departments, dept));
+    const cultureOn = Number.isInteger(db.settings.cultureDay);
+    const pool = cur.source === 'culture' ? rotation.filter(isCulture) : cultureOn ? rotation.filter(t => !isCulture(t)) : rotation;
+    const t = pickStalest(pool, cur.topic ? cur.topic.id : null);
     if (!t) return send(res, 400, { error: 'No topics in the rotation for this department.' });
-    db.settings.dailyPicks[key] = { date: today(), topicId: t.id };
+    if (cur.source === 'daily') db.settings.dailyPicks[key] = { date: today(), topicId: t.id };
+    else if (cur.source === 'weekly') db.settings.weeklyPicks[key] = { week: weekStart(), topicId: t.id };
+    else if (cur.source === 'culture') db.settings.weeklyPicks['culture|' + key] = { week: weekStart(), topicId: t.id };
+    else return send(res, 400, { error: 'This department has a scheduled topic. Change it on the Schedule tab.' });
     saveDb();
     return send(res, 200, { topicId: t.id });
   }
