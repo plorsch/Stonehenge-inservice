@@ -431,7 +431,15 @@
     const mine = who && who.employeeId && (s.config.celebrations || []).filter(c => c.id === who.employeeId);
     if (!mine || !mine.length) return '';
     const first = (who.name || '').split(' ')[0];
-    const pick = (list, fallback) => { const l = (list || []).filter(Boolean); return l.length ? l[Math.floor(Math.random() * l.length)] : fallback; };
+    // Lines starting with "Department:" go only to that department; if there are any for theirs, they get one of those.
+    const depts = (s.config.departments || []).map(d => d.toLowerCase());
+    const deptOf = t => { const m = t.match(/^([^:]{1,60}):\s*(.+)$/); return m && depts.includes(m[1].trim().toLowerCase()) ? [m[1].trim().toLowerCase(), m[2]] : [null, t]; };
+    const pick = (list, fallback) => {
+      const l = (list || []).filter(Boolean).map(deptOf);
+      const mineDept = l.filter(([d]) => d && d === String(who.department || '').toLowerCase());
+      const pool = (mineDept.length ? mineDept : l.filter(([d]) => !d)).map(x => x[1]);
+      return pool.length ? pool[Math.floor(Math.random() * pool.length)] : fallback;
+    };
     return mine.map(c => c.type === 'birthday'
       ? `${bday()} ${pick(s.config.birthdayMessages, 'Happy birthday, {name}!')}`
       : `🎉 ${pick(s.config.anniversaryMessages, 'Happy {years}-year anniversary, {name}!')}`)

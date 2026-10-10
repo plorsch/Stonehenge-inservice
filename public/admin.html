@@ -143,10 +143,10 @@
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="an-celebrate"> Show birthdays and work anniversaries on the iPad (first name and last initial only)</label>
       <div class="muted small" style="margin-top:6px">Add a birthday (month and day only) and hire date to each person on the Staff tab, or include Birthday and Hire date columns when you import staff. On their day, the person also gets a happy birthday or happy anniversary message after their in-service.</div>
       <div class="grid" style="margin-top:10px">
-        <div><label class="block" for="an-bday-msgs">Birthday messages <span class="hint">one per line; one is picked at random. {name} = their first name</span></label>
-          <textarea id="an-bday-msgs" rows="5"></textarea></div>
+        <div><label class="block" for="an-bday-msgs">Birthday messages <span class="hint">one per line, picked at random. {name} = first name. Start a line with a department, like "Dietary: ...", to make it only for that department.</span></label>
+          <textarea id="an-bday-msgs" rows="10"></textarea></div>
         <div><label class="block" for="an-anniv-msgs">Work anniversary messages <span class="hint">one per line. {years} = years worked</span></label>
-          <textarea id="an-anniv-msgs" rows="5"></textarea></div>
+          <textarea id="an-anniv-msgs" rows="10"></textarea></div>
       </div>
       <div style="margin-top:10px"><button class="btn" id="an-save-msgs">Save messages</button></div>
       <h3 style="margin-top:14px">Coming up in the next 30 days</h3>
