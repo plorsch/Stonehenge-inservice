@@ -28,8 +28,7 @@ const BUILD_ID = process.env.RENDER_GIT_COMMIT || String(Date.now());
 // roll over at local midnight. Set the TZ environment variable to override.
 if (process.env.RENDER && !process.env.TZ) process.env.TZ = 'America/Denver';
 
-function today() {
-  const d = new Date();
+function today(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 const newId = () => crypto.randomBytes(6).toString('hex');
@@ -466,8 +465,49 @@ function kioskItem(topic, employeeId, extra) {
   return Object.assign({
     topic: { id: topic.id, title: topic.title, category: topic.category, lesson: topic.lesson, image: topic.image || '' },
     question: { id: q.id, type: q.type, text: q.text, answers: shuffle(choicesFor(q)) },
-    es: es ? { title: topic.es.title || topic.title, lesson: topic.es.lesson, question: q.es.text } : null
+    es: es ? { title: topic.es.title || topic.title, lesson: topic.es.lesson, question: q.es.text } : null,
+    // Lets the iPad grade answers itself if the Wi-Fi drops mid in-service. The correct answers are only sent as a salted hash.
+    offline: Object.assign({ hint: q.hint, explanation: q.explanation, hintEs: es ? q.es.hint : '', explanationEs: es ? q.es.explanation : '' }, answerKey(q))
   }, extra);
+}
+const answerSet = list => [...new Set(list.map(a => String(a).trim().toLowerCase()))].sort().join('\n');
+function answerKey(q) {
+  const salt = crypto.randomBytes(8).toString('hex');
+  return { salt, key: crypto.createHash('sha256').update(salt + answerSet(q.correctAnswers)).digest('hex') };
+}
+const isRightAnswer = (q, chosen) => answerSet(chosen) === answerSet(q.correctAnswers);
+
+// A new response record for a person's first answer to a question.
+function newResponse(b, topic, q, at = new Date()) {
+  const w = b.who || {};
+  const emp = w.employeeId ? findEmployee(String(w.employeeId)) : null;
+  if (w.employeeId && !emp) return null;
+  const name = emp ? emp.name : cleanText(w.name, 100);
+  if (!name) return null;
+  const kind = ['required', 'scheduled', 'rotation', 'starter', 'annual'].includes(b.kind) ? b.kind : 'rotation';
+  return {
+    id: newId(), submittedAt: at.toISOString(), date: today(at),
+    employeeId: emp ? emp.id : null, name, last4: emp ? emp.last4 : cleanLast4(w.last4) || '',
+    department: emp ? emp.department : cleanText(w.department, 60), verified: !!emp,
+    kind, requiredId: kind === 'required' ? cleanText(b.requiredId, 20) : null,
+    scheduleId: kind === 'scheduled' ? cleanText(b.scheduleId, 20) : null,
+    topicId: topic.id, topicTitle: topic.title, questionId: q.id, question: q.text,
+    correctAnswer: q.correctAnswers.join('; '), attempts: [], firstTryCorrect: false, completed: false, completedAt: null
+  };
+}
+
+// Encouragement after a correct answer: in-service milestones for the year, or a first-try streak.
+const MILESTONES = [10, 25, 50, 75, 100, 150, 200, 250, 300, 365];
+function cheerFor(emp) {
+  if (!emp) return null;
+  const mine = db.responses.filter(r => r.employeeId === emp.id && r.completed);
+  const year = today().slice(0, 4);
+  const thisYear = mine.filter(r => r.date.startsWith(year)).length;
+  if (MILESTONES.includes(thisYear)) return { en: `🏆 That's your ${thisYear}th in-service this year!`, es: `🏆 ¡Es su in-service número ${thisYear} este año!` };
+  let streak = 0;
+  for (let i = mine.length - 1; i >= 0 && mine[i].firstTryCorrect; i--) streak++;
+  if (streak >= 5 && streak % 5 === 0) return { en: `🔥 ${streak} in a row right on the first try!`, es: `🔥 ¡${streak} seguidas correctas al primer intento!` };
+  return null;
 }
 
 // ---------- New hire starter set and yearly topics ----------
@@ -635,7 +675,8 @@ function filterResponses(q) {
     (!q.get('to') || r.date <= q.get('to')) &&
     (!q.get('topicId') || r.topicId === q.get('topicId')) &&
     (!q.get('department') || sameText(r.department, q.get('department'))) &&
-    (!q.get('missed') || !r.firstTryCorrect)
+    (!q.get('missed') || !r.firstTryCorrect) &&
+    (!q.get('employeeId') || r.employeeId === q.get('employeeId'))
   );
 }
 
@@ -671,7 +712,10 @@ async function kioskRoutes(req, res, p, m) {
     const s = db.settings;
     // ?month=10 previews another month's decor from the admin page.
     const previewMonth = Number(new URL(req.url, 'http://localhost').searchParams.get('month'));
-    if (!previewMonth) kioskSeen = { at: nowIso(), device: /iPad|Macintosh.*Mobile/.test(req.headers['user-agent'] || '') ? 'iPad' : 'browser' };
+    if (!previewMonth) {
+      kioskSeen = { at: nowIso(), device: /iPad|Macintosh.*Mobile/.test(req.headers['user-agent'] || '') ? 'iPad' : 'browser',
+        waiting: Math.max(0, Math.min(10000, Number(new URL(req.url, 'http://localhost').searchParams.get('waiting')) || 0)) };
+    }
     const month = previewMonth || new Date().getMonth() + 1;
     const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
     return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages, decor,
@@ -749,29 +793,14 @@ async function kioskRoutes(req, res, p, m) {
     if (!topic || !q) return send(res, 400, { error: 'This in-service is no longer available. Please start again.' });
 
     if (!r) {
-      const w = b.who || {};
-      const emp = w.employeeId ? findEmployee(String(w.employeeId)) : null;
-      if (w.employeeId && !emp) return send(res, 400, { error: 'Please start again.' });
-      const name = emp ? emp.name : cleanText(w.name, 100);
-      if (!name) return send(res, 400, { error: 'Please start again.' });
-      const kind = ['required', 'scheduled', 'rotation', 'starter', 'annual'].includes(b.kind) ? b.kind : 'rotation';
-      r = {
-        id: newId(), submittedAt: nowIso(), date: today(),
-        employeeId: emp ? emp.id : null, name, last4: emp ? emp.last4 : cleanLast4(w.last4) || '',
-        department: emp ? emp.department : cleanText(w.department, 60), verified: !!emp,
-        kind, requiredId: kind === 'required' ? cleanText(b.requiredId, 20) : null,
-        scheduleId: kind === 'scheduled' ? cleanText(b.scheduleId, 20) : null,
-        topicId: topic.id, topicTitle: topic.title, questionId: q.id, question: q.text,
-        correctAnswer: q.correctAnswers.join('; '), attempts: [], firstTryCorrect: false, completed: false, completedAt: null
-      };
+      r = newResponse(b, topic, q);
+      if (!r) return send(res, 400, { error: 'Please start again.' });
       db.responses.push(r);
       recordUsage(topic);
     }
     r.attempts.push(chosen.join('; '));
     r.lang = b.lang === 'es' ? 'es' : 'en';
-    const want = q.correctAnswers.map(a => a.toLowerCase()).sort();
-    const got = [...new Set(chosen.map(a => a.toLowerCase()))].sort();
-    const correct = want.length === got.length && want.every((a, i) => a === got[i]);
+    const correct = isRightAnswer(q, chosen);
     if (r.attempts.length === 1) r.firstTryCorrect = correct;
     if (correct) { r.completed = true; r.completedAt = nowIso(); }
     saveDb();
@@ -790,8 +819,60 @@ async function kioskRoutes(req, res, p, m) {
       answers: correct ? [] : shuffle(remaining),   // try again with the wrong choices removed, in a new order
       correctAnswer: correct ? q.correctAnswers.join('; ') : null,
       explanation: correct ? q.explanation : '',
-      explanationEs: correct && es ? es.explanation : ''
+      explanationEs: correct && es ? es.explanation : '',
+      cheer: correct ? cheerFor(r.employeeId && findEmployee(r.employeeId)) : null
     });
+  }
+
+  // "Was this helpful?" on the last screen.
+  if (m === 'POST' && p === '/api/kiosk/feedback') {
+    const b = await readBody(req);
+    const r = db.responses.find(x => x.id === String(b.responseId || ''));
+    if (!r || !r.completed || 'helpful' in r) return send(res, 200, { ok: false });
+    r.helpful = !!b.helpful;
+    saveDb();
+    return send(res, 200, { ok: true });
+  }
+
+  // Answers the iPad saved while it was offline. Every answer is graded again here; the iPad's grading is not trusted.
+  if (m === 'POST' && p === '/api/kiosk/sync') {
+    const records = ((await readBody(req, 5e6)).records || []).slice(0, 500);
+    const done = [];
+    for (const rec of records) {
+      const offlineId = cleanText(rec && rec.offlineId, 40);
+      if (!offlineId) continue;
+      if (db.responses.some(x => x.offlineIds && x.offlineIds.includes(offlineId))) { done.push(offlineId); continue; }
+      const attempts = (Array.isArray(rec.attempts) ? rec.attempts : []).slice(0, 20)
+        .map(a => ({ chosen: cleanList(Array.isArray(a && a.answer) ? a.answer : [a && a.answer], 500, 8), at: new Date(a && a.at) }))
+        .filter(a => a.chosen.length);
+      let r = rec.responseId ? db.responses.find(x => x.id === String(rec.responseId)) : null;
+      const topic = findTopic(String(r ? r.topicId : rec.topicId || ''));
+      const q = topic && topic.questions.find(x => x.id === (r ? r.questionId : String(rec.questionId || '')));
+      if (!topic || !q || !attempts.length) { done.push(offlineId); continue; } // can't be recorded; drop it
+      // Use the iPad's times when they're believable (the last 30 days, not in the future).
+      const now = Date.now();
+      for (const a of attempts) if (isNaN(a.at) || a.at > now + 5 * 60000 || a.at < now - 30 * 86400000) a.at = new Date(now);
+      if (!r) {
+        r = newResponse(rec, topic, q, attempts[0].at);
+        if (!r) { done.push(offlineId); continue; }
+        db.responses.push(r);
+        recordUsage(topic);
+      }
+      if (!r.completed) {
+        for (const a of attempts) {
+          const correct = isRightAnswer(q, a.chosen);
+          r.attempts.push(a.chosen.join('; '));
+          if (r.attempts.length === 1) r.firstTryCorrect = correct;
+          if (correct) { r.completed = true; r.completedAt = a.at.toISOString(); break; }
+        }
+      }
+      r.lang = rec.lang === 'es' ? 'es' : r.lang || 'en';
+      r.offline = true;
+      r.offlineIds = (r.offlineIds || []).concat(offlineId);
+      done.push(offlineId);
+    }
+    if (done.length) saveDb();
+    return send(res, 200, { done });
   }
   return false;
 }
@@ -895,9 +976,11 @@ async function adminRoutes(req, res, p, m, url) {
   if (m === 'GET' && p === '/api/admin/state') {
     const topicStats = {};
     for (const r of db.responses) {
-      const st = topicStats[r.topicId] || (topicStats[r.topicId] = { responses: 0, firstTry: 0 });
+      const st = topicStats[r.topicId] || (topicStats[r.topicId] = { responses: 0, firstTry: 0, helpful: 0, notHelpful: 0 });
       st.responses += 1;
       if (r.firstTryCorrect) st.firstTry += 1;
+      if (r.helpful === true) st.helpful += 1;
+      if (r.helpful === false) st.notHelpful += 1;
     }
     return send(res, 200, {
       topics: db.topics.map(t => t.status === 'draft' ? Object.assign({}, t, { problems: topicProblems(t) }) : t),
@@ -1183,7 +1266,8 @@ async function adminRoutes(req, res, p, m, url) {
       ['First answer', r => r.attempts[0]], ['Correct answer', r => r.correctAnswer],
       ['Correct first try', r => r.firstTryCorrect ? 'yes' : 'no'], ['Tries', r => r.attempts.length],
       ['Finished', r => r.completed ? 'yes' : 'no'], ['Finished at', r => r.completedAt],
-      ['Language', r => r.lang === 'es' ? 'Spanish' : 'English']
+      ['Language', r => r.lang === 'es' ? 'Spanish' : 'English'],
+      ['Lesson helpful', r => r.helpful === true ? 'yes' : r.helpful === false ? 'no' : '']
     ];
     const rows = filterResponses(url.searchParams).map(r => cols.map(([, f]) => csvCell(f(r))).join(','));
     return send(res, 200, '﻿' + [cols.map(c => c[0]).join(','), ...rows].join('\r\n'), 'text/csv; charset=utf-8',

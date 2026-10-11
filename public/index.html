@@ -161,6 +161,9 @@
   .tryagain { background: var(--warn-soft); color: var(--warn); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; font-size: 18px; }
   .tryagain strong { display: block; font-size: 20px; }
 
+  .cheer { display: inline-block; background: #fff4d6; color: #8a5a00; border-radius: 12px; padding: 10px 18px; font-size: 21px; font-weight: 700; margin: 4px 0 6px; }
+  .helpful { margin-top: 18px; display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; font-size: 18px; color: var(--muted); }
+  .helpful .chip { font-size: 26px; min-width: 72px; }
   .badge { width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 16px; font-size: 50px; font-weight: 700; background: var(--good-soft); color: var(--good); }
   .explain { text-align: left; background: var(--bg); border-radius: 14px; padding: 16px 20px; margin: 20px 0 0; font-size: 19px; }
   .error { color: var(--warn); font-weight: 600; min-height: 28px; margin-top: 10px; text-align: center; }
@@ -308,8 +311,12 @@
         <img src="logo.png" alt="Stonehenge of Springville" class="end-logo" id="end-logo" hidden>
         <div class="badge">✓</div>
         <h1 id="result-title"></h1>
+        <div class="cheer" id="result-cheer" hidden></div>
         <p class="muted" id="result-sub"></p>
         <div class="explain" id="result-explain" hidden></div>
+        <div class="helpful" id="helpful" hidden><span id="helpful-q"></span>
+          <button class="chip" data-helpful="1" aria-label="Helpful">👍</button><button class="chip" data-helpful="0" aria-label="Not helpful">👎</button></div>
+        <div class="helpful" id="helpful-thanks" hidden></div>
         <div class="closing" id="result-closing" hidden></div>
         <div class="news-list" id="result-news" hidden></div>
         <div class="row"><button class="btn wide" id="result-next">Done</button></div>
@@ -355,7 +362,7 @@
     if (!$('s-home').classList.contains('active')) idleTimer = setTimeout(goHome, IDLE_RESET_MS);
   }
   function goHome() {
-    Object.assign(s, { pin: '', dept: '', who: null, items: [], idx: 0, answers: [], choice: null, responseId: null, lang: 'en', hint: null });
+    Object.assign(s, { pin: '', dept: '', who: null, items: [], idx: 0, answers: [], choice: null, responseId: null, lang: 'en', hint: null, offlineRec: null });
     $('name').value = ''; $('forgot-name').value = ''; $('forgot-matches').innerHTML = '';
     ['pin-error', 'unlisted-error', 'question-error', 'forgot-error'].forEach(id => { $(id).textContent = ''; });
     $('who-label').textContent = '';
@@ -364,18 +371,62 @@
     if (Date.now() - loadedAt > RELOAD_EVERY_MS) location.reload();
   }
 
+  const OFFLINE_MSG = "The iPad can't reach the internet right now. Please try again in a minute.";
   async function api(path, body) {
     const opts = { cache: 'no-store', headers: { 'Content-Type': 'application/json' } };
     if (body) { opts.method = 'POST'; opts.body = JSON.stringify(body); }
-    const res = await fetch(path, opts);
+    let res;
+    const offline = () => Object.assign(new Error(OFFLINE_MSG), { offline: true });
+    try { res = await fetch(path, opts); } catch { throw offline(); }
+    if (res.status >= 502) throw offline(); // the site is restarting or unreachable
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
     return data;
   }
 
+  // ----- answers saved while offline -----
+  // If the Wi-Fi drops during an in-service, the iPad grades the answer itself and keeps it here until it can send it.
+  const QUEUE_KEY = 'inservice-waiting';
+  function readQueue() { try { return JSON.parse(localStorage.getItem(QUEUE_KEY)) || []; } catch { return []; } }
+  function writeQueue(q) { try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch { /* storage full or blocked */ } }
+  let flushing = false;
+  async function flushQueue() {
+    const q = readQueue();
+    if (!q.length || flushing) return;
+    flushing = true;
+    try {
+      const { done } = await api('/api/kiosk/sync', { records: q });
+      writeQueue(readQueue().filter(r => !done.includes(r.offlineId)));
+    } catch { /* still offline; try again later */ }
+    finally { flushing = false; }
+  }
+  const canGradeOffline = () => !!(window.crypto && crypto.subtle);
+  async function sha256(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  const answerSet = list => [...new Set(list.map(a => String(a).trim().toLowerCase()))].sort().join('\n');
+  async function gradeOffline(chosen) {
+    const it = item(), o = it.offline;
+    const correct = (await sha256(o.salt + answerSet(chosen))) === o.key;
+    const rec = s.offlineRec || (s.offlineRec = {
+      offlineId: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), responseId: s.responseId,
+      topicId: it.topic.id, questionId: it.question.id, kind: it.kind, requiredId: it.requiredId || null, scheduleId: it.scheduleId || null,
+      who: { employeeId: s.who.employeeId, name: s.who.name, department: s.who.department, last4: s.who.last4 }, attempts: [] });
+    rec.lang = es() ? 'es' : 'en';
+    rec.attempts.push({ answer: chosen, at: new Date().toISOString() });
+    writeQueue(readQueue().filter(r => r.offlineId !== rec.offlineId).concat(rec));
+    s.tries += 1;
+    const tried = new Set(rec.attempts.flatMap(a => isMulti() ? [] : a.answer.map(x => x.toLowerCase())));
+    const remaining = s.answers.filter(a => !tried.has(a.en.toLowerCase()));
+    return { offline: true, correct, firstTryCorrect: s.tries === 1 && correct, hint: o.hint, hintEs: o.hintEs,
+      answers: correct ? [] : remaining.sort(() => Math.random() - .5), explanation: correct ? o.explanation : '', explanationEs: correct ? o.explanationEs : '' };
+  }
+
   async function loadConfig() {
     try {
-      const cfg = await api('/api/kiosk/config' + (previewMonth ? '?month=' + previewMonth : ''));
+      const cfg = await api('/api/kiosk/config' + (previewMonth ? '?month=' + previewMonth : '?waiting=' + readQueue().length));
+      if (!previewMonth) flushQueue();
       // A new version of the site was deployed: reload so the iPad picks it up without anyone touching it.
       if (s.config && s.config.build && cfg.build !== s.config.build && $('s-home').classList.contains('active')) return location.reload();
       s.config = cfg;
@@ -581,7 +632,7 @@
 
   function openItem() {
     const it = item();
-    s.answers = it.question.answers; s.responseId = null; s.hint = null; clearChoice();
+    s.answers = it.question.answers; s.responseId = null; s.hint = null; s.offlineRec = null; s.tries = 0; clearChoice();
     $('tryagain').hidden = true;
     renderItem();
     show('lesson');
@@ -644,14 +695,26 @@
     if ($('submit').disabled || s.busy) return;
     s.busy = true; $('submit').disabled = true;
     const it = item();
+    const chosen = isMulti() ? [...s.choice].map(i => s.answers[i].en) : [s.answers[s.choice].en];
     try {
-      const r = await api('/api/kiosk/answer', {
-        responseId: s.responseId, answer: isMulti() ? [...s.choice].map(i => s.answers[i].en) : s.answers[s.choice].en,
-        topicId: it.topic.id, questionId: it.question.id, kind: it.kind, lang: es() ? 'es' : 'en',
-        requiredId: it.requiredId || null, scheduleId: it.scheduleId || null,
-        who: { employeeId: s.who.employeeId, name: s.who.name, department: s.who.department, last4: s.who.last4 }
-      });
-      s.responseId = r.responseId;
+      let r;
+      // Once an answer has been saved offline, keep this question offline so its tries stay together.
+      if (s.offlineRec) r = await gradeOffline(chosen);
+      else {
+        try {
+          r = await api('/api/kiosk/answer', {
+            responseId: s.responseId, answer: isMulti() ? chosen : chosen[0],
+            topicId: it.topic.id, questionId: it.question.id, kind: it.kind, lang: es() ? 'es' : 'en',
+            requiredId: it.requiredId || null, scheduleId: it.scheduleId || null,
+            who: { employeeId: s.who.employeeId, name: s.who.name, department: s.who.department, last4: s.who.last4 }
+          });
+          s.tries += 1;
+          s.responseId = r.responseId;
+        } catch (err) {
+          if (!err.offline || !it.offline || !canGradeOffline()) throw err;
+          r = await gradeOffline(chosen);
+        }
+      }
       if (!r.correct) {
         // Wrong: show a hint, remove that choice, and shuffle the rest.
         s.answers = r.answers; clearChoice();
@@ -691,6 +754,14 @@
     $('result-explain').innerHTML = explanation ? escapeHtml(explanation) : '';
     $('result-explain').hidden = !explanation;
     $('result-next').textContent = more ? T('Next', 'Siguiente') : T('Done', 'Listo');
+    const cheer = r.cheer && (es() ? r.cheer.es : r.cheer.en);
+    $('result-cheer').textContent = cheer || '';
+    $('result-cheer').hidden = !cheer;
+    // "Was this helpful?" needs the saved record, so it's skipped for answers saved offline.
+    s.feedbackFor = r.offline ? null : r.responseId;
+    $('helpful-q').textContent = T('Was this lesson helpful?', '¿Le sirvió esta lección?');
+    $('helpful').hidden = !s.feedbackFor;
+    $('helpful-thanks').hidden = true;
     $('end-logo').hidden = more;
     $('result-closing').hidden = more;
     const news = more ? [] : newsFor(s.who);
@@ -705,6 +776,15 @@
     tick();
     countdownTimer = setInterval(() => { left -= 1; tick(); if (left <= 0) goHome(); }, 1000);
   }
+  $('helpful').addEventListener('click', e => {
+    const b = e.target.closest('[data-helpful]');
+    if (!b || !s.feedbackFor) return;
+    api('/api/kiosk/feedback', { responseId: s.feedbackFor, helpful: b.dataset.helpful === '1' }).catch(() => {});
+    s.feedbackFor = null;
+    $('helpful').hidden = true;
+    $('helpful-thanks').textContent = T('Thanks for the feedback!', '¡Gracias por su opinión!');
+    $('helpful-thanks').hidden = false;
+  });
   $('result-next').addEventListener('click', () => {
     if (s.idx < s.items.length - 1) { s.idx += 1; openItem(); } else goHome();
   });

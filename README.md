@@ -19,6 +19,9 @@ A small website for a daily micro in-service on the iPad mini kiosk. Staff compl
 - **Spanish.** Topics can have a Spanish version. Staff tap "Español" on the iPad to switch.
 - **Reports.** A printable survey sign-in sheet for any topic, and a list of the questions staff miss most.
 - **iPad check.** The admin page warns you when the iPad stops checking in or nobody has used it today.
+- **Training records.** Print one person's in-service history and yearly status for their HR file.
+- **Encouragement and feedback.** Staff see milestones and first-try streaks, and can tap 👍 or 👎 on each lesson.
+- **Wi-Fi drops.** Answers given while the iPad is offline are saved on it and uploaded when it reconnects.
 
 It runs on Node.js with nothing else to install and no database to set up. Everything is saved in one data file.
 
@@ -127,6 +130,16 @@ In the topic editor, open **Spanish version** to add a Spanish title and lesson,
 ### iPad check
 
 While it shows the keypad, the iPad checks in with the site every minute. The **Today** tab shows when it last checked in, and a warning appears at the top of every admin tab if it goes 10 minutes without checking in, or if no one has done an in-service by 10 am.
+
+### Training records, streaks and lesson feedback
+
+- **Staff → Training record** opens a printable page for one person: every in-service they finished, how they did, and where they stand on each yearly topic.
+- After a correct answer, staff sometimes see a cheer: a milestone (their 10th, 25th, 50th... in-service this year) or a streak of 5, 10, 15... right on the first try.
+- The last screen asks "Was this lesson helpful?" with 👍 and 👎. The Topic library shows the counts under "Right first try", and the responses CSV has a "Lesson helpful" column.
+
+### When the Wi-Fi drops
+
+If the iPad loses its connection after someone has started, it grades their answers itself and saves them on the iPad. It uploads them within a minute of reconnecting, and the site grades every answer again before saving it. The Responses tab marks these "Saved offline", and the Today tab shows how many are waiting to upload. Starting a new in-service needs the connection, so the keypad says when the iPad is offline. Offline saving needs the site's https address (as on Render).
 
 ### Announcements, birthdays and anniversaries
 

@@ -117,6 +117,7 @@
     $('kiosk-alert').hidden = !alerts.length;
     $('kiosk-status').innerHTML = `<div><span class="dot${quiet ? ' off' : ''}"></span>${k.kioskSeen ? `Last checked in ${ago(mins)}${k.kioskSeen.device === 'iPad' ? ' from the iPad' : ''}.` : 'Waiting to hear from the iPad.'}</div>
       <div class="muted" style="margin-top:4px">Last in-service: ${k.lastResponseAt ? fmtWhen(k.lastResponseAt) : 'none yet'}. Completed today: ${k.responseCountToday}.</div>
+      ${k.kioskSeen && k.kioskSeen.waiting ? `<div style="margin-top:4px">${k.kioskSeen.waiting} answer${k.kioskSeen.waiting === 1 ? '' : 's'} saved on the iPad while it was offline ${k.kioskSeen.waiting === 1 ? 'is' : 'are'} waiting to upload.</div>` : ''}
       <div class="muted" style="margin-top:4px">A warning shows at the top of this page if the iPad goes ${KIOSK_QUIET_MIN} minutes without checking in, or if no one has done an in-service by 10 am.</div>`;
   }
   checkKiosk();
@@ -301,7 +302,7 @@
         <td>${retired || draft ? '<span class="muted">–</span>' : `<input type="checkbox" data-rotation="${t.id}"${t.inRotation ? ' checked' : ''} aria-label="In rotation">`}</td>
         <td style="white-space:nowrap">${fmtDate(t.lastUsedDate)}</td>
         <td>${st ? st.responses : 0}</td>
-        <td>${pct}</td>
+        <td>${pct}${st && st.helpful + st.notHelpful ? `<div class="small muted" title="Was this lesson helpful?">👍 ${st.helpful} · 👎 ${st.notHelpful}</div>` : ''}</td>
         <td style="white-space:nowrap">
           <button class="btn subtle" data-act="preview" data-id="${t.id}">Preview</button>
           <button class="btn subtle" data-act="edit" data-id="${t.id}">Edit</button>
@@ -623,7 +624,7 @@
       <td>${escapeHtml(e.last4)}</td><td>${escapeHtml(e.department)}</td>
       <td data-last="${e.id}" class="small muted">…</td>
       <td data-pending="${e.id}"></td>
-      <td><button class="btn subtle" data-edit-staff="${e.id}">Edit</button></td></tr>`).join('')
+      <td style="white-space:nowrap"><button class="btn subtle" data-edit-staff="${e.id}">Edit</button><button class="btn subtle" data-record="${e.id}">Training record</button></td></tr>`).join('')
       || '<tr><td colspan="6" class="muted">No staff yet. Add them one at a time or import your roster from a spreadsheet.</td></tr>';
     fillStaffActivity();
     const sel = $('st-dept');
@@ -668,7 +669,47 @@
   $('staff-rows').addEventListener('click', e => {
     const b = e.target.closest('[data-edit-staff]');
     if (b) openStaff(state.employees.find(x => x.id === b.dataset.editStaff));
+    const rec = e.target.closest('[data-record]');
+    if (rec) printRecord(state.employees.find(x => x.id === rec.dataset.record));
   });
+  // A printable training record for one person, for their HR file.
+  async function printRecord(emp) {
+    const win = window.open('', '_blank');
+    if (!win) return alert('Your browser blocked the new window. Allow pop-ups for this site and try again.');
+    win.document.write('<p style="font-family:sans-serif">Loading…</p>');
+    try {
+      const [{ responses }, { topics }] = await Promise.all([api('/api/admin/responses?employeeId=' + encodeURIComponent(emp.id)), api('/api/admin/annual')]);
+      const done = responses.filter(r => r.completed);
+      const year = state.todayDate.slice(0, 4);
+      const thisYear = done.filter(r => r.date.startsWith(year));
+      const first = thisYear.filter(r => r.firstTryCorrect).length;
+      const yearly = topics.map(t => ({ title: t.title, p: t.people.find(x => x.id === emp.id) })).filter(x => x.p);
+      const words = { current: 'Up to date', soon: 'Due soon', overdue: 'Overdue', never: 'Not done yet' };
+      const kinds = { required: 'Required', scheduled: 'Scheduled', rotation: 'Rotation', starter: 'New hire', annual: 'Yearly' };
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(emp.name)} training record</title><style>
+        body { font: 13px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #111; margin: 28px; }
+        h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 15px; margin: 18px 0 6px; } .meta { color: #444; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; } th, td { border: 1px solid #bbb; padding: 5px 7px; text-align: left; vertical-align: top; }
+        th { background: #eee; font-size: 12px; } .noprint { margin-bottom: 14px; }
+        @media print { .noprint { display: none; } body { margin: 0.4in; } tr { break-inside: avoid; } }
+      </style></head><body>
+        <div class="noprint"><button onclick="print()" style="font-size:15px;padding:6px 14px">Print or save as PDF</button></div>
+        <h1>${escapeHtml(state.settings.facilityName || '')} In-Service Training Record</h1>
+        <div class="meta"><strong>${escapeHtml(emp.name)}</strong> · ${escapeHtml(emp.department || 'No department')} · Workday last 4: ${escapeHtml(emp.last4)}${emp.hireDate ? ` · Hired ${fmtDate(emp.hireDate)}` : ''}<br>
+          ${year}: <strong>${thisYear.length}</strong> in-services completed${thisYear.length ? `, ${Math.round(100 * first / thisYear.length)}% correct on the first try` : ''}. All time: ${done.length}.</div>
+        ${yearly.length ? `<h2>Yearly requirements</h2><table><thead><tr><th>Topic</th><th>Status</th><th>Last completed</th><th>Due</th></tr></thead><tbody>
+          ${yearly.map(x => `<tr><td>${escapeHtml(x.title)}</td><td>${words[x.p.status]}</td><td>${x.p.last ? fmtDate(x.p.last) : ''}</td><td>${x.p.due ? fmtDate(x.p.due) : 'Now'}</td></tr>`).join('')}</tbody></table>` : ''}
+        <h2>Completed in-services</h2>
+        <table><thead><tr><th>Completed</th><th>Topic</th><th>Type</th><th>Knowledge check</th></tr></thead><tbody>
+        ${done.map(r => `<tr><td>${fmtWhen(r.completedAt)}</td><td>${escapeHtml(r.topicTitle)}</td><td>${kinds[r.kind] || ''}</td>
+          <td>${r.firstTryCorrect ? 'Correct first try' : `Correct on try ${r.attempts.length}`}</td></tr>`).join('') || '<tr><td colspan="4">None yet.</td></tr>'}
+        </tbody></table>
+        <p style="margin-top:14px;color:#666;font-size:11px">Printed ${escapeHtml(new Date().toLocaleString())} from the in-service admin page.</p>
+      </body></html>`);
+      win.document.close();
+    } catch (err) { win.close(); fail(err); }
+  }
   $('staff-form').addEventListener('submit', async e => {
     e.preventDefault();
     const body = { name: $('st-name').value, last4: $('st-last4').value, department: $('st-dept').value, active: $('st-active').checked,
@@ -782,7 +823,7 @@
         return `<tr>
         <td style="white-space:nowrap">${fmtWhen(r.submittedAt)}</td>
         <td>${escapeHtml(r.name)}${r.verified ? '' : ' <span class="pill" title="Typed their name; not on the roster">Not on roster</span>'}<div class="muted small">${escapeHtml(r.last4 || '')}</div></td>
-        <td>${escapeHtml(r.department || '')}</td><td>${kindLabel[r.kind] || ''}${r.lang === 'es' ? ' <span class="pill">Español</span>' : ''}</td>
+        <td>${escapeHtml(r.department || '')}</td><td>${kindLabel[r.kind] || ''}${r.lang === 'es' ? ' <span class="pill">Español</span>' : ''}${r.offline ? ' <span class="pill" title="Answered while the iPad was offline, uploaded later">Saved offline</span>' : ''}</td>
         <td>${escapeHtml(r.topicTitle)}<div class="muted small">${escapeHtml(r.question)}</div></td>
         <td>${escapeHtml(r.attempts[0] || '')}</td><td>${result}</td></tr>`;
       }).join('');
