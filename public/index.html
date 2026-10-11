@@ -138,6 +138,8 @@
 
   .lang { display: block; margin: -10px -10px 12px auto; min-height: 48px; padding: 0 16px; border-radius: 24px; border: 2px solid var(--brand); background: #fff; color: var(--brand); font: inherit; font-size: 17px; font-weight: 650; cursor: pointer; }
   .required-banner.starter { background: var(--good-soft); color: var(--good); }
+  .required-banner.review { background: var(--brand-soft); color: var(--brand); }
+  .review-note { font-size: 19px; font-weight: 600; color: var(--brand); margin: 8px 0 0; }
   .required-banner { background: var(--req-soft); color: var(--req); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 17px; }
   .required-banner strong { display: block; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; }
   .lesson { font-size: 20px; line-height: 1.6; }
@@ -297,6 +299,7 @@
     <section class="screen" id="s-question">
       <div class="card">
         <button class="lang" data-action="lang" hidden></button>
+        <div class="required-banner review" id="question-review" hidden></div>
         <div class="tryagain" id="tryagain" hidden></div>
         <div class="kicker" id="question-kicker">Question</div>
         <h2 id="question-text"></h2>
@@ -319,6 +322,7 @@
         <div class="cheer" id="result-cheer" hidden></div>
         <p class="muted" id="result-sub"></p>
         <div class="explain" id="result-explain" hidden></div>
+        <div class="review-note" id="result-review" hidden></div>
         <div class="helpful" id="helpful" hidden><span id="helpful-q"></span>
           <button class="chip" data-helpful="1" aria-label="Helpful">👍</button><button class="chip" data-helpful="0" aria-label="Not helpful">👎</button></div>
         <div class="helpful" id="helpful-thanks" hidden></div>
@@ -509,7 +513,8 @@
   // Home screen: all-staff items only, one at a time.
   let newsIdx = 0;
   // Public streaks (when turned on in admin): shout-outs and the leaderboard.
-  const st = cfg => cfg.streaks || { shoutOuts: [], leaders: [], leadersOn: 'off' };
+  const st = cfg => Object.assign({ shoutOuts: [], leaders: [], deptLeaders: [], leadersOn: 'off' }, cfg.streaks);
+  const deptLine = list => '🏅 Department streak leaders: ' + list.map(l => `${l.department}: ${l.name} ${l.streak}`).join(' · ');
   function leadersLine(list) {
     if (list.length === 1) return `🏅 Streak leader: ${list[0].name}, ${list[0].streak} in a row right on the first try!`;
     return '🏅 Top streaks: ' + list.map(l => `${l.name} ${l.streak}`).join(' · ');
@@ -519,7 +524,8 @@
     const items = (s.config.announcements || []).filter(a => !a.departments.length).map(a => a.text)
       .concat((s.config.celebrations || []).map(celebLine))
       .concat(str.shoutOuts.map(x => x.text))
-      .concat(['home', 'both'].includes(str.leadersOn) && str.leaders.length ? [leadersLine(str.leaders)] : []);
+      .concat(['home', 'both'].includes(str.leadersOn) && str.leaders.length ? [leadersLine(str.leaders)] : [])
+      .concat(['home', 'both'].includes(str.leadersOn) && str.deptLeaders.length ? [deptLine(str.deptLeaders)] : []);
     const el = $('news-home');
     el.hidden = !items.length;
     if (!items.length) return;
@@ -650,7 +656,8 @@
     s.answers = it.question.answers; s.responseId = null; s.hint = null; s.offlineRec = null; s.tries = 0; clearChoice();
     $('tryagain').hidden = true;
     renderItem();
-    show('lesson');
+    // A review starts with the question (recall first); the lesson is one tap away.
+    show(it.kind === 'review' ? 'question' : 'lesson');
   }
   // Fills in the lesson and question screens in the chosen language.
   function renderItem() {
@@ -658,11 +665,15 @@
     const multi = s.items.length > 1 ? T(` · ${s.idx + 1} of ${s.items.length}`, ` · ${s.idx + 1} de ${s.items.length}`) : '';
     document.querySelectorAll('[data-action=lang]').forEach(b => { b.hidden = !it.es; b.textContent = es() ? '🌐 English' : '🌐 Español'; });
     const banner = $('lesson-required');
-    banner.className = 'required-banner' + (it.kind === 'starter' ? ' starter' : '');
-    banner.hidden = !['required', 'starter', 'annual'].includes(it.kind);
+    banner.className = 'required-banner' + (it.kind === 'starter' ? ' starter' : it.kind === 'review' ? ' review' : '');
+    banner.hidden = !['required', 'starter', 'annual', 'review'].includes(it.kind);
+    const reviewHtml = `<strong>${T('Quick check-in', 'Repaso rápido')}</strong>${T("This one was tricky last time. Let's see if it stuck.", 'Esta fue difícil la última vez. Veamos si la recuerda.')}`;
+    $('question-review').innerHTML = it.kind === 'review' ? reviewHtml : '';
+    $('question-review').hidden = it.kind !== 'review';
     banner.innerHTML = it.kind === 'required'
       ? `<strong>${T('Required education', 'Educación obligatoria')}${multi}</strong>${escapeHtml(it.reason || T('Please complete this before continuing.', 'Complete esto antes de continuar.'))}`
       : it.kind === 'starter' ? `<strong>${T('Welcome to the team!', '¡Bienvenido al equipo!')}</strong>${T('This is one of your new hire topics.', 'Este es uno de sus temas para empleados nuevos.')}`
+      : it.kind === 'review' ? reviewHtml
       : it.kind === 'annual' ? `<strong>${T('Yearly requirement', 'Requisito anual')}</strong>${it.due ? T(`Due by ${fmtDue(it.due)}.`, `Vence el ${fmtDue(it.due)}.`) : T('Everyone completes this once a year.', 'Todos completan esto una vez al año.')}`
       : '';
     $('lesson-kicker').textContent = (it.kind === 'scheduled' ? T('Topic of the week', 'Tema de la semana') : (es() ? 'Lección' : (it.topic.category || 'Lesson'))) + (it.kind === 'required' ? '' : multi);
@@ -769,6 +780,10 @@
     $('result-explain').innerHTML = explanation ? escapeHtml(explanation) : '';
     $('result-explain').hidden = !explanation;
     $('result-next').textContent = more ? T('Next', 'Siguiente') : T('Done', 'Listo');
+    const notes = { later: T("We'll check back on this one in a few days.", 'Volveremos a repasar esto en unos días.'),
+      progress: T("Nice, it's sticking! 👍", '¡Muy bien, lo está recordando! 👍'), mastered: T("✓ Got it! This one's mastered.", '✓ ¡Lo logró! Ya domina este tema.') };
+    $('result-review').textContent = notes[r.review] || '';
+    $('result-review').hidden = !notes[r.review];
     const cheer = r.cheer && (es() ? r.cheer.es : r.cheer.en);
     $('result-cheer').textContent = cheer || '';
     $('result-cheer').hidden = !cheer;
@@ -781,11 +796,16 @@
     $('result-closing').hidden = more;
     const news = more ? [] : newsFor(s.who);
     if (!more) $('result-closing').textContent = personalLine(s.who) || closingLine();
-    const str = r.streaks || st(s.config);
-    const board = !more && ['end', 'both'].includes(str.leadersOn) ? str.leaders : [];
-    $('result-leaders').innerHTML = board.length ? `<h3>🏅 ${T(board.length === 1 ? 'Streak leader' : 'Top streaks', board.length === 1 ? 'Líder de racha' : 'Mejores rachas')}</h3>` +
-      board.map((l, i) => `<div class="${s.who && l.id === s.who.employeeId ? 'me' : ''}"><b>${i + 1}.</b><span>${escapeHtml(l.name)}${s.who && l.id === s.who.employeeId ? T(' (you!)', ' (¡usted!)') : ''}</span><span>🔥 ${l.streak} ${T('in a row', 'seguidas')}</span></div>`).join('') : '';
-    $('result-leaders').hidden = !board.length;
+    const str = st(r.streaks ? { streaks: r.streaks } : s.config);
+    const showBoard = !more && ['end', 'both'].includes(str.leadersOn);
+    const board = showBoard ? str.leaders : [];
+    // Department board on this screen: just the person's own department.
+    const myDept = showBoard && s.who && s.who.department ? str.deptLeaders.find(l => l.department.toLowerCase() === s.who.department.toLowerCase()) : null;
+    const isMe = l => s.who && l.id === s.who.employeeId;
+    const row = (label, l) => `<div class="${isMe(l) ? 'me' : ''}"><b>${label}</b><span>${escapeHtml(l.name)}${isMe(l) ? T(' (you!)', ' (¡usted!)') : ''}</span><span>🔥 ${l.streak} ${T('in a row', 'seguidas')}</span></div>`;
+    $('result-leaders').innerHTML = (board.length ? `<h3>🏅 ${T(board.length === 1 ? 'Streak leader' : 'Top streaks', board.length === 1 ? 'Líder de racha' : 'Mejores rachas')}</h3>` + board.map((l, i) => row(`${i + 1}.`, l)).join('') : '') +
+      (myDept ? `<h3${board.length ? ' style="margin-top:10px"' : ''}>🏅 ${T(`${escapeHtml(myDept.department)} leader`, `Líder de ${escapeHtml(myDept.department)}`)}</h3>` + row('', myDept) : '');
+    $('result-leaders').hidden = !board.length && !myDept;
     $('result-news').innerHTML = news.slice(0, 4).map(t => `<div>${escapeHtml(t)}</div>`).join('');
     $('result-news').hidden = !news.length;
     show('result');

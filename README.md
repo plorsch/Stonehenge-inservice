@@ -16,6 +16,7 @@ A small website for a daily micro in-service on the iPad mini kiosk. Staff compl
 - **Staff roster** with import from Excel, plus responses you can download as CSV and a usage history.
 - **New hire starter set.** New hires get a short series of topics, one per visit, for their first weeks.
 - **Yearly requirements.** Mark topics everyone must do once a year. Each person gets them when they're due, and a report shows who is overdue.
+- **Spaced review.** A question missed on the first try comes back a few days later, asked a different way, then once more a week after that.
 - **Spanish.** Topics can have a Spanish version. Staff tap "Español" on the iPad to switch.
 - **Reports.** A printable survey sign-in sheet for any topic, and a list of the questions staff miss most.
 - **iPad check.** The admin page warns you when the iPad stops checking in or nobody has used it today.
@@ -75,11 +76,18 @@ Sign in with username `admin` and your password. The default for a facility-comp
 
 1. **Required education** that applies to them and that they haven't finished yet, all of it, oldest first. Their regular topic is skipped on that visit.
 2. Otherwise, for a **new hire**, the next topic in the starter set.
-3. Otherwise, one **yearly topic** that is due: never done first, then the most overdue.
-4. Otherwise, their department's **scheduled topic**. A department-specific schedule beats an all-staff one.
-5. Otherwise, a topic from the **rotation** that applies to their department.
+3. Otherwise, a **spaced review** that is due (see below), the most overdue first.
+4. Otherwise, one **yearly topic** that is due: never done first, then the most overdue.
+5. Otherwise, their department's **scheduled topic**. A department-specific schedule beats an all-staff one.
+6. Otherwise, a topic from the **rotation** that applies to their department.
 
 Within a topic they always get the question they've seen the least, never the same one twice in a row.
+
+### Spaced review of missed questions
+
+When someone gets a question wrong on the first try, that topic comes back as a **quick check-in** 2 days later, in place of their regular topic, with a different question from the same topic so they can't just remember the answer. If they get it right the first time, it comes back once more 7 days later; right again and it's mastered. A first-try miss at any point starts it over. Required education still comes first; the check-in waits for the next visit. After the question the iPad tells them where they stand: "We'll check back on this one in a few days", "Nice, it's sticking!" or "Got it! This one's mastered."
+
+**Reports → Spaced review** turns it on or off, changes the 2 and 7 days, and lists who has a check-in coming and when. It also lists topics with fewer than 3 questions: a review of those may have to repeat a question, so add a few more ways to ask it.
 
 ### Writing topics
 
@@ -135,7 +143,7 @@ While it shows the keypad, the iPad checks in with the site every minute. The **
 
 - **Staff → Training record** opens a printable page for one person: every in-service they finished, how they did, and where they stand on each yearly topic.
 - After a correct answer, staff sometimes see a cheer: a milestone (their 10th, 25th, 50th... in-service this year) or a streak of 5, 10, 15... right on the first try.
-- **Announcements → Streaks and leaderboard** can make these public, with first name and last initial only: a home screen shout-out the day someone hits a streak or milestone, and a leaderboard of the current top 3 (or just the leader) on the home screen, after the in-service, or both. Only streaks of 3 or more are ranked, and a first-try miss starts a streak over. All of it is off until you turn it on.
+- **Announcements → Streaks and leaderboard** can make these public, with first name and last initial only: a home screen shout-out the day someone hits a streak or milestone, and a leaderboard on the home screen, after the in-service, or both. The leaderboard can show the facility's top 3 (or just the leader), the leader in each department, or both. After the in-service, a person sees only their own department's leader. Only streaks of 3 or more are ranked, and a first-try miss starts a streak over. All of it is off until you turn it on.
 - The last screen asks "Was this lesson helpful?" with 👍 and 👎. The Topic library shows the counts under "Right first try", and the responses CSV has a "Lesson helpful" column.
 
 ### When the Wi-Fi drops

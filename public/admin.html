@@ -172,7 +172,8 @@
       <div class="toolbar" style="margin-top:12px">
         <label>Streak leaderboard
           <select id="sk-where"><option value="off">Off</option><option value="home">On the home screen</option><option value="end">After the in-service</option><option value="both">Both</option></select></label>
-        <label>Show <select id="sk-top"><option value="3">Top 3</option><option value="1">Leader only</option></select></label>
+        <label>Rank <select id="sk-board"><option value="facility">Whole facility</option><option value="dept">Leader of each department</option><option value="both">Both</option></select></label>
+        <label>Facility <select id="sk-top"><option value="3">Top 3</option><option value="1">Leader only</option></select></label>
         <button class="btn" id="sk-save">Save</button>
       </div>
       <div class="muted small">The leaderboard ranks current first-try streaks of 3 or more. A first-try miss starts a person's streak over.</div>
@@ -409,6 +410,21 @@
         <thead><tr><th>Question</th><th>Asked</th><th>Missed first try</th><th>Most common wrong answer</th><th></th></tr></thead>
         <tbody id="mm-rows"></tbody>
       </table></div>
+    </div>
+    <div class="card">
+      <h2>Spaced review</h2>
+      <div class="muted small">When someone misses a question on the first try, that topic comes back for them a few days later, asked with a different question from the same topic, and once more a week after that. A miss starts it over. Required education and new hire topics come first; a review replaces the regular topic that shift, one at a time. Staff see "We'll check back on this one in a few days" when they miss, and "This one's mastered" when they clear it.</div>
+      <div class="toolbar" style="margin-top:10px">
+        <label><input type="checkbox" id="rv-on"> Turn on spaced review</label>
+        <label>First check-in after <input type="number" id="rv-first" min="1" max="60" style="width:70px"> days</label>
+        <label>then after <input type="number" id="rv-second" min="1" max="60" style="width:70px"> days</label>
+        <button class="btn" id="rv-save">Save</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>Topic</th><th>Check-in</th><th>Due</th></tr></thead>
+        <tbody id="rv-rows"></tbody>
+      </table></div>
+      <div id="rv-thin" class="small" style="margin-top:10px"></div>
     </div>
     <div class="card">
       <div class="toolbar"><h2 style="margin:0" class="grow">Yearly requirements</h2>

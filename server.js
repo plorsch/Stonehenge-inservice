@@ -112,10 +112,13 @@ function defaultSettings() {
     leaders: {},              // { department: leader name }, for the Clock-in check follow-up lists
     // New hire starter set: topics given one per visit, in this order, for this many days after the hire date.
     starter: { topicIds: [], days: 60 },
+    // Spaced review: a first-try miss brings the topic back after firstDays, then after secondDays, asked a different way.
+    review: { on: true, firstDays: 2, secondDays: 7 },
     decor: defaultDecor(),    // home screen decorations, one set per month
     celebrations: true,       // show staff birthdays and work anniversaries on the kiosk
-    // Public streaks: shout-outs in the home screen banner, and a leaderboard ('off', 'home', 'end' or 'both'), top 1 or 3.
-    streaks: { shoutOuts: false, leaderboard: 'off', top: 3 },
+    // Public streaks: shout-outs in the home screen banner, and a leaderboard ('off', 'home', 'end' or 'both')
+    // of the facility's top 1 or 3, the leader of each department, or both (board: 'facility', 'dept', 'both').
+    streaks: { shoutOuts: false, leaderboard: 'off', top: 3, board: 'facility' },
     newsSeconds: 3,           // how long each announcement shows in the home screen banner
     // Shown to the person after their in-service on their day; one picked at random. {name} = first name, {years} = years worked.
     birthdayMessages: ['Happy birthday, {name}! We hope your day is as great as you are.', 'Happy birthday, {name}! Thanks for spending part of your special day with us.',
@@ -164,6 +167,7 @@ function upgradeDb(d) {
   d.announcements = Array.isArray(d.announcements) ? d.announcements : [];
   const old = d.settings || {};
   d.settings = Object.assign(defaultSettings(), old);
+  d.settings.review = Object.assign({ on: true, firstDays: 2, secondDays: 7 }, d.settings.review);
   const st = d.settings.starter;
   d.settings.starter = { topicIds: st && Array.isArray(st.topicIds) ? st.topicIds : [], days: st && st.days > 0 ? st.days : 60 };
   if (Array.isArray(old.roles) && !old.departments) d.settings.departments = old.roles;
@@ -367,9 +371,12 @@ function pickStalest(pool, avoidId) {
 }
 
 // Pick the question in a topic this person has seen least (and not the one they saw last).
-function pickQuestion(topic, employeeId) {
-  const qs = topic.questions;
+function pickQuestion(topic, employeeId, avoid = []) {
+  let qs = topic.questions;
   if (qs.length === 1 || !employeeId) return pickRandom(qs);
+  // For a review, skip the questions they missed, so it's asked a different way (if the topic has other questions).
+  if (avoid.length && qs.some(q => !avoid.includes(q.id))) qs = qs.filter(q => !avoid.includes(q.id));
+  if (qs.length === 1) return qs[0];
   const seen = {};
   let lastSeen = null;
   for (const r of db.responses) {
@@ -462,7 +469,8 @@ function choicesFor(q) {
 const hasSpanish = (topic, q) => !!(topic.es && topic.es.lesson && q.es && q.es.text);
 
 function kioskItem(topic, employeeId, extra) {
-  const q = pickQuestion(topic, employeeId);
+  const q = pickQuestion(topic, employeeId, (extra && extra.avoid) || []);
+  if (extra) delete extra.avoid;
   const es = hasSpanish(topic, q);
   return Object.assign({
     topic: { id: topic.id, title: topic.title, category: topic.category, lesson: topic.lesson, image: topic.image || '' },
@@ -486,7 +494,7 @@ function newResponse(b, topic, q, at = new Date()) {
   if (w.employeeId && !emp) return null;
   const name = emp ? emp.name : cleanText(w.name, 100);
   if (!name) return null;
-  const kind = ['required', 'scheduled', 'rotation', 'starter', 'annual'].includes(b.kind) ? b.kind : 'rotation';
+  const kind = ['required', 'scheduled', 'rotation', 'starter', 'annual', 'review'].includes(b.kind) ? b.kind : 'rotation';
   return {
     id: newId(), submittedAt: at.toISOString(), date: today(at),
     employeeId: emp ? emp.id : null, name, last4: emp ? emp.last4 : cleanLast4(w.last4) || '',
@@ -527,11 +535,19 @@ function cheerFor(emp) {
     ? { en: `🏆 That's your ${last.n}th in-service this year!`, es: `🏆 ¡Es su in-service número ${last.n} este año!` }
     : { en: `🔥 ${last.n} in a row right on the first try!`, es: `🔥 ¡${last.n} seguidas correctas al primer intento!` };
 }
+// What to tell the person about spaced review after they finish a question.
+function reviewNote(r) {
+  if (!r.employeeId || !db.settings.review.on) return null;
+  const state = reviewStates(r.employeeId).find(x => x.topicId === r.topicId);
+  if (!r.firstTryCorrect) return 'later';                            // "We'll check back on this one in a few days."
+  if (r.kind === 'review') return state ? 'progress' : 'mastered';  // "Nice, it's sticking." / "Got it! Mastered."
+  return null;
+}
 const STREAK_LEADER_MIN = 3;
 // Public streak lines for the kiosk, depending on the settings.
 function publicStreaks() {
   const set = db.settings.streaks || {};
-  if (!set.shoutOuts && (!set.leaderboard || set.leaderboard === 'off')) return { shoutOuts: [], leaders: [], leadersOn: 'off' };
+  if (!set.shoutOuts && (!set.leaderboard || set.leaderboard === 'off')) return { shoutOuts: [], leaders: [], deptLeaders: [], leadersOn: 'off' };
   const stats = streakStats();
   const active = db.employees.filter(e => e.active && stats[e.id]);
   // A streak shout-out disappears if the streak breaks later the same day.
@@ -540,10 +556,14 @@ function publicStreaks() {
     const ev = liveEvent(stats[e.id]);
     return { id: e.id, text: ev.type === 'year' ? `🏆 ${shortName(e.name)}: ${ev.n} in-services this year!` : `🔥 ${shortName(e.name)} is on a ${ev.n}-in-a-row streak!` };
   });
-  const leaders = set.leaderboard === 'off' ? [] : active.filter(e => stats[e.id].streak >= STREAK_LEADER_MIN)
+  const ranked = set.leaderboard === 'off' ? [] : active.filter(e => stats[e.id].streak >= STREAK_LEADER_MIN)
     .sort((a, b) => stats[b.id].streak - stats[a.id].streak || a.name.localeCompare(b.name))
-    .slice(0, set.top === 1 ? 1 : 3).map(e => ({ id: e.id, name: shortName(e.name), department: e.department, streak: stats[e.id].streak }));
-  return { shoutOuts, leaders, leadersOn: set.leaderboard || 'off' };
+    .map(e => ({ id: e.id, name: shortName(e.name), department: e.department, streak: stats[e.id].streak }));
+  const board = set.board || 'facility';
+  const leaders = board === 'dept' ? [] : ranked.slice(0, set.top === 1 ? 1 : 3);
+  // The top streak in each department, in the order departments are listed in Settings.
+  const deptLeaders = board === 'facility' ? [] : db.settings.departments.map(d => ranked.find(l => sameText(l.department || '', d))).filter(Boolean);
+  return { shoutOuts, leaders, deptLeaders, leadersOn: set.leaderboard || 'off' };
 }
 
 // ---------- New hire starter set and yearly topics ----------
@@ -592,6 +612,36 @@ function nextAnnualFor(emp) {
     .map(t => Object.assign({ topic: t }, annualStatus(last[`${emp.id}|${t.id}`])))
     .filter(x => x.status !== 'current')
     .sort((a, b) => rank[a.status] - rank[b.status] || (a.due || '').localeCompare(b.due || '') || a.topic.title.localeCompare(b.topic.title))[0] || null;
+}
+
+// ---------- Spaced review of missed questions ----------
+// Worked out from the person's answers, so nothing extra is stored:
+// a first-try miss starts a review (check-in 1, due firstDays later). A first-try right answer on that topic,
+// on or after the due date, moves it to check-in 2 (due secondDays later), and then clears it.
+// Another first-try miss starts it over. Answers before the due date don't move it either way, except misses.
+function reviewStates(employeeId) {
+  const cfg = db.settings.review;
+  const states = {}; // 'employeeId|topicId' -> { employeeId, topicId, stage, due, missed: [questionIds], since }
+  // In time order: answers saved offline can arrive after later ones.
+  const list = db.responses.filter(r => r.employeeId && r.attempts.length && (!employeeId || r.employeeId === employeeId))
+    .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));
+  for (const r of list) {
+    const k = `${r.employeeId}|${r.topicId}`;
+    const cur = states[k];
+    if (!r.firstTryCorrect) {
+      states[k] = { employeeId: r.employeeId, topicId: r.topicId, stage: 1, due: addDays(r.date, cfg.firstDays),
+        missed: [...new Set([...(cur ? cur.missed : []), r.questionId])], since: cur ? cur.since : r.date };
+    } else if (cur && r.date >= cur.due) {
+      if (cur.stage === 1) Object.assign(cur, { stage: 2, due: addDays(r.date, cfg.secondDays) });
+      else delete states[k];
+    }
+  }
+  return Object.values(states).filter(x => isLive(findTopic(x.topicId)));
+}
+// The one review this person should do now: the most overdue.
+function nextReviewFor(emp) {
+  if (!db.settings.review.on) return null;
+  return reviewStates(emp.id).filter(x => x.due <= today()).sort((a, b) => a.due.localeCompare(b.due))[0] || null;
 }
 
 function annualReport() {
@@ -800,11 +850,15 @@ async function kioskRoutes(req, res, p, m) {
         items.push(kioskItem(findTopic(q.topicId), who.employeeId, { kind: 'required', requiredId: q.id, reason: q.reason }));
       }
     }
-    // Then, instead of the regular topic: the next new hire topic, or else one yearly topic that is due.
+    // Then, instead of the regular topic: the next new hire topic, a spaced review that is due, or one yearly topic that is due.
     const emp = who.employeeId ? findEmployee(who.employeeId) : null;
     if (!items.length && isNewHire(emp)) {
       const next = starterProgress(emp).next;
       if (next) items.push(kioskItem(next, emp.id, { kind: 'starter' }));
+    }
+    if (!items.length && emp) {
+      const rv = nextReviewFor(emp);
+      if (rv) items.push(kioskItem(findTopic(rv.topicId), emp.id, { kind: 'review', stage: rv.stage, avoid: rv.missed }));
     }
     if (!items.length && emp) {
       const due = nextAnnualFor(emp);
@@ -857,6 +911,7 @@ async function kioskRoutes(req, res, p, m) {
       explanation: correct ? q.explanation : '',
       explanationEs: correct && es ? es.explanation : '',
       cheer: correct ? cheerFor(r.employeeId && findEmployee(r.employeeId)) : null,
+      review: correct ? reviewNote(r) : null,
       streaks: correct ? publicStreaks() : null   // fresh, so the end screen includes this answer
     });
   }
@@ -1242,9 +1297,13 @@ async function adminRoutes(req, res, p, m, url) {
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
     if ('celebrations' in b) s.celebrations = !!b.celebrations;
+    if (b.review && typeof b.review === 'object') {
+      const days = (v, d) => { const n = Math.round(Number(v)); return n >= 1 && n <= 60 ? n : d; };
+      s.review = { on: !!b.review.on, firstDays: days(b.review.firstDays, s.review.firstDays), secondDays: days(b.review.secondDays, s.review.secondDays) };
+    }
     if (b.streaks && typeof b.streaks === 'object') {
       s.streaks = { shoutOuts: !!b.streaks.shoutOuts, leaderboard: ['off', 'home', 'end', 'both'].includes(b.streaks.leaderboard) ? b.streaks.leaderboard : 'off',
-        top: Number(b.streaks.top) === 1 ? 1 : 3 };
+        top: Number(b.streaks.top) === 1 ? 1 : 3, board: ['facility', 'dept', 'both'].includes(b.streaks.board) ? b.streaks.board : 'facility' };
     }
     if (Array.isArray(b.birthdayMessages)) s.birthdayMessages = cleanList(b.birthdayMessages, 250, 300);
     if (Array.isArray(b.anniversaryMessages)) s.anniversaryMessages = cleanList(b.anniversaryMessages, 250, 300);
@@ -1326,6 +1385,16 @@ async function adminRoutes(req, res, p, m, url) {
   if (m === 'GET' && p === '/api/admin/kiosk-status') {
     return send(res, 200, { kioskSeen, serverStartedAt, now: nowIso(), responseCountToday: db.responses.filter(r => r.date === today()).length,
       lastResponseAt: db.responses.length ? db.responses[db.responses.length - 1].submittedAt : null });
+  }
+
+  if (m === 'GET' && p === '/api/admin/reviews') {
+    const list = reviewStates().map(x => {
+      const e = findEmployee(x.employeeId), t = findTopic(x.topicId);
+      return Object.assign({ name: e ? e.name : '', department: e ? e.department : '', active: !!(e && e.active), title: t.title }, x);
+    }).filter(x => x.active).sort((a, b) => a.due.localeCompare(b.due));
+    // Topics need a few questions so a review can ask it a different way.
+    const thin = db.topics.filter(t => isLive(t) && t.questions.length < 3).map(t => ({ id: t.id, title: t.title, questions: t.questions.length }));
+    return send(res, 200, { reviews: list, thin, settings: db.settings.review });
   }
 
   if (m === 'GET' && p === '/api/admin/annual') return send(res, 200, { topics: annualReport(), dueSoonDays: DUE_SOON_DAYS });

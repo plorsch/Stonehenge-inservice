@@ -53,7 +53,7 @@
     if (b.dataset.tab === 'responses') loadResponses();
     if (b.dataset.tab === 'history') loadUsage();
     if (b.dataset.tab === 'settings') renderSettings();
-    if (b.dataset.tab === 'reports') { loadMissed(); loadAnnual(); }
+    if (b.dataset.tab === 'reports') { loadMissed(); loadAnnual(); loadReviews(); }
   });
 
   async function refresh() {
@@ -685,7 +685,7 @@
       const first = thisYear.filter(r => r.firstTryCorrect).length;
       const yearly = topics.map(t => ({ title: t.title, p: t.people.find(x => x.id === emp.id) })).filter(x => x.p);
       const words = { current: 'Up to date', soon: 'Due soon', overdue: 'Overdue', never: 'Not done yet' };
-      const kinds = { required: 'Required', scheduled: 'Scheduled', rotation: 'Rotation', starter: 'New hire', annual: 'Yearly' };
+      const kinds = { required: 'Required', scheduled: 'Scheduled', rotation: 'Rotation', starter: 'New hire', annual: 'Yearly', review: 'Review' };
       win.document.open();
       win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(emp.name)} training record</title><style>
         body { font: 13px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #111; margin: 28px; }
@@ -808,7 +808,7 @@
     return p.toString();
   }
   const kindLabel = { required: '<span class="pill req">Required</span>', scheduled: '<span class="pill brand">Scheduled</span>', rotation: '<span class="pill">Rotation</span>',
-    starter: '<span class="pill good">New hire</span>', annual: '<span class="pill req">Yearly</span>' };
+    starter: '<span class="pill good">New hire</span>', annual: '<span class="pill req">Yearly</span>', review: '<span class="pill brand">Review</span>' };
   async function loadResponses() {
     try {
       const { responses } = await api('/api/admin/responses?' + respQuery());
@@ -1076,6 +1076,32 @@
     if (b) openEditor(topicById(b.dataset.mmEdit));
   });
 
+  // Spaced review
+  async function loadReviews() {
+    try {
+      const { reviews, thin, settings } = await api('/api/admin/reviews');
+      $('rv-on').checked = !!settings.on; $('rv-first').value = settings.firstDays; $('rv-second').value = settings.secondDays;
+      const today = state.todayDate;
+      $('rv-rows').innerHTML = reviews.map(r => `<tr><td>${escapeHtml(r.name)}<div class="muted small">${escapeHtml(r.department || '')}</div></td>
+        <td>${escapeHtml(r.title)}<div class="muted small">missed ${fmtDate(r.since)}</div></td>
+        <td>${r.stage === 1 ? 'First' : 'Final'}</td>
+        <td style="white-space:nowrap">${fmtDate(r.due)} ${r.due <= today ? '<span class="pill warn">Due now</span>' : ''}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="muted">No one has anything to review right now.</td></tr>';
+      $('rv-thin').innerHTML = thin.length ? `<strong>Topics with fewer than 3 questions</strong> <span class="muted">(add more so a review can ask it a different way):</span> ` +
+        thin.map(t => `<a href="#" data-thin="${t.id}">${escapeHtml(t.title)}</a> (${t.questions})`).join(', ') : '';
+    } catch (err) { fail(err); }
+  }
+  $('rv-thin').addEventListener('click', e => {
+    const a = e.target.closest('[data-thin]');
+    if (a) { e.preventDefault(); openEditor(topicById(a.dataset.thin)); }
+  });
+  $('rv-save').addEventListener('click', async () => {
+    try {
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ review: { on: $('rv-on').checked, firstDays: Number($('rv-first').value), secondDays: Number($('rv-second').value) } }) });
+      toast('Saved'); await refresh(); loadReviews();
+    } catch (err) { fail(err); }
+  });
+
   // Yearly requirements
   let annual = [];
   const yrLabel = { current: '<span class="pill good">Up to date</span>', soon: '<span class="pill">Due soon</span>', overdue: '<span class="pill warn">Overdue</span>', never: '<span class="pill warn">Never done</span>' };
@@ -1177,14 +1203,14 @@
   }
   function renderStreakSettings() {
     const k = state.settings.streaks || { shoutOuts: false, leaderboard: 'off', top: 3 };
-    $('sk-shout').checked = !!k.shoutOuts; $('sk-where').value = k.leaderboard || 'off'; $('sk-top').value = String(k.top === 1 ? 1 : 3);
+    $('sk-shout').checked = !!k.shoutOuts; $('sk-where').value = k.leaderboard || 'off'; $('sk-top').value = String(k.top === 1 ? 1 : 3); $('sk-board').value = k.board || 'facility';
     const top = state.streakTop || [];
     $('sk-now').innerHTML = top.length ? '<strong>Longest streaks right now:</strong> ' + top.map(l => `${escapeHtml(l.name)} (${escapeHtml(l.department || '')}) ${l.streak}`).join(' · ')
       : '<span class="muted">No one has a streak of 3 or more yet.</span>';
   }
   $('sk-save').addEventListener('click', async () => {
     try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ streaks: { shoutOuts: $('sk-shout').checked, leaderboard: $('sk-where').value, top: Number($('sk-top').value) } }) });
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ streaks: { shoutOuts: $('sk-shout').checked, leaderboard: $('sk-where').value, top: Number($('sk-top').value), board: $('sk-board').value } }) });
       toast('Saved. The iPad picks it up within a minute.'); await refresh();
     } catch (err) { fail(err); }
   });
