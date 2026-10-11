@@ -114,6 +114,8 @@ function defaultSettings() {
     starter: { topicIds: [], days: 60 },
     decor: defaultDecor(),    // home screen decorations, one set per month
     celebrations: true,       // show staff birthdays and work anniversaries on the kiosk
+    // Public streaks: shout-outs in the home screen banner, and a leaderboard ('off', 'home', 'end' or 'both'), top 1 or 3.
+    streaks: { shoutOuts: false, leaderboard: 'off', top: 3 },
     newsSeconds: 3,           // how long each announcement shows in the home screen banner
     // Shown to the person after their in-service on their day; one picked at random. {name} = first name, {years} = years worked.
     birthdayMessages: ['Happy birthday, {name}! We hope your day is as great as you are.', 'Happy birthday, {name}! Thanks for spending part of your special day with us.',
@@ -498,16 +500,50 @@ function newResponse(b, topic, q, at = new Date()) {
 
 // Encouragement after a correct answer: in-service milestones for the year, or a first-try streak.
 const MILESTONES = [10, 25, 50, 75, 100, 150, 200, 250, 300, 365];
+// A first-try miss resets the streak, even if the person never finished that question.
+// Returns { employeeId: { streak, year, events } }, where events are the milestones reached today.
+function streakStats(onlyId) {
+  const by = {};
+  const date = today(), year = date.slice(0, 4);
+  for (const r of db.responses) {
+    if (!r.employeeId || !r.attempts.length || (onlyId && r.employeeId !== onlyId)) continue;
+    const x = by[r.employeeId] || (by[r.employeeId] = { streak: 0, year: 0, events: [] });
+    x.streak = r.firstTryCorrect ? x.streak + 1 : 0;
+    if (r.completed && r.date.startsWith(year)) {
+      x.year++;
+      if (r.date === date && MILESTONES.includes(x.year)) x.events.push({ type: 'year', n: x.year });
+    }
+    if (r.date === date && r.firstTryCorrect && x.streak >= 5 && x.streak % 5 === 0) x.events.push({ type: 'streak', n: x.streak });
+  }
+  return by;
+}
 function cheerFor(emp) {
   if (!emp) return null;
-  const mine = db.responses.filter(r => r.employeeId === emp.id && r.completed);
-  const year = today().slice(0, 4);
-  const thisYear = mine.filter(r => r.date.startsWith(year)).length;
-  if (MILESTONES.includes(thisYear)) return { en: `🏆 That's your ${thisYear}th in-service this year!`, es: `🏆 ¡Es su in-service número ${thisYear} este año!` };
-  let streak = 0;
-  for (let i = mine.length - 1; i >= 0 && mine[i].firstTryCorrect; i--) streak++;
-  if (streak >= 5 && streak % 5 === 0) return { en: `🔥 ${streak} in a row right on the first try!`, es: `🔥 ¡${streak} seguidas correctas al primer intento!` };
-  return null;
+  const x = streakStats(emp.id)[emp.id];
+  const last = x && x.events[x.events.length - 1];
+  // Only when the answer just given reached the mark.
+  if (!last || (last.type === 'year' ? last.n !== x.year : last.n !== x.streak)) return null;
+  return last.type === 'year'
+    ? { en: `🏆 That's your ${last.n}th in-service this year!`, es: `🏆 ¡Es su in-service número ${last.n} este año!` }
+    : { en: `🔥 ${last.n} in a row right on the first try!`, es: `🔥 ¡${last.n} seguidas correctas al primer intento!` };
+}
+const STREAK_LEADER_MIN = 3;
+// Public streak lines for the kiosk, depending on the settings.
+function publicStreaks() {
+  const set = db.settings.streaks || {};
+  if (!set.shoutOuts && (!set.leaderboard || set.leaderboard === 'off')) return { shoutOuts: [], leaders: [], leadersOn: 'off' };
+  const stats = streakStats();
+  const active = db.employees.filter(e => e.active && stats[e.id]);
+  // A streak shout-out disappears if the streak breaks later the same day.
+  const liveEvent = x => x.events.filter(ev => ev.type === 'year' || x.streak >= ev.n).pop();
+  const shoutOuts = !set.shoutOuts ? [] : active.filter(e => liveEvent(stats[e.id])).map(e => {
+    const ev = liveEvent(stats[e.id]);
+    return { id: e.id, text: ev.type === 'year' ? `🏆 ${shortName(e.name)}: ${ev.n} in-services this year!` : `🔥 ${shortName(e.name)} is on a ${ev.n}-in-a-row streak!` };
+  });
+  const leaders = set.leaderboard === 'off' ? [] : active.filter(e => stats[e.id].streak >= STREAK_LEADER_MIN)
+    .sort((a, b) => stats[b.id].streak - stats[a.id].streak || a.name.localeCompare(b.name))
+    .slice(0, set.top === 1 ? 1 : 3).map(e => ({ id: e.id, name: shortName(e.name), department: e.department, streak: stats[e.id].streak }));
+  return { shoutOuts, leaders, leadersOn: set.leaderboard || 'off' };
 }
 
 // ---------- New hire starter set and yearly topics ----------
@@ -719,7 +755,7 @@ async function kioskRoutes(req, res, p, m) {
     const month = previewMonth || new Date().getMonth() + 1;
     const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
     return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages, decor,
-      announcements: todaysAnnouncements(), newsSeconds: s.newsSeconds || 3, birthdayMessages: s.birthdayMessages, anniversaryMessages: s.anniversaryMessages, celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
+      announcements: todaysAnnouncements(), newsSeconds: s.newsSeconds || 3, streaks: publicStreaks(), birthdayMessages: s.birthdayMessages, anniversaryMessages: s.anniversaryMessages, celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
   }
 
   // Step 1: last 4 of Workday ID -> who might this be?
@@ -820,7 +856,8 @@ async function kioskRoutes(req, res, p, m) {
       correctAnswer: correct ? q.correctAnswers.join('; ') : null,
       explanation: correct ? q.explanation : '',
       explanationEs: correct && es ? es.explanation : '',
-      cheer: correct ? cheerFor(r.employeeId && findEmployee(r.employeeId)) : null
+      cheer: correct ? cheerFor(r.employeeId && findEmployee(r.employeeId)) : null,
+      streaks: correct ? publicStreaks() : null   // fresh, so the end screen includes this answer
     });
   }
 
@@ -992,6 +1029,8 @@ async function adminRoutes(req, res, p, m, url) {
       missedToday: db.responses.filter(r => r.date === today() && !r.firstTryCorrect).length,
       responseCountTotal: db.responses.length,
       newHires: newHireList(),
+      streakTop: (() => { const st = streakStats(); return db.employees.filter(e => e.active && st[e.id] && st[e.id].streak >= STREAK_LEADER_MIN)
+        .sort((a, b) => st[b.id].streak - st[a.id].streak).slice(0, 5).map(e => ({ name: e.name, department: e.department, streak: st[e.id].streak })); })(),
       kioskUrls: kioskUrls(), passwordFromEnv
     });
   }
@@ -1203,6 +1242,10 @@ async function adminRoutes(req, res, p, m, url) {
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
     if ('celebrations' in b) s.celebrations = !!b.celebrations;
+    if (b.streaks && typeof b.streaks === 'object') {
+      s.streaks = { shoutOuts: !!b.streaks.shoutOuts, leaderboard: ['off', 'home', 'end', 'both'].includes(b.streaks.leaderboard) ? b.streaks.leaderboard : 'off',
+        top: Number(b.streaks.top) === 1 ? 1 : 3 };
+    }
     if (Array.isArray(b.birthdayMessages)) s.birthdayMessages = cleanList(b.birthdayMessages, 250, 300);
     if (Array.isArray(b.anniversaryMessages)) s.anniversaryMessages = cleanList(b.anniversaryMessages, 250, 300);
     if ('newsSeconds' in b) { const n = Number(b.newsSeconds); if (n >= 1 && n <= 60) s.newsSeconds = Math.round(n); }

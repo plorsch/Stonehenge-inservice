@@ -165,6 +165,19 @@
       <h3 style="margin-top:14px">Coming up in the next 30 days</h3>
       <div id="an-upcoming" class="small"></div>
     </div>
+    <div class="card">
+      <h2>Streaks and leaderboard</h2>
+      <div class="muted small">Staff always see their own streaks and milestones privately after their in-service (5, 10, 15... in a row right on the first try, and their 10th, 25th, 50th... in-service of the year). These switches make them public, with first name and last initial only.</div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="sk-shout"> Shout-outs on the home screen the day someone hits a streak or milestone <span class="hint">e.g. "🔥 Maria L. is on a 10-in-a-row streak!"</span></label>
+      <div class="toolbar" style="margin-top:12px">
+        <label>Streak leaderboard
+          <select id="sk-where"><option value="off">Off</option><option value="home">On the home screen</option><option value="end">After the in-service</option><option value="both">Both</option></select></label>
+        <label>Show <select id="sk-top"><option value="3">Top 3</option><option value="1">Leader only</option></select></label>
+        <button class="btn" id="sk-save">Save</button>
+      </div>
+      <div class="muted small">The leaderboard ranks current first-try streaks of 3 or more. A first-try miss starts a person's streak over.</div>
+      <div id="sk-now" class="small" style="margin-top:8px"></div>
+    </div>
   </section>
 
   <!-- Schedule -->

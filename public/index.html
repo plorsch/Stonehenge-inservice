@@ -164,6 +164,11 @@
   .cheer { display: inline-block; background: #fff4d6; color: #8a5a00; border-radius: 12px; padding: 10px 18px; font-size: 21px; font-weight: 700; margin: 4px 0 6px; }
   .helpful { margin-top: 18px; display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; font-size: 18px; color: var(--muted); }
   .helpful .chip { font-size: 26px; min-width: 72px; }
+  .leaders { margin: 18px auto 0; max-width: 420px; text-align: left; background: #fff8e6; border: 1px solid #f1dfae; border-radius: 14px; padding: 12px 18px; }
+  .leaders h3 { margin: 0 0 6px; font-size: 18px; color: #8a5a00; text-align: center; }
+  .leaders div { display: flex; gap: 10px; font-size: 19px; padding: 3px 0; }
+  .leaders div b { width: 26px; } .leaders div span:last-child { margin-left: auto; color: var(--muted); }
+  .leaders div.me { font-weight: 700; color: var(--brand); }
   .badge { width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 16px; font-size: 50px; font-weight: 700; background: var(--good-soft); color: var(--good); }
   .explain { text-align: left; background: var(--bg); border-radius: 14px; padding: 16px 20px; margin: 20px 0 0; font-size: 19px; }
   .error { color: var(--warn); font-weight: 600; min-height: 28px; margin-top: 10px; text-align: center; }
@@ -318,6 +323,7 @@
           <button class="chip" data-helpful="1" aria-label="Helpful">👍</button><button class="chip" data-helpful="0" aria-label="Not helpful">👎</button></div>
         <div class="helpful" id="helpful-thanks" hidden></div>
         <div class="closing" id="result-closing" hidden></div>
+        <div class="leaders" id="result-leaders" hidden></div>
         <div class="news-list" id="result-news" hidden></div>
         <div class="row"><button class="btn wide" id="result-next">Done</button></div>
         <div class="countdown muted" id="countdown"></div>
@@ -502,9 +508,18 @@
   }
   // Home screen: all-staff items only, one at a time.
   let newsIdx = 0;
+  // Public streaks (when turned on in admin): shout-outs and the leaderboard.
+  const st = cfg => cfg.streaks || { shoutOuts: [], leaders: [], leadersOn: 'off' };
+  function leadersLine(list) {
+    if (list.length === 1) return `🏅 Streak leader: ${list[0].name}, ${list[0].streak} in a row right on the first try!`;
+    return '🏅 Top streaks: ' + list.map(l => `${l.name} ${l.streak}`).join(' · ');
+  }
   function rotateNews() {
+    const str = st(s.config);
     const items = (s.config.announcements || []).filter(a => !a.departments.length).map(a => a.text)
-      .concat((s.config.celebrations || []).map(celebLine));
+      .concat((s.config.celebrations || []).map(celebLine))
+      .concat(str.shoutOuts.map(x => x.text))
+      .concat(['home', 'both'].includes(str.leadersOn) && str.leaders.length ? [leadersLine(str.leaders)] : []);
     const el = $('news-home');
     el.hidden = !items.length;
     if (!items.length) return;
@@ -766,6 +781,11 @@
     $('result-closing').hidden = more;
     const news = more ? [] : newsFor(s.who);
     if (!more) $('result-closing').textContent = personalLine(s.who) || closingLine();
+    const str = r.streaks || st(s.config);
+    const board = !more && ['end', 'both'].includes(str.leadersOn) ? str.leaders : [];
+    $('result-leaders').innerHTML = board.length ? `<h3>🏅 ${T(board.length === 1 ? 'Streak leader' : 'Top streaks', board.length === 1 ? 'Líder de racha' : 'Mejores rachas')}</h3>` +
+      board.map((l, i) => `<div class="${s.who && l.id === s.who.employeeId ? 'me' : ''}"><b>${i + 1}.</b><span>${escapeHtml(l.name)}${s.who && l.id === s.who.employeeId ? T(' (you!)', ' (¡usted!)') : ''}</span><span>🔥 ${l.streak} ${T('in a row', 'seguidas')}</span></div>`).join('') : '';
+    $('result-leaders').hidden = !board.length;
     $('result-news').innerHTML = news.slice(0, 4).map(t => `<div>${escapeHtml(t)}</div>`).join('');
     $('result-news').hidden = !news.length;
     show('result');

@@ -135,6 +135,7 @@ While it shows the keypad, the iPad checks in with the site every minute. The **
 
 - **Staff → Training record** opens a printable page for one person: every in-service they finished, how they did, and where they stand on each yearly topic.
 - After a correct answer, staff sometimes see a cheer: a milestone (their 10th, 25th, 50th... in-service this year) or a streak of 5, 10, 15... right on the first try.
+- **Announcements → Streaks and leaderboard** can make these public, with first name and last initial only: a home screen shout-out the day someone hits a streak or milestone, and a leaderboard of the current top 3 (or just the leader) on the home screen, after the in-service, or both. Only streaks of 3 or more are ranked, and a first-try miss starts a streak over. All of it is off until you turn it on.
 - The last screen asks "Was this lesson helpful?" with 👍 and 👎. The Topic library shows the counts under "Right first try", and the responses CSV has a "Lesson helpful" column.
 
 ### When the Wi-Fi drops

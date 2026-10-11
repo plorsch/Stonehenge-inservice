@@ -1167,6 +1167,7 @@
         <td><button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
     }).join('') || '<tr><td colspan="4" class="muted">No announcements yet.</td></tr>';
     $('an-celebrate').checked = state.settings.celebrations !== false;
+    renderStreakSettings();
     if (document.activeElement !== $('an-bday-msgs')) $('an-bday-msgs').value = (state.settings.birthdayMessages || []).join('\n');
     if (document.activeElement !== $('an-anniv-msgs')) $('an-anniv-msgs').value = (state.settings.anniversaryMessages || []).join('\n');
     const up = state.upcomingCelebrations || [];
@@ -1174,6 +1175,19 @@
       ? up.map(c => `<div>${fmtDate(c.date)}: ${c.type === 'birthday' ? '🎂' : '🎉'} ${escapeHtml(c.name)}${c.department ? ` <span class="muted">(${escapeHtml(c.department)})</span>` : ''} ${c.type === 'birthday' ? 'birthday' : `${c.years} year${c.years === 1 ? '' : 's'} at work`}</div>`).join('')
       : '<span class="muted">None. Add birthdays and hire dates on the Staff tab.</span>';
   }
+  function renderStreakSettings() {
+    const k = state.settings.streaks || { shoutOuts: false, leaderboard: 'off', top: 3 };
+    $('sk-shout').checked = !!k.shoutOuts; $('sk-where').value = k.leaderboard || 'off'; $('sk-top').value = String(k.top === 1 ? 1 : 3);
+    const top = state.streakTop || [];
+    $('sk-now').innerHTML = top.length ? '<strong>Longest streaks right now:</strong> ' + top.map(l => `${escapeHtml(l.name)} (${escapeHtml(l.department || '')}) ${l.streak}`).join(' · ')
+      : '<span class="muted">No one has a streak of 3 or more yet.</span>';
+  }
+  $('sk-save').addEventListener('click', async () => {
+    try {
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ streaks: { shoutOuts: $('sk-shout').checked, leaderboard: $('sk-where').value, top: Number($('sk-top').value) } }) });
+      toast('Saved. The iPad picks it up within a minute.'); await refresh();
+    } catch (err) { fail(err); }
+  });
   $('an-show-past').addEventListener('change', renderAnnouncements);
   $('an-add').addEventListener('click', async () => {
     $('an-error').textContent = '';
