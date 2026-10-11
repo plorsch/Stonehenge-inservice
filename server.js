@@ -111,6 +111,8 @@ function defaultSettings() {
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
     leaders: {},              // { department: leader name }, for the Clock-in check follow-up lists
+    // New hire starter set: topics given one per visit, in this order, for this many days after the hire date.
+    starter: { topicIds: [], days: 60 },
     decor: defaultDecor(),    // home screen decorations, one set per month
     celebrations: true,       // show staff birthdays and work anniversaries on the kiosk
     newsSeconds: 3,           // how long each announcement shows in the home screen banner
@@ -161,6 +163,8 @@ function upgradeDb(d) {
   d.announcements = Array.isArray(d.announcements) ? d.announcements : [];
   const old = d.settings || {};
   d.settings = Object.assign(defaultSettings(), old);
+  const st = d.settings.starter;
+  d.settings.starter = { topicIds: st && Array.isArray(st.topicIds) ? st.topicIds : [], days: st && st.days > 0 ? st.days : 60 };
   if (Array.isArray(old.roles) && !old.departments) d.settings.departments = old.roles;
   if (old.mode === 'random') d.settings.fallbackMode = 'random';
   if (old.mode === 'fixed' && old.fixedTopicId) {
@@ -283,6 +287,21 @@ function validateQuestion(q, n) {
   if (out.wrongAnswers.length < 1) errors.push(`${label}: add at least one wrong answer.`);
   const all = [...out.correctAnswers, ...out.wrongAnswers].map(a => a.toLowerCase());
   if (new Set(all).size !== all.length) errors.push(`${label}: each answer choice must be different.`);
+  // Optional Spanish version. Answers pair up with the English ones by position, so the counts must match.
+  const es = q.es && typeof q.es === 'object' ? {
+    text: cleanText(q.es.text, 1000),
+    correctAnswers: cleanList(q.es.correctAnswers, 500, 8),
+    wrongAnswers: cleanList(q.es.wrongAnswers, 500, 8),
+    hint: cleanText(q.es.hint, 1000),
+    explanation: cleanText(q.es.explanation, 2000)
+  } : null;
+  if (es && (es.text || es.correctAnswers.length || es.wrongAnswers.length || es.hint || es.explanation)) {
+    if (!es.text) errors.push(`${label} (Spanish): the question is empty.`);
+    if (es.correctAnswers.length !== out.correctAnswers.length || es.wrongAnswers.length !== out.wrongAnswers.length) {
+      errors.push(`${label} (Spanish): give the same number of correct and wrong answers as in English, in the same order.`);
+    }
+    out.es = es;
+  }
   return { question: out, errors };
 }
 
@@ -301,6 +320,13 @@ function validateTopicInput(input) {
   if ('image' in input) {
     const img = cleanText(input.image, 1000);
     t.image = /^\/(media|samples)\/[\w-]+\.(png|jpe?g|gif|webp)$/i.test(img) || /^https:\/\/\S+$/i.test(img) ? img : '';
+  }
+  // Like the picture, only touched when given, so a spreadsheet import keeps these.
+  if ('annual' in input) t.annual = !!input.annual;
+  if ('es' in input) {
+    const es = input.es && typeof input.es === 'object' ? input.es : {};
+    t.es = { title: cleanText(es.title, 200), lesson: cleanText(es.lesson, 5000) };
+    if (!t.es.title && !t.es.lesson) t.es = null;
   }
   if (!t.title) errors.push('Title is required.');
   if (!t.lesson) errors.push('Lesson text is required.');
@@ -425,12 +451,83 @@ function pendingRequiredFor(emp) {
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+// Answer choices as { en, es } pairs. Answers are always checked against the English text.
+function choicesFor(q) {
+  const es = q.es || { correctAnswers: [], wrongAnswers: [] };
+  return [...q.correctAnswers.map((en, i) => ({ en, es: es.correctAnswers[i] || '' })),
+    ...q.wrongAnswers.map((en, i) => ({ en, es: es.wrongAnswers[i] || '' }))];
+}
+// Spanish is offered only when the topic has a Spanish lesson and the question has a Spanish version.
+const hasSpanish = (topic, q) => !!(topic.es && topic.es.lesson && q.es && q.es.text);
+
 function kioskItem(topic, employeeId, extra) {
   const q = pickQuestion(topic, employeeId);
+  const es = hasSpanish(topic, q);
   return Object.assign({
     topic: { id: topic.id, title: topic.title, category: topic.category, lesson: topic.lesson, image: topic.image || '' },
-    question: { id: q.id, type: q.type, text: q.text, answers: shuffle([...q.correctAnswers, ...q.wrongAnswers]) }
+    question: { id: q.id, type: q.type, text: q.text, answers: shuffle(choicesFor(q)) },
+    es: es ? { title: topic.es.title || topic.title, lesson: topic.es.lesson, question: q.es.text } : null
   }, extra);
+}
+
+// ---------- New hire starter set and yearly topics ----------
+
+// The date each person last finished each topic: { 'employeeId|topicId': 'YYYY-MM-DD' }.
+function lastCompletions(employeeId) {
+  const last = {};
+  for (const r of db.responses) {
+    if (!r.completed || !r.employeeId || (employeeId && r.employeeId !== employeeId)) continue;
+    const k = `${r.employeeId}|${r.topicId}`;
+    if (!last[k] || r.date > last[k]) last[k] = r.date;
+  }
+  return last;
+}
+
+const isNewHire = (emp, date = today()) => !!(emp && emp.active && emp.hireDate && addDays(emp.hireDate, db.settings.starter.days) >= date);
+const starterTopicsFor = emp => db.settings.starter.topicIds.map(findTopic).filter(t => isLive(t) && forDepartment(t.departments, emp.department));
+
+// The starter topics this new hire has finished since their hire date, and the next one to do.
+function starterProgress(emp, last = lastCompletions(emp.id)) {
+  const topics = starterTopicsFor(emp);
+  const done = topics.filter(t => (last[`${emp.id}|${t.id}`] || '') >= emp.hireDate);
+  return { total: topics.length, done: done.length, next: topics.find(t => !done.includes(t)) || null };
+}
+
+function addYears(date, n) {
+  const [y, m, d] = date.split('-').map(Number);
+  const x = new Date(y + n, m - 1, d);
+  if (x.getMonth() !== m - 1) x.setDate(0); // Feb 29 -> Feb 28
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+const DUE_SOON_DAYS = 30;
+// A yearly topic is due one year after it was last finished. It's offered on the iPad from 30 days before.
+function annualStatus(last) {
+  if (!last) return { status: 'never', last: null, due: null };
+  const due = addYears(last, 1);
+  return { status: due < today() ? 'overdue' : due <= addDays(today(), DUE_SOON_DAYS) ? 'soon' : 'current', last, due };
+}
+const annualTopicsFor = emp => db.topics.filter(t => t.annual && isLive(t) && forDepartment(t.departments, emp.department));
+
+// The one yearly topic this person should do next: never done first, then the longest overdue, then due soonest.
+function nextAnnualFor(emp) {
+  const last = lastCompletions(emp.id);
+  const rank = { never: 0, overdue: 1, soon: 2 };
+  return annualTopicsFor(emp)
+    .map(t => Object.assign({ topic: t }, annualStatus(last[`${emp.id}|${t.id}`])))
+    .filter(x => x.status !== 'current')
+    .sort((a, b) => rank[a.status] - rank[b.status] || (a.due || '').localeCompare(b.due || '') || a.topic.title.localeCompare(b.topic.title))[0] || null;
+}
+
+function annualReport() {
+  const last = lastCompletions();
+  const staff = db.employees.filter(e => e.active);
+  return db.topics.filter(t => t.annual && t.status !== 'retired').sort((a, b) => a.title.localeCompare(b.title)).map(t => {
+    const people = staff.filter(e => forDepartment(t.departments, e.department)).map(e => Object.assign(
+      { id: e.id, name: e.name, last4: e.last4, department: e.department }, annualStatus(last[`${e.id}|${t.id}`])));
+    const count = st => people.filter(p => p.status === st).length;
+    return { id: t.id, title: t.title, departments: t.departments, status: t.status,
+      current: count('current'), soon: count('soon'), overdue: count('overdue'), never: count('never'), people };
+  });
 }
 
 function recordUsage(topic) {
@@ -565,11 +662,17 @@ const todaysCelebrations = () => celebrationsOn(today());
 
 // ---------- Kiosk routes (no login) ----------
 
+// When the iPad last checked in. It asks for its settings every minute while it shows the keypad.
+let kioskSeen = null;
+const serverStartedAt = nowIso();
+
 async function kioskRoutes(req, res, p, m) {
   if (m === 'GET' && p === '/api/kiosk/config') {
     const s = db.settings;
     // ?month=10 previews another month's decor from the admin page.
-    const month = Number(new URL(req.url, 'http://localhost').searchParams.get('month')) || new Date().getMonth() + 1;
+    const previewMonth = Number(new URL(req.url, 'http://localhost').searchParams.get('month'));
+    if (!previewMonth) kioskSeen = { at: nowIso(), device: /iPad|Macintosh.*Mobile/.test(req.headers['user-agent'] || '') ? 'iPad' : 'browser' };
+    const month = previewMonth || new Date().getMonth() + 1;
     const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
     return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages, decor,
       announcements: todaysAnnouncements(), newsSeconds: s.newsSeconds || 3, birthdayMessages: s.birthdayMessages, anniversaryMessages: s.anniversaryMessages, celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
@@ -617,6 +720,16 @@ async function kioskRoutes(req, res, p, m) {
         items.push(kioskItem(findTopic(q.topicId), who.employeeId, { kind: 'required', requiredId: q.id, reason: q.reason }));
       }
     }
+    // Then, instead of the regular topic: the next new hire topic, or else one yearly topic that is due.
+    const emp = who.employeeId ? findEmployee(who.employeeId) : null;
+    if (!items.length && isNewHire(emp)) {
+      const next = starterProgress(emp).next;
+      if (next) items.push(kioskItem(next, emp.id, { kind: 'starter' }));
+    }
+    if (!items.length && emp) {
+      const due = nextAnnualFor(emp);
+      if (due) items.push(kioskItem(due.topic, emp.id, { kind: 'annual', due: due.due }));
+    }
     if (!items.length) {
       const r = regularTopicFor(who.department);
       if (r.topic) items.push(kioskItem(r.topic, who.employeeId, { kind: r.source === 'schedule' ? 'scheduled' : 'rotation', scheduleId: r.scheduleId || null }));
@@ -641,7 +754,7 @@ async function kioskRoutes(req, res, p, m) {
       if (w.employeeId && !emp) return send(res, 400, { error: 'Please start again.' });
       const name = emp ? emp.name : cleanText(w.name, 100);
       if (!name) return send(res, 400, { error: 'Please start again.' });
-      const kind = ['required', 'scheduled', 'rotation'].includes(b.kind) ? b.kind : 'rotation';
+      const kind = ['required', 'scheduled', 'rotation', 'starter', 'annual'].includes(b.kind) ? b.kind : 'rotation';
       r = {
         id: newId(), submittedAt: nowIso(), date: today(),
         employeeId: emp ? emp.id : null, name, last4: emp ? emp.last4 : cleanLast4(w.last4) || '',
@@ -655,6 +768,7 @@ async function kioskRoutes(req, res, p, m) {
       recordUsage(topic);
     }
     r.attempts.push(chosen.join('; '));
+    r.lang = b.lang === 'es' ? 'es' : 'en';
     const want = q.correctAnswers.map(a => a.toLowerCase()).sort();
     const got = [...new Set(chosen.map(a => a.toLowerCase()))].sort();
     const correct = want.length === got.length && want.every((a, i) => a === got[i]);
@@ -663,17 +777,20 @@ async function kioskRoutes(req, res, p, m) {
     saveDb();
 
     // Single choice: drop the wrong picks. Select-all: keep every choice (a partly right pick isn't "wrong").
-    const all = [...q.correctAnswers, ...q.wrongAnswers];
+    const all = choicesFor(q);
     const tried = r.attempts.map(a => a.toLowerCase());
-    const remaining = q.type === 'multi' ? all : all.filter(a => !tried.includes(a.toLowerCase()));
+    const remaining = q.type === 'multi' ? all : all.filter(a => !tried.includes(a.en.toLowerCase()));
+    const es = hasSpanish(topic, q) ? q.es : null;
     return send(res, 200, {
       responseId: r.id,
       correct,
       firstTryCorrect: r.firstTryCorrect,
       hint: correct ? '' : q.hint,
+      hintEs: correct || !es ? '' : es.hint,
       answers: correct ? [] : shuffle(remaining),   // try again with the wrong choices removed, in a new order
       correctAnswer: correct ? q.correctAnswers.join('; ') : null,
-      explanation: correct ? q.explanation : ''
+      explanation: correct ? q.explanation : '',
+      explanationEs: correct && es ? es.explanation : ''
     });
   }
   return false;
@@ -765,6 +882,15 @@ function requiredProgress(q) {
   return { done, pending };
 }
 
+function newHireList() {
+  const last = lastCompletions();
+  return db.employees.filter(e => isNewHire(e)).sort((a, b) => b.hireDate.localeCompare(a.hireDate)).map(e => {
+    const pr = starterProgress(e, last);
+    return { id: e.id, name: e.name, department: e.department, hireDate: e.hireDate, until: addDays(e.hireDate, db.settings.starter.days),
+      done: pr.done, total: pr.total, next: pr.next ? pr.next.title : null };
+  });
+}
+
 async function adminRoutes(req, res, p, m, url) {
   if (m === 'GET' && p === '/api/admin/state') {
     const topicStats = {};
@@ -782,6 +908,7 @@ async function adminRoutes(req, res, p, m, url) {
       responseCountToday: db.responses.filter(r => r.date === today()).length,
       missedToday: db.responses.filter(r => r.date === today() && !r.firstTryCorrect).length,
       responseCountTotal: db.responses.length,
+      newHires: newHireList(),
       kioskUrls: kioskUrls(), passwordFromEnv
     });
   }
@@ -799,6 +926,11 @@ async function adminRoutes(req, res, p, m, url) {
       const lastUsedDate = cleanDate(input.lastUsedDate);
       const existing = db.topics.find(t => sameText(t.title, topic.title));
       if (existing) {
+        // A sheet without Spanish columns keeps the Spanish already written for the same question.
+        for (const q of topic.questions) {
+          const old = !q.es && existing.questions.find(x => x.es && sameText(x.text, q.text));
+          if (old && old.es.correctAnswers.length === q.correctAnswers.length && old.es.wrongAnswers.length === q.wrongAnswers.length) q.es = old.es;
+        }
         Object.assign(existing, topic, { updatedAt: nowIso() });
         if (existing.status !== 'retired') existing.status = status;
         if (lastUsedDate && lastUsedDate > (existing.lastUsedDate || '')) existing.lastUsedDate = lastUsedDate;
@@ -848,7 +980,7 @@ async function adminRoutes(req, res, p, m, url) {
       return send(res, 200, { topic: t });
     }
     if (m === 'POST' && action === 'duplicate') {
-      const copy = makeTopic(Object.assign({}, t, { title: `${t.title} (copy)`, inRotation: false, lastUsedDate: null,
+      const copy = makeTopic(Object.assign({}, t, { title: `${t.title} (copy)`, inRotation: false, annual: false, lastUsedDate: null,
         questions: t.questions.map(q => Object.assign({}, q, { id: null })) }));
       if (topicProblems(copy).length) copy.status = 'draft';
       db.topics.push(copy);
@@ -997,6 +1129,13 @@ async function adminRoutes(req, res, p, m, url) {
         emoji: cleanText(x && x.emoji, 60), message: cleanText(x && x.message, 100),
         color: DECOR_COLORS.includes(x && x.color) ? x.color : 'none' })) };
     }
+    if (b.starter && typeof b.starter === 'object') {
+      const days = Math.round(Number(b.starter.days));
+      s.starter = {
+        topicIds: [...new Set(cleanList(b.starter.topicIds, 20, 50))].filter(id => findTopic(id)),
+        days: days >= 1 && days <= 365 ? days : s.starter.days
+      };
+    }
     if (b.leaders && typeof b.leaders === 'object') {
       s.leaders = {};
       for (const [d, l] of Object.entries(b.leaders).slice(0, 50)) if (cleanText(d, 60) && cleanText(l, 60)) s.leaders[cleanText(d, 60)] = cleanText(l, 60);
@@ -1043,7 +1182,8 @@ async function adminRoutes(req, res, p, m, url) {
       ['Type', r => r.kind], ['Topic', r => r.topicTitle], ['Question', r => r.question],
       ['First answer', r => r.attempts[0]], ['Correct answer', r => r.correctAnswer],
       ['Correct first try', r => r.firstTryCorrect ? 'yes' : 'no'], ['Tries', r => r.attempts.length],
-      ['Finished', r => r.completed ? 'yes' : 'no'], ['Finished at', r => r.completedAt]
+      ['Finished', r => r.completed ? 'yes' : 'no'], ['Finished at', r => r.completedAt],
+      ['Language', r => r.lang === 'es' ? 'Spanish' : 'English']
     ];
     const rows = filterResponses(url.searchParams).map(r => cols.map(([, f]) => csvCell(f(r))).join(','));
     return send(res, 200, '﻿' + [cols.map(c => c[0]).join(','), ...rows].join('\r\n'), 'text/csv; charset=utf-8',
@@ -1055,6 +1195,13 @@ async function adminRoutes(req, res, p, m, url) {
     const punches = ((await readBody(req, 20e6)).punches || []).slice(0, 50000);
     return send(res, 200, clockCheck(punches));
   }
+
+  if (m === 'GET' && p === '/api/admin/kiosk-status') {
+    return send(res, 200, { kioskSeen, serverStartedAt, now: nowIso(), responseCountToday: db.responses.filter(r => r.date === today()).length,
+      lastResponseAt: db.responses.length ? db.responses[db.responses.length - 1].submittedAt : null });
+  }
+
+  if (m === 'GET' && p === '/api/admin/annual') return send(res, 200, { topics: annualReport(), dueSoonDays: DUE_SOON_DAYS });
 
   if (m === 'GET' && p === '/api/admin/usage') return send(res, 200, { usage: db.usage.slice().reverse() });
 
