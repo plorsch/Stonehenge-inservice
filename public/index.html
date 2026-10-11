@@ -43,6 +43,9 @@
   .end-logo { display: block; width: 260px; max-width: 70%; margin: 0 auto 18px; }
   .closing { font-size: 26px; font-weight: 700; color: var(--brand); margin: 22px 0 4px; line-height: 1.3; }
   .who { font-size: 16px; color: var(--muted); }
+  header { position: relative; }
+  .trophy { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 34px; line-height: 1; width: 60px; height: 60px; border-radius: 50%; border: 1px solid #f1dfae; background: #fff8e6; cursor: pointer; }
+  body:not(.on-home) .trophy { display: none; }
   main {
     flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
     display: flex; justify-content: center; align-items: flex-start;
@@ -196,6 +199,7 @@
   <header>
     <div class="brand"><span class="brand-emoji left" id="decor-emoji-left" aria-hidden="true" hidden></span><img src="logo.png" alt="" class="logo"><span class="brand-emoji" id="decor-emoji" aria-hidden="true" hidden></span><span id="facility" hidden>Stonehenge</span></div>
     <div class="who" id="who-label"></div>
+    <button class="trophy" id="trophy" aria-label="Streak leaderboard" hidden>🏆</button>
   </header>
   <main>
     <!-- Home: Workday ID keypad -->
@@ -314,6 +318,16 @@
     </section>
 
     <!-- Correct -->
+    <!-- Leaderboard, from the 🏆 button -->
+    <section class="screen" id="s-board">
+      <div class="card center">
+        <h2>🏆 Streak leaderboard</h2>
+        <div class="muted">In a row, right on the first try</div>
+        <div id="board-lists"></div>
+        <button class="btn" id="board-close" style="margin-top:22px">Back</button>
+      </div>
+    </section>
+
     <section class="screen" id="s-result">
       <div class="card center">
         <img src="logo.png" alt="Stonehenge of Springville" class="end-logo" id="end-logo" hidden>
@@ -445,6 +459,7 @@
       renderDepts();
       renderDecor(s.config.decor);
       rotateNews(); scheduleNews();
+      $('trophy').hidden = !st(s.config).button;
     } catch { /* keep last known config */ }
   }
 
@@ -519,6 +534,20 @@
     if (list.length === 1) return `🏅 Streak leader: ${list[0].name}, ${list[0].streak} in a row right on the first try!`;
     return '🏅 Top streaks: ' + list.map(l => `${l.name} ${l.streak}`).join(' · ');
   }
+  // The 🏆 button: the full leaderboard, ranked the way it's set in admin.
+  function renderBoard() {
+    const str = st(s.config);
+    const row = (label, l) => `<div><b>${label}</b><span>${escapeHtml(l.name)}</span><span>🔥 ${l.streak}</span></div>`;
+    const html = (str.leaders.length ? `<div class="leaders"><h3>${str.leaders.length === 1 ? 'Facility leader' : 'Top streaks'}</h3>${str.leaders.map((l, i) => row(`${i + 1}.`, l)).join('')}</div>` : '') +
+      (str.deptLeaders.length ? `<div class="leaders"><h3>Department leaders</h3>${str.deptLeaders.map(l => `<div><b style="width:auto;min-width:140px">${escapeHtml(l.department)}</b><span>${escapeHtml(l.name)}</span><span>🔥 ${l.streak}</span></div>`).join('')}</div>` : '');
+    $('board-lists').innerHTML = html || '<p style="margin-top:18px">No one has 3 in a row yet. Be the first!</p>';
+  }
+  $('trophy').addEventListener('click', async () => {
+    await loadConfig(); // freshest standings
+    renderBoard();
+    show('board');
+  });
+  $('board-close').addEventListener('click', () => goHome());
   function rotateNews() {
     const str = st(s.config);
     const items = (s.config.announcements || []).filter(a => !a.departments.length).map(a => a.text)

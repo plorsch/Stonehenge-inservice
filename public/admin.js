@@ -1203,14 +1203,14 @@
   }
   function renderStreakSettings() {
     const k = state.settings.streaks || { shoutOuts: false, leaderboard: 'off', top: 3 };
-    $('sk-shout').checked = !!k.shoutOuts; $('sk-where').value = k.leaderboard || 'off'; $('sk-top').value = String(k.top === 1 ? 1 : 3); $('sk-board').value = k.board || 'facility';
+    $('sk-shout').checked = !!k.shoutOuts; $('sk-where').value = k.leaderboard || 'off'; $('sk-top').value = String(k.top === 1 ? 1 : 3); $('sk-board').value = k.board || 'facility'; $('sk-button').checked = !!k.button;
     const top = state.streakTop || [];
     $('sk-now').innerHTML = top.length ? '<strong>Longest streaks right now:</strong> ' + top.map(l => `${escapeHtml(l.name)} (${escapeHtml(l.department || '')}) ${l.streak}`).join(' · ')
       : '<span class="muted">No one has a streak of 3 or more yet.</span>';
   }
   $('sk-save').addEventListener('click', async () => {
     try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ streaks: { shoutOuts: $('sk-shout').checked, leaderboard: $('sk-where').value, top: Number($('sk-top').value), board: $('sk-board').value } }) });
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ streaks: { shoutOuts: $('sk-shout').checked, leaderboard: $('sk-where').value, top: Number($('sk-top').value), board: $('sk-board').value, button: $('sk-button').checked } }) });
       toast('Saved. The iPad picks it up within a minute.'); await refresh();
     } catch (err) { fail(err); }
   });

@@ -118,7 +118,8 @@ function defaultSettings() {
     celebrations: true,       // show staff birthdays and work anniversaries on the kiosk
     // Public streaks: shout-outs in the home screen banner, and a leaderboard ('off', 'home', 'end' or 'both')
     // of the facility's top 1 or 3, the leader of each department, or both (board: 'facility', 'dept', 'both').
-    streaks: { shoutOuts: false, leaderboard: 'off', top: 3, board: 'facility' },
+    // button: a 🏆 button on the home screen that opens the full leaderboard.
+    streaks: { shoutOuts: false, leaderboard: 'off', top: 3, board: 'facility', button: false },
     newsSeconds: 3,           // how long each announcement shows in the home screen banner
     // Shown to the person after their in-service on their day; one picked at random. {name} = first name, {years} = years worked.
     birthdayMessages: ['Happy birthday, {name}! We hope your day is as great as you are.', 'Happy birthday, {name}! Thanks for spending part of your special day with us.',
@@ -258,6 +259,22 @@ if (!(db.settings.sampleRefresh >= 1)) {
     t.updatedAt = nowIso();
   }
   db.settings.sampleRefresh = 1;
+  saveDb();
+}
+// One-time: more ways to ask each sample topic, so spaced review can ask a different question (October 2026).
+// Adds only the new sample questions a topic doesn't already have; nothing you wrote is changed.
+if (!(db.settings.sampleRefresh >= 2)) {
+  for (const s of loadJson(SEED_FILE, [])) {
+    const t = db.topics.find(x => sameText(x.title, s.title));
+    if (!t) continue;
+    const { topic } = validateTopicInput(s);
+    // Only the questions written in October 2026, so an original you reworded isn't added back.
+    const added = topic.questions.filter((q, i) => s.questions[i].added === '2026-10' && !t.questions.some(x => sameText(x.text, q.text)));
+    if (!added.length) continue;
+    t.questions.push(...added);
+    t.updatedAt = nowIso();
+  }
+  db.settings.sampleRefresh = 2;
   saveDb();
 }
 
@@ -547,7 +564,8 @@ const STREAK_LEADER_MIN = 3;
 // Public streak lines for the kiosk, depending on the settings.
 function publicStreaks() {
   const set = db.settings.streaks || {};
-  if (!set.shoutOuts && (!set.leaderboard || set.leaderboard === 'off')) return { shoutOuts: [], leaders: [], deptLeaders: [], leadersOn: 'off' };
+  const boardOn = (set.leaderboard && set.leaderboard !== 'off') || !!set.button;
+  if (!set.shoutOuts && !boardOn) return { shoutOuts: [], leaders: [], deptLeaders: [], leadersOn: 'off', button: false };
   const stats = streakStats();
   const active = db.employees.filter(e => e.active && stats[e.id]);
   // A streak shout-out disappears if the streak breaks later the same day.
@@ -556,14 +574,14 @@ function publicStreaks() {
     const ev = liveEvent(stats[e.id]);
     return { id: e.id, text: ev.type === 'year' ? `🏆 ${shortName(e.name)}: ${ev.n} in-services this year!` : `🔥 ${shortName(e.name)} is on a ${ev.n}-in-a-row streak!` };
   });
-  const ranked = set.leaderboard === 'off' ? [] : active.filter(e => stats[e.id].streak >= STREAK_LEADER_MIN)
+  const ranked = !boardOn ? [] : active.filter(e => stats[e.id].streak >= STREAK_LEADER_MIN)
     .sort((a, b) => stats[b.id].streak - stats[a.id].streak || a.name.localeCompare(b.name))
     .map(e => ({ id: e.id, name: shortName(e.name), department: e.department, streak: stats[e.id].streak }));
   const board = set.board || 'facility';
   const leaders = board === 'dept' ? [] : ranked.slice(0, set.top === 1 ? 1 : 3);
   // The top streak in each department, in the order departments are listed in Settings.
   const deptLeaders = board === 'facility' ? [] : db.settings.departments.map(d => ranked.find(l => sameText(l.department || '', d))).filter(Boolean);
-  return { shoutOuts, leaders, deptLeaders, leadersOn: set.leaderboard || 'off' };
+  return { shoutOuts, leaders, deptLeaders, leadersOn: set.leaderboard || 'off', button: !!set.button };
 }
 
 // ---------- New hire starter set and yearly topics ----------
@@ -1303,7 +1321,7 @@ async function adminRoutes(req, res, p, m, url) {
     }
     if (b.streaks && typeof b.streaks === 'object') {
       s.streaks = { shoutOuts: !!b.streaks.shoutOuts, leaderboard: ['off', 'home', 'end', 'both'].includes(b.streaks.leaderboard) ? b.streaks.leaderboard : 'off',
-        top: Number(b.streaks.top) === 1 ? 1 : 3, board: ['facility', 'dept', 'both'].includes(b.streaks.board) ? b.streaks.board : 'facility' };
+        top: Number(b.streaks.top) === 1 ? 1 : 3, board: ['facility', 'dept', 'both'].includes(b.streaks.board) ? b.streaks.board : 'facility', button: !!b.streaks.button };
     }
     if (Array.isArray(b.birthdayMessages)) s.birthdayMessages = cleanList(b.birthdayMessages, 250, 300);
     if (Array.isArray(b.anniversaryMessages)) s.anniversaryMessages = cleanList(b.anniversaryMessages, 250, 300);
