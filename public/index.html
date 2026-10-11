@@ -43,6 +43,9 @@
   .end-logo { display: block; width: 260px; max-width: 70%; margin: 0 auto 18px; }
   .closing { font-size: 26px; font-weight: 700; color: var(--brand); margin: 22px 0 4px; line-height: 1.3; }
   .who { font-size: 16px; color: var(--muted); }
+  header { position: relative; }
+  .trophy { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 34px; line-height: 1; width: 60px; height: 60px; border-radius: 50%; border: 1px solid #f1dfae; background: #fff8e6; cursor: pointer; }
+  body:not(.on-home) .trophy { display: none; }
   main {
     flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
     display: flex; justify-content: center; align-items: flex-start;
@@ -136,6 +139,10 @@
   .chip { min-height: 54px; padding: 0 20px; border-radius: 27px; border: 2px solid var(--line); background: #fff; font: inherit; font-size: 18px; color: var(--ink); cursor: pointer; }
   .chip.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 650; }
 
+  .lang { display: block; margin: -10px -10px 12px auto; min-height: 48px; padding: 0 16px; border-radius: 24px; border: 2px solid var(--brand); background: #fff; color: var(--brand); font: inherit; font-size: 17px; font-weight: 650; cursor: pointer; }
+  .required-banner.starter { background: var(--good-soft); color: var(--good); }
+  .required-banner.review { background: var(--brand-soft); color: var(--brand); }
+  .review-note { font-size: 19px; font-weight: 600; color: var(--brand); margin: 8px 0 0; }
   .required-banner { background: var(--req-soft); color: var(--req); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 17px; }
   .required-banner strong { display: block; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; }
   .lesson { font-size: 20px; line-height: 1.6; }
@@ -159,6 +166,14 @@
   .tryagain { background: var(--warn-soft); color: var(--warn); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; font-size: 18px; }
   .tryagain strong { display: block; font-size: 20px; }
 
+  .cheer { display: inline-block; background: #fff4d6; color: #8a5a00; border-radius: 12px; padding: 10px 18px; font-size: 21px; font-weight: 700; margin: 4px 0 6px; }
+  .helpful { margin-top: 18px; display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; font-size: 18px; color: var(--muted); }
+  .helpful .chip { font-size: 26px; min-width: 72px; }
+  .leaders { margin: 18px auto 0; max-width: 420px; text-align: left; background: #fff8e6; border: 1px solid #f1dfae; border-radius: 14px; padding: 12px 18px; }
+  .leaders h3 { margin: 0 0 6px; font-size: 18px; color: #8a5a00; text-align: center; }
+  .leaders div { display: flex; gap: 10px; font-size: 19px; padding: 3px 0; }
+  .leaders div b { width: 26px; } .leaders div span:last-child { margin-left: auto; color: var(--muted); }
+  .leaders div.me { font-weight: 700; color: var(--brand); }
   .badge { width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 16px; font-size: 50px; font-weight: 700; background: var(--good-soft); color: var(--good); }
   .explain { text-align: left; background: var(--bg); border-radius: 14px; padding: 16px 20px; margin: 20px 0 0; font-size: 19px; }
   .error { color: var(--warn); font-weight: 600; min-height: 28px; margin-top: 10px; text-align: center; }
@@ -184,6 +199,7 @@
   <header>
     <div class="brand"><span class="brand-emoji left" id="decor-emoji-left" aria-hidden="true" hidden></span><img src="logo.png" alt="" class="logo"><span class="brand-emoji" id="decor-emoji" aria-hidden="true" hidden></span><span id="facility" hidden>Stonehenge</span></div>
     <div class="who" id="who-label"></div>
+    <button class="trophy" id="trophy" aria-label="Streak leaderboard" hidden>🏆</button>
   </header>
   <main>
     <!-- Home: Workday ID keypad -->
@@ -270,13 +286,14 @@
     <!-- Lesson -->
     <section class="screen" id="s-lesson">
       <div class="card">
+        <button class="lang" data-action="lang" hidden></button>
         <div class="required-banner" id="lesson-required" hidden></div>
         <div class="kicker" id="lesson-kicker"></div>
         <h2 id="lesson-title"></h2>
         <img class="lesson-img" id="lesson-img" alt="" hidden>
         <div class="lesson" id="lesson-body"></div>
         <div class="row">
-          <button class="btn secondary" data-action="home">Cancel</button>
+          <button class="btn secondary" data-action="home" id="lesson-cancel">Cancel</button>
           <button class="btn" id="to-question">I've read this</button>
         </div>
       </div>
@@ -285,6 +302,8 @@
     <!-- Question (and retries) -->
     <section class="screen" id="s-question">
       <div class="card">
+        <button class="lang" data-action="lang" hidden></button>
+        <div class="required-banner review" id="question-review" hidden></div>
         <div class="tryagain" id="tryagain" hidden></div>
         <div class="kicker" id="question-kicker">Question</div>
         <h2 id="question-text"></h2>
@@ -292,21 +311,37 @@
         <div class="answers" id="answers"></div>
         <div class="error" id="question-error"></div>
         <div class="row">
-          <button class="btn secondary" data-action="lesson">Review lesson</button>
+          <button class="btn secondary" data-action="lesson" id="review-lesson">Review lesson</button>
           <button class="btn" id="submit" disabled>Submit answer</button>
         </div>
       </div>
     </section>
 
     <!-- Correct -->
+    <!-- Leaderboard, from the 🏆 button -->
+    <section class="screen" id="s-board">
+      <div class="card center">
+        <h2>🏆 Streak leaderboard</h2>
+        <div class="muted">In a row, right on the first try</div>
+        <div id="board-lists"></div>
+        <button class="btn" id="board-close" style="margin-top:22px">Back</button>
+      </div>
+    </section>
+
     <section class="screen" id="s-result">
       <div class="card center">
         <img src="logo.png" alt="Stonehenge of Springville" class="end-logo" id="end-logo" hidden>
         <div class="badge">✓</div>
         <h1 id="result-title"></h1>
+        <div class="cheer" id="result-cheer" hidden></div>
         <p class="muted" id="result-sub"></p>
         <div class="explain" id="result-explain" hidden></div>
+        <div class="review-note" id="result-review" hidden></div>
+        <div class="helpful" id="helpful" hidden><span id="helpful-q"></span>
+          <button class="chip" data-helpful="1" aria-label="Helpful">👍</button><button class="chip" data-helpful="0" aria-label="Not helpful">👎</button></div>
+        <div class="helpful" id="helpful-thanks" hidden></div>
         <div class="closing" id="result-closing" hidden></div>
+        <div class="leaders" id="result-leaders" hidden></div>
         <div class="news-list" id="result-news" hidden></div>
         <div class="row"><button class="btn wide" id="result-next">Done</button></div>
         <div class="countdown muted" id="countdown"></div>
@@ -333,7 +368,7 @@
 
   const $ = id => document.getElementById(id);
   const s = { pin: '', config: { departments: [], allowUnlisted: true }, dept: '', who: null, items: [], idx: 0,
-    answers: [], choice: null, responseId: null, busy: false };
+    answers: [], choice: null, responseId: null, busy: false, lang: 'en', hint: null };
   let idleTimer = null, countdownTimer = null;
   const loadedAt = Date.now();
 
@@ -351,7 +386,7 @@
     if (!$('s-home').classList.contains('active')) idleTimer = setTimeout(goHome, IDLE_RESET_MS);
   }
   function goHome() {
-    Object.assign(s, { pin: '', dept: '', who: null, items: [], idx: 0, answers: [], choice: null, responseId: null });
+    Object.assign(s, { pin: '', dept: '', who: null, items: [], idx: 0, answers: [], choice: null, responseId: null, lang: 'en', hint: null, offlineRec: null });
     $('name').value = ''; $('forgot-name').value = ''; $('forgot-matches').innerHTML = '';
     ['pin-error', 'unlisted-error', 'question-error', 'forgot-error'].forEach(id => { $(id).textContent = ''; });
     $('who-label').textContent = '';
@@ -360,18 +395,62 @@
     if (Date.now() - loadedAt > RELOAD_EVERY_MS) location.reload();
   }
 
+  const OFFLINE_MSG = "The iPad can't reach the internet right now. Please try again in a minute.";
   async function api(path, body) {
     const opts = { cache: 'no-store', headers: { 'Content-Type': 'application/json' } };
     if (body) { opts.method = 'POST'; opts.body = JSON.stringify(body); }
-    const res = await fetch(path, opts);
+    let res;
+    const offline = () => Object.assign(new Error(OFFLINE_MSG), { offline: true });
+    try { res = await fetch(path, opts); } catch { throw offline(); }
+    if (res.status >= 502) throw offline(); // the site is restarting or unreachable
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
     return data;
   }
 
+  // ----- answers saved while offline -----
+  // If the Wi-Fi drops during an in-service, the iPad grades the answer itself and keeps it here until it can send it.
+  const QUEUE_KEY = 'inservice-waiting';
+  function readQueue() { try { return JSON.parse(localStorage.getItem(QUEUE_KEY)) || []; } catch { return []; } }
+  function writeQueue(q) { try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch { /* storage full or blocked */ } }
+  let flushing = false;
+  async function flushQueue() {
+    const q = readQueue();
+    if (!q.length || flushing) return;
+    flushing = true;
+    try {
+      const { done } = await api('/api/kiosk/sync', { records: q });
+      writeQueue(readQueue().filter(r => !done.includes(r.offlineId)));
+    } catch { /* still offline; try again later */ }
+    finally { flushing = false; }
+  }
+  const canGradeOffline = () => !!(window.crypto && crypto.subtle);
+  async function sha256(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  const answerSet = list => [...new Set(list.map(a => String(a).trim().toLowerCase()))].sort().join('\n');
+  async function gradeOffline(chosen) {
+    const it = item(), o = it.offline;
+    const correct = (await sha256(o.salt + answerSet(chosen))) === o.key;
+    const rec = s.offlineRec || (s.offlineRec = {
+      offlineId: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), responseId: s.responseId,
+      topicId: it.topic.id, questionId: it.question.id, kind: it.kind, requiredId: it.requiredId || null, scheduleId: it.scheduleId || null,
+      who: { employeeId: s.who.employeeId, name: s.who.name, department: s.who.department, last4: s.who.last4 }, attempts: [] });
+    rec.lang = es() ? 'es' : 'en';
+    rec.attempts.push({ answer: chosen, at: new Date().toISOString() });
+    writeQueue(readQueue().filter(r => r.offlineId !== rec.offlineId).concat(rec));
+    s.tries += 1;
+    const tried = new Set(rec.attempts.flatMap(a => isMulti() ? [] : a.answer.map(x => x.toLowerCase())));
+    const remaining = s.answers.filter(a => !tried.has(a.en.toLowerCase()));
+    return { offline: true, correct, firstTryCorrect: s.tries === 1 && correct, hint: o.hint, hintEs: o.hintEs,
+      answers: correct ? [] : remaining.sort(() => Math.random() - .5), explanation: correct ? o.explanation : '', explanationEs: correct ? o.explanationEs : '' };
+  }
+
   async function loadConfig() {
     try {
-      const cfg = await api('/api/kiosk/config' + (previewMonth ? '?month=' + previewMonth : ''));
+      const cfg = await api('/api/kiosk/config' + (previewMonth ? '?month=' + previewMonth : '?waiting=' + readQueue().length));
+      if (!previewMonth) flushQueue();
       // A new version of the site was deployed: reload so the iPad picks it up without anyone touching it.
       if (s.config && s.config.build && cfg.build !== s.config.build && $('s-home').classList.contains('active')) return location.reload();
       s.config = cfg;
@@ -380,6 +459,7 @@
       renderDepts();
       renderDecor(s.config.decor);
       rotateNews(); scheduleNews();
+      $('trophy').hidden = !st(s.config).button;
     } catch { /* keep last known config */ }
   }
 
@@ -447,9 +527,34 @@
   }
   // Home screen: all-staff items only, one at a time.
   let newsIdx = 0;
+  // Public streaks (when turned on in admin): shout-outs and the leaderboard.
+  const st = cfg => Object.assign({ shoutOuts: [], leaders: [], deptLeaders: [], leadersOn: 'off' }, cfg.streaks);
+  const deptLine = list => '🏅 Department streak leaders: ' + list.map(l => `${l.department}: ${l.name} ${l.streak}`).join(' · ');
+  function leadersLine(list) {
+    if (list.length === 1) return `🏅 Streak leader: ${list[0].name}, ${list[0].streak} in a row right on the first try!`;
+    return '🏅 Top streaks: ' + list.map(l => `${l.name} ${l.streak}`).join(' · ');
+  }
+  // The 🏆 button: the full leaderboard, ranked the way it's set in admin.
+  function renderBoard() {
+    const str = st(s.config);
+    const row = (label, l) => `<div><b>${label}</b><span>${escapeHtml(l.name)}</span><span>🔥 ${l.streak}</span></div>`;
+    const html = (str.leaders.length ? `<div class="leaders"><h3>${str.leaders.length === 1 ? 'Facility leader' : 'Top streaks'}</h3>${str.leaders.map((l, i) => row(`${i + 1}.`, l)).join('')}</div>` : '') +
+      (str.deptLeaders.length ? `<div class="leaders"><h3>Department leaders</h3>${str.deptLeaders.map(l => `<div><b style="width:auto;min-width:140px">${escapeHtml(l.department)}</b><span>${escapeHtml(l.name)}</span><span>🔥 ${l.streak}</span></div>`).join('')}</div>` : '');
+    $('board-lists').innerHTML = html || '<p style="margin-top:18px">No one has 3 in a row yet. Be the first!</p>';
+  }
+  $('trophy').addEventListener('click', async () => {
+    await loadConfig(); // freshest standings
+    renderBoard();
+    show('board');
+  });
+  $('board-close').addEventListener('click', () => goHome());
   function rotateNews() {
+    const str = st(s.config);
     const items = (s.config.announcements || []).filter(a => !a.departments.length).map(a => a.text)
-      .concat((s.config.celebrations || []).map(celebLine));
+      .concat((s.config.celebrations || []).map(celebLine))
+      .concat(str.shoutOuts.map(x => x.text))
+      .concat(['home', 'both'].includes(str.leadersOn) && str.leaders.length ? [leadersLine(str.leaders)] : [])
+      .concat(['home', 'both'].includes(str.leadersOn) && str.deptLeaders.length ? [deptLine(str.deptLeaders)] : []);
     const el = $('news-home');
     el.hidden = !items.length;
     if (!items.length) return;
@@ -570,32 +675,64 @@
     } finally { s.busy = false; }
   }
 
+  // Spanish: shown when the person taps "Español" and this item has a Spanish version. The choice lasts for their visit.
+  const es = () => s.lang === 'es' && !!(item() && item().es);
+  const T = (en, sp) => es() ? sp : en;
+  const fmtDue = d => { const [y, m, day] = d.split('-').map(Number); return new Date(y, m - 1, day).toLocaleDateString(es() ? 'es' : 'en-US', { month: 'long', day: 'numeric' }); };
+
   function openItem() {
     const it = item();
-    s.answers = it.question.answers; s.responseId = null; clearChoice();
-    const multi = s.items.length > 1 ? ` · ${s.idx + 1} of ${s.items.length}` : '';
-    $('lesson-required').hidden = it.kind !== 'required';
-    $('lesson-required').innerHTML = it.kind === 'required'
-      ? `<strong>Required education${multi}</strong>${escapeHtml(it.reason || 'Please complete this before continuing.')}` : '';
-    $('lesson-kicker').textContent = (it.kind === 'scheduled' ? 'Topic of the week' : (it.topic.category || 'Lesson')) + (it.kind === 'required' ? '' : multi);
-    $('lesson-title').textContent = it.topic.title;
-    $('lesson-body').innerHTML = formatLesson(it.topic.lesson);
+    s.answers = it.question.answers; s.responseId = null; s.hint = null; s.offlineRec = null; s.tries = 0; clearChoice();
+    $('tryagain').hidden = true;
+    renderItem();
+    // A review starts with the question (recall first); the lesson is one tap away.
+    show(it.kind === 'review' ? 'question' : 'lesson');
+  }
+  // Fills in the lesson and question screens in the chosen language.
+  function renderItem() {
+    const it = item();
+    const multi = s.items.length > 1 ? T(` · ${s.idx + 1} of ${s.items.length}`, ` · ${s.idx + 1} de ${s.items.length}`) : '';
+    document.querySelectorAll('[data-action=lang]').forEach(b => { b.hidden = !it.es; b.textContent = es() ? '🌐 English' : '🌐 Español'; });
+    const banner = $('lesson-required');
+    banner.className = 'required-banner' + (it.kind === 'starter' ? ' starter' : it.kind === 'review' ? ' review' : '');
+    banner.hidden = !['required', 'starter', 'annual', 'review'].includes(it.kind);
+    const reviewHtml = `<strong>${T('Quick check-in', 'Repaso rápido')}</strong>${T("This one was tricky last time. Let's see if it stuck.", 'Esta fue difícil la última vez. Veamos si la recuerda.')}`;
+    $('question-review').innerHTML = it.kind === 'review' ? reviewHtml : '';
+    $('question-review').hidden = it.kind !== 'review';
+    banner.innerHTML = it.kind === 'required'
+      ? `<strong>${T('Required education', 'Educación obligatoria')}${multi}</strong>${escapeHtml(it.reason || T('Please complete this before continuing.', 'Complete esto antes de continuar.'))}`
+      : it.kind === 'starter' ? `<strong>${T('Welcome to the team!', '¡Bienvenido al equipo!')}</strong>${T('This is one of your new hire topics.', 'Este es uno de sus temas para empleados nuevos.')}`
+      : it.kind === 'review' ? reviewHtml
+      : it.kind === 'annual' ? `<strong>${T('Yearly requirement', 'Requisito anual')}</strong>${it.due ? T(`Due by ${fmtDue(it.due)}.`, `Vence el ${fmtDue(it.due)}.`) : T('Everyone completes this once a year.', 'Todos completan esto una vez al año.')}`
+      : '';
+    $('lesson-kicker').textContent = (it.kind === 'scheduled' ? T('Topic of the week', 'Tema de la semana') : (es() ? 'Lección' : (it.topic.category || 'Lesson'))) + (it.kind === 'required' ? '' : multi);
+    $('lesson-title').textContent = es() ? it.es.title : it.topic.title;
+    $('lesson-body').innerHTML = formatLesson(es() ? it.es.lesson : it.topic.lesson);
     $('lesson-img').hidden = !it.topic.image;
     if (it.topic.image) $('lesson-img').src = it.topic.image; else $('lesson-img').removeAttribute('src');
-    $('tryagain').hidden = true;
-    $('question-kicker').textContent = 'Question' + multi;
+    $('lesson-cancel').textContent = T('Cancel', 'Cancelar');
+    $('to-question').textContent = T("I've read this", 'Ya lo leí');
+    $('question-kicker').textContent = T('Question', 'Pregunta') + multi;
+    $('select-all').textContent = T('Select all that apply', 'Seleccione todas las correctas');
+    $('review-lesson').textContent = T('Review lesson', 'Ver la lección');
+    $('submit').textContent = T('Submit answer', 'Enviar respuesta');
+    renderTryAgain();
     renderQuestion();
-    show('lesson');
+  }
+  function renderTryAgain() {
+    if (!s.hint) return;
+    const hint = es() ? s.hint.es : s.hint.en;
+    $('tryagain').innerHTML = `<strong>${T('Not quite. Please try again.', 'No exactamente. Inténtelo de nuevo.')}</strong>${hint ? T('Hint: ', 'Pista: ') + escapeHtml(hint) : T('The answer choices have been shuffled.', 'Las respuestas se han mezclado.')}`;
   }
 
   // s.choice is an index for single-answer questions, or a Set of indexes for "select all that apply".
   const isMulti = () => item().question.type === 'multi';
   const picked = i => isMulti() ? s.choice.has(i) : s.choice === i;
   function renderQuestion() {
-    $('question-text').textContent = item().question.text;
+    $('question-text').textContent = es() ? item().es.question : item().question.text;
     $('select-all').hidden = !isMulti();
     $('answers').innerHTML = s.answers.map((a, i) =>
-      `<button class="answer${picked(i) ? ' on' : ''}${isMulti() ? ' multi' : ''}" data-i="${i}"><span class="letter">${isMulti() ? (picked(i) ? '✓' : '') : 'ABCDEFGH'[i]}</span><span>${escapeHtml(a)}</span></button>`).join('');
+      `<button class="answer${picked(i) ? ' on' : ''}${isMulti() ? ' multi' : ''}" data-i="${i}"><span class="letter">${isMulti() ? (picked(i) ? '✓' : '') : 'ABCDEFGH'[i]}</span><span>${escapeHtml(es() && a.es ? a.es : a.en)}</span></button>`).join('');
     $('submit').disabled = isMulti() ? s.choice.size === 0 : s.choice === null;
   }
   function clearChoice() { s.choice = isMulti() ? new Set() : null; }
@@ -613,18 +750,31 @@
     if ($('submit').disabled || s.busy) return;
     s.busy = true; $('submit').disabled = true;
     const it = item();
+    const chosen = isMulti() ? [...s.choice].map(i => s.answers[i].en) : [s.answers[s.choice].en];
     try {
-      const r = await api('/api/kiosk/answer', {
-        responseId: s.responseId, answer: isMulti() ? [...s.choice].map(i => s.answers[i]) : s.answers[s.choice],
-        topicId: it.topic.id, questionId: it.question.id, kind: it.kind,
-        requiredId: it.requiredId || null, scheduleId: it.scheduleId || null,
-        who: { employeeId: s.who.employeeId, name: s.who.name, department: s.who.department, last4: s.who.last4 }
-      });
-      s.responseId = r.responseId;
+      let r;
+      // Once an answer has been saved offline, keep this question offline so its tries stay together.
+      if (s.offlineRec) r = await gradeOffline(chosen);
+      else {
+        try {
+          r = await api('/api/kiosk/answer', {
+            responseId: s.responseId, answer: isMulti() ? chosen : chosen[0],
+            topicId: it.topic.id, questionId: it.question.id, kind: it.kind, lang: es() ? 'es' : 'en',
+            requiredId: it.requiredId || null, scheduleId: it.scheduleId || null,
+            who: { employeeId: s.who.employeeId, name: s.who.name, department: s.who.department, last4: s.who.last4 }
+          });
+          s.tries += 1;
+          s.responseId = r.responseId;
+        } catch (err) {
+          if (!err.offline || !it.offline || !canGradeOffline()) throw err;
+          r = await gradeOffline(chosen);
+        }
+      }
       if (!r.correct) {
         // Wrong: show a hint, remove that choice, and shuffle the rest.
         s.answers = r.answers; clearChoice();
-        $('tryagain').innerHTML = `<strong>Not quite. Please try again.</strong>${r.hint ? 'Hint: ' + escapeHtml(r.hint) : 'The answer choices have been shuffled.'}`;
+        s.hint = { en: r.hint, es: r.hintEs || r.hint };
+        renderTryAgain();
         $('tryagain').hidden = false;
         renderQuestion();
         document.querySelector('main').scrollTop = 0;
@@ -652,25 +802,58 @@
 
   function showResult(r) {
     const more = s.idx < s.items.length - 1;
-    $('result-title').textContent = r.firstTryCorrect ? 'Correct!' : `That's right.`;
-    $('result-sub').textContent = more ? 'You have more to finish.' : '';
+    $('result-title').textContent = r.firstTryCorrect ? T('Correct!', '¡Correcto!') : T(`That's right.`, 'Así es.');
+    $('result-sub').textContent = more ? T('You have more to finish.', 'Tiene más por terminar.') : '';
     $('result-sub').hidden = !more;
-    $('result-explain').innerHTML = r.explanation ? escapeHtml(r.explanation) : '';
-    $('result-explain').hidden = !r.explanation;
-    $('result-next').textContent = more ? 'Next' : 'Done';
+    const explanation = es() && r.explanationEs ? r.explanationEs : r.explanation;
+    $('result-explain').innerHTML = explanation ? escapeHtml(explanation) : '';
+    $('result-explain').hidden = !explanation;
+    $('result-next').textContent = more ? T('Next', 'Siguiente') : T('Done', 'Listo');
+    const notes = { later: T("We'll check back on this one in a few days.", 'Volveremos a repasar esto en unos días.'),
+      progress: T("Nice, it's sticking! 👍", '¡Muy bien, lo está recordando! 👍'), mastered: T("✓ Got it! This one's mastered.", '✓ ¡Lo logró! Ya domina este tema.') };
+    $('result-review').textContent = notes[r.review] || '';
+    $('result-review').hidden = !notes[r.review];
+    const cheer = r.cheer && (es() ? r.cheer.es : r.cheer.en);
+    $('result-cheer').textContent = cheer || '';
+    $('result-cheer').hidden = !cheer;
+    // "Was this helpful?" needs the saved record, so it's skipped for answers saved offline.
+    s.feedbackFor = r.offline ? null : r.responseId;
+    $('helpful-q').textContent = T('Was this lesson helpful?', '¿Le sirvió esta lección?');
+    $('helpful').hidden = !s.feedbackFor;
+    $('helpful-thanks').hidden = true;
     $('end-logo').hidden = more;
     $('result-closing').hidden = more;
     const news = more ? [] : newsFor(s.who);
     if (!more) $('result-closing').textContent = personalLine(s.who) || closingLine();
+    const str = st(r.streaks ? { streaks: r.streaks } : s.config);
+    const showBoard = !more && ['end', 'both'].includes(str.leadersOn);
+    const board = showBoard ? str.leaders : [];
+    // Department board on this screen: just the person's own department.
+    const myDept = showBoard && s.who && s.who.department ? str.deptLeaders.find(l => l.department.toLowerCase() === s.who.department.toLowerCase()) : null;
+    const isMe = l => s.who && l.id === s.who.employeeId;
+    const row = (label, l) => `<div class="${isMe(l) ? 'me' : ''}"><b>${label}</b><span>${escapeHtml(l.name)}${isMe(l) ? T(' (you!)', ' (¡usted!)') : ''}</span><span>🔥 ${l.streak} ${T('in a row', 'seguidas')}</span></div>`;
+    $('result-leaders').innerHTML = (board.length ? `<h3>🏅 ${T(board.length === 1 ? 'Streak leader' : 'Top streaks', board.length === 1 ? 'Líder de racha' : 'Mejores rachas')}</h3>` + board.map((l, i) => row(`${i + 1}.`, l)).join('') : '') +
+      (myDept ? `<h3${board.length ? ' style="margin-top:10px"' : ''}>🏅 ${T(`${escapeHtml(myDept.department)} leader`, `Líder de ${escapeHtml(myDept.department)}`)}</h3>` + row('', myDept) : '');
+    $('result-leaders').hidden = !board.length && !myDept;
     $('result-news').innerHTML = news.slice(0, 4).map(t => `<div>${escapeHtml(t)}</div>`).join('');
     $('result-news').hidden = !news.length;
     show('result');
     if (more) return;
     let left = RESULT_RESET_S + (news.length ? 5 : 0);
-    const tick = () => { $('countdown').textContent = `Returning to start in ${left} seconds`; };
+    const spanish = es();
+    const tick = () => { $('countdown').textContent = spanish ? `Volviendo al inicio en ${left} segundos` : `Returning to start in ${left} seconds`; };
     tick();
     countdownTimer = setInterval(() => { left -= 1; tick(); if (left <= 0) goHome(); }, 1000);
   }
+  $('helpful').addEventListener('click', e => {
+    const b = e.target.closest('[data-helpful]');
+    if (!b || !s.feedbackFor) return;
+    api('/api/kiosk/feedback', { responseId: s.feedbackFor, helpful: b.dataset.helpful === '1' }).catch(() => {});
+    s.feedbackFor = null;
+    $('helpful').hidden = true;
+    $('helpful-thanks').textContent = T('Thanks for the feedback!', '¡Gracias por su opinión!');
+    $('helpful-thanks').hidden = false;
+  });
   $('result-next').addEventListener('click', () => {
     if (s.idx < s.items.length - 1) { s.idx += 1; openItem(); } else goHome();
   });
@@ -681,6 +864,7 @@
     const act = a.dataset.action;
     if (act === 'home') goHome();
     if (act === 'lesson') show('lesson');
+    if (act === 'lang') { s.lang = s.lang === 'es' ? 'en' : 'es'; renderItem(); bumpIdle(); }
     if (act === 'unlisted') { renderDepts(); show('unlisted'); setTimeout(() => $('name').focus(), 250); }
     if (act === 'forgot') { show('forgot'); setTimeout(() => $('forgot-name').focus(), 250); }
   });

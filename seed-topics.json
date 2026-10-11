@@ -48,6 +48,33 @@
         ],
         "hint": "Two groups need to know: the person who treats the resident and the person who speaks for them.",
         "explanation": "Federal rules require prompt notification of the physician and the resident's representative when there is a significant change."
+      },
+      {
+        "text": "When should you report a change you notice?",
+        "correctAnswer": "Right away",
+        "wrongAnswers": [
+          "At the end of your shift",
+          "If it's still there tomorrow",
+          "At the next care conference"
+        ],
+        "hint": "Small changes can turn serious fast.",
+        "explanation": "Reporting right away gets the resident help sooner.",
+        "added": "2026-10"
+      },
+      {
+        "type": "multi",
+        "text": "Which of these should you tell the nurse about? Select all that apply.",
+        "correctAnswers": [
+          "New confusion",
+          "Eating much less than usual",
+          "A new fall"
+        ],
+        "wrongAnswers": [
+          "Wanting a different TV show"
+        ],
+        "hint": "Look for changes from their usual self.",
+        "explanation": "Confusion, appetite and falls are all changes in condition.",
+        "added": "2026-10"
       }
     ]
   },
@@ -78,6 +105,42 @@
         ],
         "hint": "It's about as long as singing Happy Birthday twice.",
         "explanation": "Scrubbing for at least 20 seconds removes germs from all surfaces of the hands."
+      },
+      {
+        "text": "Your hands are visibly dirty. What should you use?",
+        "correctAnswer": "Soap and water",
+        "wrongAnswers": [
+          "Alcohol hand rub",
+          "A paper towel",
+          "Gloves over them"
+        ],
+        "hint": "Hand rub can't cut through dirt.",
+        "explanation": "Visible dirt needs soap and water to wash it off.",
+        "added": "2026-10"
+      },
+      {
+        "text": "Why doesn't hand rub work for C. diff?",
+        "correctAnswer": "Alcohol doesn't kill C. diff spores",
+        "wrongAnswers": [
+          "It dries too fast",
+          "C. diff is only on surfaces",
+          "It works fine for C. diff"
+        ],
+        "hint": "C. diff makes tough spores.",
+        "explanation": "Spores survive alcohol, so they have to be washed off with soap and water.",
+        "added": "2026-10"
+      },
+      {
+        "text": "Which is about 20 seconds of scrubbing?",
+        "correctAnswer": "Singing Happy Birthday twice",
+        "wrongAnswers": [
+          "A quick rinse",
+          "Counting to 5",
+          "Until the soap is gone"
+        ],
+        "hint": "Longer than most people think.",
+        "explanation": "Happy Birthday twice is an easy 20-second timer.",
+        "added": "2026-10"
       }
     ],
     "image": "/samples/hand-hygiene.gif"
@@ -109,6 +172,45 @@
         ],
         "hint": "Every staff member is responsible for call lights.",
         "explanation": "Answering promptly prevents residents from getting up alone and falling."
+      },
+      {
+        "text": "Why do most falls happen?",
+        "correctAnswer": "Residents get up alone",
+        "wrongAnswers": [
+          "Floors are too shiny",
+          "Residents walk too much",
+          "Beds are too low"
+        ],
+        "hint": "Think about who is in the room when it happens.",
+        "explanation": "Most falls happen when a resident gets up without help.",
+        "added": "2026-10"
+      },
+      {
+        "text": "You're leaving a room. How should the bed be?",
+        "correctAnswer": "In the low position",
+        "wrongAnswers": [
+          "Raised to your waist",
+          "As high as it goes",
+          "It doesn't matter"
+        ],
+        "hint": "A shorter drop is safer.",
+        "explanation": "A low bed makes a fall less likely to cause injury.",
+        "added": "2026-10"
+      },
+      {
+        "type": "multi",
+        "text": "Before you leave a room, check: Select all that apply.",
+        "correctAnswers": [
+          "Call light in reach",
+          "Bed in low position"
+        ],
+        "wrongAnswers": [
+          "TV turned off",
+          "Door closed"
+        ],
+        "hint": "Two quick safety checks from the lesson.",
+        "explanation": "A reachable call light and a low bed prevent falls.",
+        "added": "2026-10"
       }
     ],
     "image": "/samples/call-light.gif"
@@ -140,6 +242,42 @@
         ],
         "hint": "It's the A in PASS.",
         "explanation": "Aiming at the base puts out the fuel that is burning."
+      },
+      {
+        "text": "In RACE, what does the A stand for?",
+        "correctAnswer": "Alarm",
+        "wrongAnswers": [
+          "Assist",
+          "Aim",
+          "Assess"
+        ],
+        "hint": "After you rescue, let everyone know.",
+        "explanation": "Pull the alarm right after rescuing anyone in danger.",
+        "added": "2026-10"
+      },
+      {
+        "text": "What should you do to contain a fire?",
+        "correctAnswer": "Close the doors",
+        "wrongAnswers": [
+          "Open the windows",
+          "Turn on the fans",
+          "Prop the doors open"
+        ],
+        "hint": "Keep the smoke and fire in one room.",
+        "explanation": "Closed doors slow the spread of smoke and fire.",
+        "added": "2026-10"
+      },
+      {
+        "text": "What is the first step in PASS?",
+        "correctAnswer": "Pull the pin",
+        "wrongAnswers": [
+          "Point at the flames",
+          "Spray the top",
+          "Shake the can"
+        ],
+        "hint": "The extinguisher won't work until you do this.",
+        "explanation": "Pull the pin, Aim at the base, Squeeze, Sweep.",
+        "added": "2026-10"
       }
     ],
     "image": "/samples/fire-race.gif"
@@ -171,6 +309,42 @@
         ],
         "hint": "It's the person in charge of the whole building.",
         "explanation": "Reports go to your supervisor and the Administrator, who is the Abuse Coordinator."
+      },
+      {
+        "text": "Do you need proof before reporting abuse?",
+        "correctAnswer": "No, report what you suspect",
+        "wrongAnswers": [
+          "Yes, always",
+          "Only if a resident tells you",
+          "Only if you saw it twice"
+        ],
+        "hint": "Suspicion is enough.",
+        "explanation": "Report suspected abuse. The facility investigates.",
+        "added": "2026-10"
+      },
+      {
+        "text": "Can you get in trouble for reporting in good faith?",
+        "correctAnswer": "No, you're protected",
+        "wrongAnswers": [
+          "Yes, if it turns out false",
+          "Only if it's a coworker",
+          "Only if you're new"
+        ],
+        "hint": "The law protects reporters.",
+        "explanation": "Good-faith reports are protected, even if nothing is found.",
+        "added": "2026-10"
+      },
+      {
+        "text": "A resident tells you something that sounds like neglect. What first?",
+        "correctAnswer": "Keep them safe and report now",
+        "wrongAnswers": [
+          "Ask the family",
+          "Write it down for later",
+          "Wait for your supervisor to ask"
+        ],
+        "hint": "Safety first, then report right away.",
+        "explanation": "Keep the resident safe and report immediately.",
+        "added": "2026-10"
       }
     ]
   },
@@ -214,6 +388,30 @@
         ],
         "hint": "Residents have the right to make choices about their own space.",
         "explanation": "Honoring personal preferences is part of person-centered, dignified care."
+      },
+      {
+        "text": "What should you do before entering to change a bed?",
+        "correctAnswer": "Knock and explain why you're there",
+        "wrongAnswers": [
+          "Walk in quietly",
+          "Turn on all the lights",
+          "Wait for the nurse"
+        ],
+        "hint": "It's their home.",
+        "explanation": "Knocking and explaining respects privacy.",
+        "added": "2026-10"
+      },
+      {
+        "text": "A dropped clean sheet touches the floor. What now?",
+        "correctAnswer": "Bag it and get a new one",
+        "wrongAnswers": [
+          "Shake it off and use it",
+          "Use it on the bottom only",
+          "Brush it off and fold it"
+        ],
+        "hint": "The floor is dirty.",
+        "explanation": "Linens that touch the floor are dirty and go to laundry.",
+        "added": "2026-10"
       }
     ]
   },
@@ -257,6 +455,30 @@
         ],
         "hint": "If you don't know what's in it, it isn't safe to use.",
         "explanation": "Every chemical container must be labeled so staff know what it is and how to use it safely."
+      },
+      {
+        "text": "Why is an unlocked cart dangerous?",
+        "correctAnswer": "A resident could drink or touch a chemical",
+        "wrongAnswers": [
+          "It could roll away",
+          "Supplies could get dusty",
+          "It's not dangerous"
+        ],
+        "hint": "Think about residents with dementia.",
+        "explanation": "Chemicals can poison or burn a resident who doesn't know the danger.",
+        "added": "2026-10"
+      },
+      {
+        "text": "When should the cart be locked?",
+        "correctAnswer": "Every time you step away",
+        "wrongAnswers": [
+          "Only at night",
+          "Only on the dementia unit",
+          "When you'll be gone 10 minutes"
+        ],
+        "hint": "Even for a minute.",
+        "explanation": "Lock it every time, even for a moment.",
+        "added": "2026-10"
       }
     ]
   },
@@ -302,6 +524,30 @@
         ],
         "hint": "Diet orders can change. Check the official source every time.",
         "explanation": "Checking every time prevents serving a texture that could cause choking."
+      },
+      {
+        "text": "A resident asks for a cracker but is on Pureed (Level 4). What do you do?",
+        "correctAnswer": "Check with the nurse; don't give it",
+        "wrongAnswers": [
+          "Give it since they asked",
+          "Break it into small pieces",
+          "Soak it in water first"
+        ],
+        "hint": "The diet order protects them from choking.",
+        "explanation": "Follow the diet order and let the nurse know about the request.",
+        "added": "2026-10"
+      },
+      {
+        "text": "What does Level 4 Pureed food look like?",
+        "correctAnswer": "Smooth with no lumps",
+        "wrongAnswers": [
+          "Small soft chunks",
+          "Regular food cut small",
+          "Thin like water"
+        ],
+        "hint": "No chewing needed.",
+        "explanation": "Pureed is smooth, no lumps, and holds its shape.",
+        "added": "2026-10"
       }
     ]
   },
@@ -345,6 +591,30 @@
         ],
         "hint": "It's the same temperature poultry is cooked to.",
         "explanation": "Reheating to 165°F within 2 hours kills bacteria that may have grown."
+      },
+      {
+        "text": "What is the danger zone?",
+        "correctAnswer": "41°F to 135°F",
+        "wrongAnswers": [
+          "0°F to 32°F",
+          "135°F to 165°F",
+          "70°F to 100°F"
+        ],
+        "hint": "Between cold holding and hot holding.",
+        "explanation": "Bacteria grow fastest between 41°F and 135°F.",
+        "added": "2026-10"
+      },
+      {
+        "text": "Soup on the line reads 120°F. What do you do?",
+        "correctAnswer": "Reheat it to 165°F",
+        "wrongAnswers": [
+          "Serve it quickly",
+          "Add hot water",
+          "Leave it, it's warm enough"
+        ],
+        "hint": "120°F is in the danger zone.",
+        "explanation": "Food below 135°F must be reheated to 165°F (or thrown out per policy).",
+        "added": "2026-10"
       }
     ],
     "image": "/samples/food-danger-zone.gif"
@@ -389,6 +659,33 @@
         ],
         "hint": "Use the official, up-to-date record.",
         "explanation": "The list can change. Check the current list and the care plan every shift."
+      },
+      {
+        "type": "multi",
+        "text": "What must be in place for self-administration? Select all that apply.",
+        "correctAnswers": [
+          "IDT assessment",
+          "Provider order",
+          "Care plan"
+        ],
+        "wrongAnswers": [
+          "Family permission"
+        ],
+        "hint": "Three things from the lesson.",
+        "explanation": "All three are required before a resident self-administers.",
+        "added": "2026-10"
+      },
+      {
+        "text": "How often should you check the self-administration list?",
+        "correctAnswer": "Every shift",
+        "wrongAnswers": [
+          "Once a month",
+          "Only when hired",
+          "When a resident asks"
+        ],
+        "hint": "It can change at any time.",
+        "explanation": "Check the current list every shift.",
+        "added": "2026-10"
       }
     ]
   },
@@ -422,6 +719,45 @@
         ],
         "hint": "Redness that doesn't fade can be the first stage of a pressure injury.",
         "explanation": "Early reporting lets the nurse start treatment before the skin breaks down."
+      },
+      {
+        "text": "Where do pressure injuries usually start?",
+        "correctAnswer": "Over bony areas",
+        "wrongAnswers": [
+          "On the palms",
+          "On the face",
+          "On soft, padded areas"
+        ],
+        "hint": "Heels, hips, tailbone.",
+        "explanation": "Bone presses the skin hardest in those spots.",
+        "added": "2026-10"
+      },
+      {
+        "type": "multi",
+        "text": "Which areas should you check for redness? Select all that apply.",
+        "correctAnswers": [
+          "Heels",
+          "Hips",
+          "Tailbone"
+        ],
+        "wrongAnswers": [
+          "Fingertips"
+        ],
+        "hint": "Bony areas that rest on the bed.",
+        "explanation": "Heels, hips and tailbone carry the most pressure.",
+        "added": "2026-10"
+      },
+      {
+        "text": "A resident's care plan says turn every 2 hours. It's been 3. What now?",
+        "correctAnswer": "Reposition now and tell the nurse",
+        "wrongAnswers": [
+          "Wait for the next round",
+          "Skip it if they're asleep",
+          "Note it at end of shift"
+        ],
+        "hint": "Pressure damage starts fast.",
+        "explanation": "Reposition right away and let the nurse know it was late.",
+        "added": "2026-10"
       }
     ],
     "image": "/samples/reposition.gif"
@@ -453,6 +789,42 @@
         ],
         "hint": "It's their bedroom.",
         "explanation": "Knocking and waiting respects the resident's privacy and home."
+      },
+      {
+        "text": "Why greet residents by name?",
+        "correctAnswer": "It shows they're known and welcome",
+        "wrongAnswers": [
+          "It's faster",
+          "It's only for new residents",
+          "So they remember your name"
+        ],
+        "hint": "This is their home.",
+        "explanation": "Using their name tells residents they matter.",
+        "added": "2026-10"
+      },
+      {
+        "text": "What should you do before starting care?",
+        "correctAnswer": "Say what you're about to do",
+        "wrongAnswers": [
+          "Just start quietly",
+          "Ask a coworker to explain",
+          "Turn on the TV"
+        ],
+        "hint": "No surprises.",
+        "explanation": "Explaining first helps residents feel safe and respected.",
+        "added": "2026-10"
+      },
+      {
+        "text": "A resident is in the dining room as you pass by. What do you do?",
+        "correctAnswer": "Smile and say hi by name",
+        "wrongAnswers": [
+          "Walk past to stay on time",
+          "Wave only if they wave first",
+          "Talk only to your coworker"
+        ],
+        "hint": "Every resident, every time.",
+        "explanation": "A quick greeting makes the building feel like home.",
+        "added": "2026-10"
       }
     ]
   },
@@ -483,6 +855,42 @@
         ],
         "hint": "Every request has an owner. Help them find it.",
         "explanation": "Connecting residents to the right person shows we all own their care."
+      },
+      {
+        "text": "A call light is on and you're not a CNA. What do you do?",
+        "correctAnswer": "Check on them and get help",
+        "wrongAnswers": [
+          "Ignore it, it's not your role",
+          "Turn it off and leave",
+          "Wait for nursing to see it"
+        ],
+        "hint": "Answer it, whatever your role.",
+        "explanation": "Anyone can check in and find the right person to help.",
+        "added": "2026-10"
+      },
+      {
+        "text": "What does a great team do?",
+        "correctAnswer": "Helps without being asked",
+        "wrongAnswers": [
+          "Waits for assignments",
+          "Sticks to its own tasks",
+          "Reports slow coworkers"
+        ],
+        "hint": "Don't wait to be asked.",
+        "explanation": "Jumping in helps residents and coworkers alike.",
+        "added": "2026-10"
+      },
+      {
+        "text": "You see a spill in the hall. What's best?",
+        "correctAnswer": "Stay with it and get it cleaned up",
+        "wrongAnswers": [
+          "Step around it",
+          "Tell someone at end of shift",
+          "Leave it for housekeeping to find"
+        ],
+        "hint": "Someone could fall.",
+        "explanation": "Owning small problems keeps everyone safe.",
+        "added": "2026-10"
       }
     ]
   }

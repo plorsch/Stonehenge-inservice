@@ -33,7 +33,7 @@
   .btn:disabled { opacity: .5; cursor: default; }
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
   .toolbar .grow { flex: 1; }
-  input[type=text], input[type=date], input[type=password], select, textarea {
+  input[type=text], input[type=date], input[type=password], input[type=number], select, textarea {
     font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); max-width: 100%;
   }
   textarea { width: 100%; resize: vertical; }
@@ -67,6 +67,13 @@
   code { background: var(--bg); padding: 2px 6px; border-radius: 5px; }
   .progress-bar { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; min-width: 120px; }
   .progress-bar span { display: block; height: 100%; background: var(--good); }
+  .alert { background: var(--warn-soft); color: var(--warn); border: 1px solid #f0cfb4; border-radius: var(--radius); padding: 12px 18px; margin-bottom: 18px; font-weight: 600; }
+  .alert .small { font-weight: 400; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: var(--good); }
+  .dot.off { background: var(--warn); }
+  details.es { margin-top: 10px; border: 1px dashed var(--line); border-radius: 10px; padding: 6px 12px 10px; }
+  details.es summary { cursor: pointer; font-weight: 600; color: var(--brand); }
+  .starter-list li { margin: 4px 0; }
 </style>
 </head>
 <body>
@@ -81,11 +88,13 @@
     <button data-tab="staff">Staff</button>
     <button data-tab="responses">Responses</button>
     <button data-tab="clockcheck">Clock-in check</button>
+    <button data-tab="reports">Reports</button>
     <button data-tab="history">Usage history</button>
     <button data-tab="settings">Settings</button>
   </nav>
 </header>
 <main>
+  <div class="alert" id="kiosk-alert" hidden></div>
   <!-- Today -->
   <section class="tab on" id="tab-today">
     <div class="card">
@@ -98,11 +107,15 @@
     </div>
     <div class="card">
       <h2>What each department gets today</h2>
-      <div class="muted small" style="margin-bottom:8px">Required education always comes first. Otherwise staff get their department's scheduled topic, or a topic from the rotation, with a different question from that topic each shift.</div>
+      <div class="muted small" style="margin-bottom:8px">Required education always comes first, then a new hire's starter topics, then one yearly topic if it's due. Otherwise staff get their department's scheduled topic, or a topic from the rotation, with a different question from that topic each shift.</div>
       <div class="table-wrap"><table>
         <thead><tr><th>Department</th><th>Topic</th><th>Why</th><th></th></tr></thead>
         <tbody id="today-rows"></tbody>
       </table></div>
+    </div>
+    <div class="card">
+      <h3>iPad status</h3>
+      <div id="kiosk-status" class="small"></div>
     </div>
     <div class="card">
       <h3>iPad address</h3>
@@ -151,6 +164,21 @@
       <div style="margin-top:10px"><button class="btn" id="an-save-msgs">Save messages</button></div>
       <h3 style="margin-top:14px">Coming up in the next 30 days</h3>
       <div id="an-upcoming" class="small"></div>
+    </div>
+    <div class="card">
+      <h2>Streaks and leaderboard</h2>
+      <div class="muted small">Staff always see their own streaks and milestones privately after their in-service (5, 10, 15... in a row right on the first try, and their 10th, 25th, 50th... in-service of the year). These switches make them public, with first name and last initial only.</div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="sk-shout"> Shout-outs on the home screen the day someone hits a streak or milestone <span class="hint">e.g. "🔥 Maria L. is on a 10-in-a-row streak!"</span></label>
+      <div class="toolbar" style="margin-top:12px">
+        <label>Streak leaderboard
+          <select id="sk-where"><option value="off">Off</option><option value="home">On the home screen</option><option value="end">After the in-service</option><option value="both">Both</option></select></label>
+        <label>Rank <select id="sk-board"><option value="facility">Whole facility</option><option value="dept">Leader of each department</option><option value="both">Both</option></select></label>
+        <label>Facility <select id="sk-top"><option value="3">Top 3</option><option value="1">Leader only</option></select></label>
+        <button class="btn" id="sk-save">Save</button>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:4px"><input type="checkbox" id="sk-button"> 🏆 button in the top right of the iPad home screen <span class="hint">Tap it to see the leaderboard, ranked as chosen above, even if the leaderboard is off.</span></label>
+      <div class="muted small">The leaderboard ranks current first-try streaks of 3 or more. A first-try miss starts a person's streak over.</div>
+      <div id="sk-now" class="small" style="margin-top:8px"></div>
     </div>
   </section>
 
@@ -233,6 +261,24 @@
         <tbody id="rq-rows"></tbody>
       </table></div>
       <div class="muted small" style="margin-top:8px">Progress counts staff on the roster. Close an item when you no longer need it; closed items stop appearing on the iPad.</div>
+    </div>
+    <div class="card">
+      <h2>New hire starter set</h2>
+      <div class="muted small">New hires get these topics one per visit, in this order, instead of their regular topic. It uses the hire date on the Staff tab, so add a hire date for each new person. Topics marked for certain departments only go to those departments.</div>
+      <ol class="starter-list" id="ns-list"></ol>
+      <div class="toolbar">
+        <select id="ns-add-topic" style="min-width:260px"></select>
+        <button class="btn ghost" id="ns-add">Add to set</button>
+      </div>
+      <div class="toolbar">
+        <label>Counts as a new hire for <input type="number" id="ns-days" min="1" max="365" style="width:80px"> days after the hire date</label>
+        <button class="btn" id="ns-save">Save starter set</button>
+      </div>
+      <h3 style="margin-top:14px">New hires right now</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>Department</th><th>Hired</th><th>Progress</th><th>Next topic</th></tr></thead>
+        <tbody id="nh-rows"></tbody>
+      </table></div>
     </div>
   </section>
 
@@ -341,6 +387,57 @@
     </div>
   </section>
 
+  <!-- Reports -->
+  <section class="tab" id="tab-reports">
+    <div class="card">
+      <h2>Survey sign-in sheet</h2>
+      <div class="muted small">A printable page for one topic: the lesson and questions, then everyone who completed it, when, and whether they got it right the first try. Use your browser's print window to print it or save it as a PDF.</div>
+      <div class="toolbar" style="margin-top:12px">
+        <select id="rp-topic" style="min-width:260px"></select>
+        <label>From <input type="date" id="rp-from"></label>
+        <label>To <input type="date" id="rp-to"></label>
+        <select id="rp-dept"><option value="">All departments</option></select>
+        <button class="btn" id="rp-print">Open printable sheet</button>
+        <span class="err" id="rp-error"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="toolbar"><h2 style="margin:0" class="grow">Most-missed questions</h2>
+        <label>From <input type="date" id="mm-from"></label>
+        <label>To <input type="date" id="mm-to"></label>
+        <select id="mm-dept"><option value="">All departments</option></select></div>
+      <div class="muted small" style="margin-bottom:8px">Questions staff got wrong on the first try most often. Reteach these, or reword them if the question is confusing. Questions answered fewer than 5 times are listed last.</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Question</th><th>Asked</th><th>Missed first try</th><th>Most common wrong answer</th><th></th></tr></thead>
+        <tbody id="mm-rows"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Spaced review</h2>
+      <div class="muted small">When someone misses a question on the first try, that topic comes back for them a few days later, asked with a different question from the same topic, and once more a week after that. A miss starts it over. Required education and new hire topics come first; a review replaces the regular topic that shift, one at a time. Staff see "We'll check back on this one in a few days" when they miss, and "This one's mastered" when they clear it.</div>
+      <div class="toolbar" style="margin-top:10px">
+        <label><input type="checkbox" id="rv-on"> Turn on spaced review</label>
+        <label>First check-in after <input type="number" id="rv-first" min="1" max="60" style="width:70px"> days</label>
+        <label>then after <input type="number" id="rv-second" min="1" max="60" style="width:70px"> days</label>
+        <button class="btn" id="rv-save">Save</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>Topic</th><th>Check-in</th><th>Due</th></tr></thead>
+        <tbody id="rv-rows"></tbody>
+      </table></div>
+      <div id="rv-thin" class="small" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <div class="toolbar"><h2 style="margin:0" class="grow">Yearly requirements</h2>
+        <button class="btn ghost" id="yr-csv">Download who's due (CSV)</button></div>
+      <div class="muted small" style="margin-bottom:8px">To make a topic yearly, tick <strong>Required every year</strong> when you edit it. Each person gets it on the iPad when they have never done it, or from 30 days before a year has passed since they last did it, one per visit, in place of their regular topic.</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Topic</th><th>Who</th><th>Up to date</th><th>Due in 30 days</th><th>Overdue</th><th>Never done</th><th></th></tr></thead>
+        <tbody id="yr-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
   <!-- History -->
   <section class="tab" id="tab-history">
     <div class="card">
@@ -427,10 +524,16 @@
       </div>
       <div class="small muted" id="f-image-status"></div>
       <img id="f-image-preview" alt="" style="display:none;max-width:100%;max-height:220px;margin-top:8px;border-radius:10px">
+      <details class="es" id="f-es-box"><summary>Spanish version (optional)</summary>
+        <div class="muted small" style="margin-top:6px">Staff can tap "Español" on the iPad when the topic has a Spanish lesson and the question they get has a Spanish version. Fill in Spanish under each question too.</div>
+        <label class="block" for="f-es-title">Title in Spanish</label><input type="text" id="f-es-title" style="width:100%">
+        <label class="block" for="f-es-lesson">Lesson in Spanish</label><textarea id="f-es-lesson" rows="6"></textarea>
+      </details>
       <label class="block">Questions <span class="hint">add several so staff get a different one each shift</span></label>
       <div id="f-questions"></div>
       <button type="button" class="btn ghost" id="f-add-q">+ Add question</button>
       <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" id="f-rotation"> Include in the automatic rotation</label>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="f-annual"> Required every year <span class="hint">each person gets it when it's due; see Reports</span></label>
       <div class="err" id="f-error" style="margin-top:8px"></div>
     </div>
     <div class="dlg-foot">
@@ -485,7 +588,7 @@
 <dialog id="topic-import">
   <div class="dlg-head"><h2 style="margin:0">Import topics from a spreadsheet</h2></div>
   <div class="dlg-body">
-    <p class="muted small">Choose an Excel (.xlsx) or CSV file with one row per question and these column headings: <strong>Topic title</strong>, <strong>Question</strong>, <strong>Correct answer</strong>, <strong>Wrong answers</strong>. Optional: Lesson text, Department, Hint, Explanation, Category, Last-used date. Separate several answers in one cell with <code>|</code>. Rows with the same topic title become one topic with several questions. A question containing "select all" becomes select-all-that-apply. Topics already in your library with the same title are updated.</p>
+    <p class="muted small">Choose an Excel (.xlsx) or CSV file with one row per question and these column headings: <strong>Topic title</strong>, <strong>Question</strong>, <strong>Correct answer</strong>, <strong>Wrong answers</strong>. Optional: Lesson text, Department, Hint, Explanation, Category, Last-used date, and Spanish versions: Spanish title, Spanish lesson, Spanish question, Spanish correct answer, Spanish wrong answers, Spanish hint, Spanish explanation. Separate several answers in one cell with <code>|</code>. Rows with the same topic title become one topic with several questions. A question containing "select all" becomes select-all-that-apply. Topics already in your library with the same title are updated.</p>
     <input type="file" id="ti-file" accept=".xlsx,.xls,.csv,text/csv">
     <div id="ti-preview" class="small" style="margin-top:12px"></div>
     <div class="err" id="ti-error"></div>

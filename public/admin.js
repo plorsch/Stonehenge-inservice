@@ -53,11 +53,12 @@
     if (b.dataset.tab === 'responses') loadResponses();
     if (b.dataset.tab === 'history') loadUsage();
     if (b.dataset.tab === 'settings') renderSettings();
+    if (b.dataset.tab === 'reports') { loadMissed(); loadAnnual(); loadReviews(); }
   });
 
   async function refresh() {
     state = await api('/api/admin/state');
-    renderToday(); renderSchedule(); renderRequired(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters();
+    renderToday(); renderSchedule(); renderRequired(); renderStarter(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters(); renderReportFilters();
   }
 
   // ---------- today ----------
@@ -94,6 +95,33 @@
     const pv = e.target.closest('[data-preview]');
     if (pv) { e.preventDefault(); showPreview(topicById(pv.dataset.preview)); }
   });
+
+  // ---------- iPad check ----------
+  // The iPad asks for its settings every minute while it shows the keypad. Warn when it goes quiet.
+  const KIOSK_QUIET_MIN = 10;
+  const ago = mins => mins < 1 ? 'just now' : mins < 60 ? `${Math.round(mins)} minute${Math.round(mins) === 1 ? '' : 's'} ago`
+    : mins < 48 * 60 ? `${Math.round(mins / 60)} hour${Math.round(mins / 60) === 1 ? '' : 's'} ago` : `${Math.round(mins / 1440)} days ago`;
+  async function checkKiosk() {
+    let k;
+    try { k = await api('/api/admin/kiosk-status'); } catch { return; }
+    const now = new Date(k.now);
+    const mins = k.kioskSeen ? (now - new Date(k.kioskSeen.at)) / 60000 : null;
+    const upMins = (now - new Date(k.serverStartedAt)) / 60000;
+    // Right after an update the site restarts and hasn't heard from the iPad yet; give it a few minutes.
+    const quiet = mins === null ? upMins > 5 : mins > KIOSK_QUIET_MIN;
+    const noneToday = !k.responseCountToday && new Date().getHours() >= 10;
+    const alerts = [];
+    if (quiet) alerts.push(`The iPad hasn't checked in for ${mins === null ? 'over ' + ago(upMins).replace(' ago', '') : ago(mins).replace(' ago', '')}. <span class="small">Check that it's charged, on Wi-Fi, and showing the in-service page.</span>`);
+    else if (noneToday) alerts.push('No one has done an in-service on the iPad yet today. <span class="small">Check that the iPad is working and staff can reach it.</span>');
+    $('kiosk-alert').innerHTML = alerts.map(a => `<div>⚠️ ${a}</div>`).join('');
+    $('kiosk-alert').hidden = !alerts.length;
+    $('kiosk-status').innerHTML = `<div><span class="dot${quiet ? ' off' : ''}"></span>${k.kioskSeen ? `Last checked in ${ago(mins)}${k.kioskSeen.device === 'iPad' ? ' from the iPad' : ''}.` : 'Waiting to hear from the iPad.'}</div>
+      <div class="muted" style="margin-top:4px">Last in-service: ${k.lastResponseAt ? fmtWhen(k.lastResponseAt) : 'none yet'}. Completed today: ${k.responseCountToday}.</div>
+      ${k.kioskSeen && k.kioskSeen.waiting ? `<div style="margin-top:4px">${k.kioskSeen.waiting} answer${k.kioskSeen.waiting === 1 ? '' : 's'} saved on the iPad while it was offline ${k.kioskSeen.waiting === 1 ? 'is' : 'are'} waiting to upload.</div>` : ''}
+      <div class="muted" style="margin-top:4px">A warning shows at the top of this page if the iPad goes ${KIOSK_QUIET_MIN} minutes without checking in, or if no one has done an in-service by 10 am.</div>`;
+  }
+  checkKiosk();
+  setInterval(checkKiosk, 60000);
 
   // ---------- schedule ----------
   function renderSchedule() {
@@ -210,6 +238,48 @@
     } catch (err) { fail(err); }
   });
 
+  // ---------- new hire starter set ----------
+  let nsIds = null, nsDirty = false;
+  function renderStarter() {
+    const st = state.settings.starter || { topicIds: [], days: 60 };
+    if (!nsDirty) { nsIds = st.topicIds.slice(); $('ns-days').value = st.days; }
+    $('ns-list').innerHTML = nsIds.map((id, i) => {
+      const t = topicById(id);
+      return `<li>${t ? escapeHtml(t.title) : '<span class="muted">Deleted topic</span>'}${t && t.status !== 'active' ? ' <span class="pill warn">Not active</span>' : ''}
+        <span class="muted small">${t ? whoLabel(t.departments) : ''}</span>
+        <button class="btn subtle" data-ns-up="${i}"${i ? '' : ' disabled'}>↑</button><button class="btn subtle" data-ns-down="${i}"${i < nsIds.length - 1 ? '' : ' disabled'}>↓</button>
+        <button class="btn subtle danger" data-ns-del="${i}">Remove</button></li>`;
+    }).join('') || '<li class="muted" style="list-style:none;margin-left:-20px">No topics yet. Add the ones every new person should see first.</li>';
+    topicOptions($('ns-add-topic'));
+    $('nh-rows').innerHTML = (state.newHires || []).map(n => `<tr><td>${escapeHtml(n.name)}</td><td>${escapeHtml(n.department || '')}</td>
+      <td style="white-space:nowrap">${fmtDate(n.hireDate)}<div class="muted small">new hire until ${fmtDate(n.until)}</div></td>
+      <td>${n.total ? `<div class="progress-bar"><span style="width:${Math.round(100 * n.done / n.total)}%"></span></div><div class="small">${n.done} of ${n.total} done</div>` : '<span class="muted">No topics for their department</span>'}</td>
+      <td>${n.next ? escapeHtml(n.next) : n.total ? '<span class="pill good">Finished</span>' : ''}</td></tr>`).join('')
+      || '<tr><td colspan="5" class="muted">No one with a recent hire date. Add hire dates on the Staff tab.</td></tr>';
+  }
+  $('ns-list').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const swap = (i, j) => { [nsIds[i], nsIds[j]] = [nsIds[j], nsIds[i]]; };
+    if (b.dataset.nsUp) swap(Number(b.dataset.nsUp), Number(b.dataset.nsUp) - 1);
+    else if (b.dataset.nsDown) swap(Number(b.dataset.nsDown), Number(b.dataset.nsDown) + 1);
+    else if (b.dataset.nsDel) nsIds.splice(Number(b.dataset.nsDel), 1);
+    nsDirty = true; renderStarter();
+  });
+  $('ns-add').addEventListener('click', () => {
+    const id = $('ns-add-topic').value;
+    if (!id) return;
+    if (!nsIds.includes(id)) nsIds.push(id);
+    $('ns-add-topic').value = ''; nsDirty = true; renderStarter();
+  });
+  $('ns-days').addEventListener('input', () => { nsDirty = true; });
+  $('ns-save').addEventListener('click', async () => {
+    try {
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ starter: { topicIds: nsIds, days: Number($('ns-days').value) } }) });
+      nsDirty = false; toast('Starter set saved'); await refresh();
+    } catch (err) { fail(err); }
+  });
+
   // ---------- topics ----------
   function renderTopics() {
     const q = $('topic-search').value.trim().toLowerCase();
@@ -222,7 +292,8 @@
       const st = state.topicStats[t.id];
       const pct = st && st.responses ? Math.round(100 * st.firstTry / st.responses) + '%' : '<span class="muted">–</span>';
       const retired = t.status === 'retired', draft = t.status === 'draft';
-      const tags = (retired ? ' <span class="pill">Retired</span>' : '') +
+      const tags = (t.annual ? ' <span class="pill req">Yearly</span>' : '') + (t.es && t.es.lesson ? ' <span class="pill brand">Español</span>' : '') +
+        (retired ? ' <span class="pill">Retired</span>' : '') +
         (draft ? ` <span class="pill warn" title="${escapeHtml((t.problems || []).join(' '))}">Needs work</span>` : '');
       return `<tr class="${retired ? 'dim' : ''}">
         <td><strong>${escapeHtml(t.title)}</strong>${tags}<div class="muted small">${escapeHtml(t.category || '')}${draft && t.problems ? ' · ' + escapeHtml(t.problems[0]) : ''}</div></td>
@@ -231,7 +302,7 @@
         <td>${retired || draft ? '<span class="muted">–</span>' : `<input type="checkbox" data-rotation="${t.id}"${t.inRotation ? ' checked' : ''} aria-label="In rotation">`}</td>
         <td style="white-space:nowrap">${fmtDate(t.lastUsedDate)}</td>
         <td>${st ? st.responses : 0}</td>
-        <td>${pct}</td>
+        <td>${pct}${st && st.helpful + st.notHelpful ? `<div class="small muted" title="Was this lesson helpful?">👍 ${st.helpful} · 👎 ${st.notHelpful}</div>` : ''}</td>
         <td style="white-space:nowrap">
           <button class="btn subtle" data-act="preview" data-id="${t.id}">Preview</button>
           <button class="btn subtle" data-act="edit" data-id="${t.id}">Edit</button>
@@ -285,6 +356,11 @@
         <ul>${q.correctAnswers.map(a => `<li>${escapeHtml(a)} <span class="pill good">Correct</span></li>`).join('')}${q.wrongAnswers.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
         ${q.hint ? `<div class="muted small"><strong>Hint after a wrong answer:</strong> ${escapeHtml(q.hint)}</div>` : ''}
         ${q.explanation ? `<div class="muted small"><strong>Explanation:</strong> ${escapeHtml(q.explanation)}</div>` : ''}`).join('')}
+      ${t.es && t.es.lesson ? `<details class="es" style="margin-top:16px"><summary>Spanish version</summary>
+        <h3 style="margin-top:10px">${escapeHtml(t.es.title || t.title)}</h3><div class="lesson-preview">${formatLesson(t.es.lesson)}</div>
+        ${t.questions.filter(q => q.es).map(q => `<h3 style="margin-top:14px">${escapeHtml(q.es.text)}</h3>
+          <ul>${q.es.correctAnswers.map(a => `<li>${escapeHtml(a)} <span class="pill good">Correcta</span></li>`).join('')}${q.es.wrongAnswers.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>`).join('')}
+        ${t.questions.some(q => !q.es) ? `<div class="muted small">${t.questions.filter(q => !q.es).length} question(s) have no Spanish yet and show in English only.</div>` : ''}</details>` : ''}
       <div class="muted small" style="margin-top:14px">Each person gets one question per visit, with the answers in a random order.</div>`;
     $('viewer').showModal();
   }
@@ -294,6 +370,7 @@
     const card = document.createElement('div');
     card.className = 'qcard';
     const lines = arr => escapeHtml((arr || []).join('\n'));
+    const es = q.es || {};
     card.innerHTML = `
       <div class="qhead"><strong class="qnum"></strong>
         <span><label class="small"><input type="checkbox" class="q-multi"${q.type === 'multi' ? ' checked' : ''}> Select all that apply</label>
@@ -306,7 +383,17 @@
       <label class="block small">Hint shown after a wrong answer <span class="hint">optional</span></label>
       <input type="text" class="q-hint" style="width:100%" value="${escapeHtml(q.hint || '')}">
       <label class="block small">Explanation shown after the right answer <span class="hint">optional</span></label>
-      <input type="text" class="q-expl" style="width:100%" value="${escapeHtml(q.explanation || '')}">`;
+      <input type="text" class="q-expl" style="width:100%" value="${escapeHtml(q.explanation || '')}">
+      <details class="es q-es"${q.es ? ' open' : ''}><summary>Spanish</summary>
+        <div class="muted small" style="margin-top:4px">Put the answers in the same order as the English ones.</div>
+        <textarea class="q-es-text" rows="2" placeholder="Pregunta" style="margin-top:6px">${escapeHtml(es.text || '')}</textarea>
+        <div class="grid" style="gap:0 14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+          <div><label class="block small">Correct answer(s) in Spanish</label><textarea class="q-es-correct" rows="2">${lines(es.correctAnswers)}</textarea></div>
+          <div><label class="block small">Wrong answers in Spanish <span class="hint">one per line</span></label><textarea class="q-es-wrong" rows="3">${lines(es.wrongAnswers)}</textarea></div>
+        </div>
+        <label class="block small">Hint in Spanish</label><input type="text" class="q-es-hint" style="width:100%" value="${escapeHtml(es.hint || '')}">
+        <label class="block small">Explanation in Spanish</label><input type="text" class="q-es-expl" style="width:100%" value="${escapeHtml(es.explanation || '')}">
+      </details>`;
     card.dataset.qid = q.id || '';
     const syncLabel = () => { card.querySelector('.q-correct-label').innerHTML = card.querySelector('.q-multi').checked ? 'Correct answers <span class="hint">one per line</span>' : 'Correct answer'; };
     card.querySelector('.q-multi').addEventListener('change', syncLabel);
@@ -326,6 +413,10 @@
     $('f-image-file').value = ''; $('f-image-status').textContent = '';
     updateImagePreview();
     $('f-rotation').checked = t ? !!t.inRotation : true;
+    $('f-annual').checked = !!(t && t.annual);
+    $('f-es-title').value = t && t.es ? t.es.title || '' : '';
+    $('f-es-lesson').value = t && t.es ? t.es.lesson || '' : '';
+    $('f-es-box').open = !!(t && t.es);
     renderChecks($('f-depts'), t ? t.departments : []);
     $('f-questions').innerHTML = '';
     (t && t.questions.length ? t.questions : [{}]).forEach(q => addQuestionCard(q));
@@ -363,14 +454,17 @@
   async function saveTopic(draft) {
     const body = {
       draft, title: $('f-title').value, category: $('f-category').value, lesson: $('f-lesson').value, image: $('f-image').value.trim(),
-      departments: checked($('f-depts')), inRotation: $('f-rotation').checked,
+      departments: checked($('f-depts')), inRotation: $('f-rotation').checked, annual: $('f-annual').checked,
+      es: { title: $('f-es-title').value, lesson: $('f-es-lesson').value },
       questions: [...$('f-questions').children].map(c => ({
         id: c.dataset.qid || undefined,
         type: c.querySelector('.q-multi').checked ? 'multi' : 'single',
         text: c.querySelector('.q-text').value,
         correctAnswers: splitLines(c.querySelector('.q-correct').value),
         wrongAnswers: splitLines(c.querySelector('.q-wrong').value),
-        hint: c.querySelector('.q-hint').value, explanation: c.querySelector('.q-expl').value
+        hint: c.querySelector('.q-hint').value, explanation: c.querySelector('.q-expl').value,
+        es: { text: c.querySelector('.q-es-text').value, correctAnswers: splitLines(c.querySelector('.q-es-correct').value),
+          wrongAnswers: splitLines(c.querySelector('.q-es-wrong').value), hint: c.querySelector('.q-es-hint').value, explanation: c.querySelector('.q-es-expl').value }
       }))
     };
     try {
@@ -453,8 +547,16 @@
         explanation: findCol(header, [/^explanation$/i]),
         lastUsed: findCol(header, [/^last.?used/i]),
         status: findCol(header, [/^status$/i]),
-        image: findCol(header, [/^(image|picture|gif)/i])
+        image: findCol(header, [/^(image|picture|gif)/i]),
+        esTitle: findCol(header, [/^spanish (topic )?title$/i]),
+        esLesson: findCol(header, [/^spanish lesson/i]),
+        esQuestion: findCol(header, [/^spanish question$/i]),
+        esCorrect: findCol(header, [/^spanish correct answers?$/i]),
+        esWrong: findCol(header, [/^spanish (wrong|incorrect) answers?$/i]),
+        esHint: findCol(header, [/^spanish hint$/i]),
+        esExplanation: findCol(header, [/^spanish explanation$/i])
       };
+      const hasEs = col.esLesson >= 0 || col.esQuestion >= 0;
       if (col.title < 0 || col.question < 0) throw new Error('The first row needs column headings, including "Topic title" and "Question".');
       const get = (r, k) => col[k] >= 0 ? String(r[col[k]] || '').trim() : '';
       const split = v => v.split('|').map(x => x.trim()).filter(Boolean);
@@ -468,6 +570,11 @@
           byTitle.set(title.toLowerCase(), t);
         }
         if (!t.lesson && get(r, 'lesson')) t.lesson = get(r, 'lesson');
+        if (hasEs) {
+          t.es = t.es || { title: '', lesson: '' };
+          if (!t.es.title && get(r, 'esTitle')) t.es.title = get(r, 'esTitle');
+          if (!t.es.lesson && get(r, 'esLesson')) t.es.lesson = get(r, 'esLesson');
+        }
         if (col.image >= 0 && !t.image && get(r, 'image')) t.image = get(r, 'image');
         const lu = get(r, 'lastUsed').slice(0, 10);
         if (/^\d{4}-\d{2}-\d{2}$/.test(lu) && lu > t.lastUsedDate) t.lastUsedDate = lu;
@@ -476,7 +583,13 @@
         const multi = /select all/i.test(text);
         let correct = split(get(r, 'correct'));
         if (multi && correct.length === 1) correct = correct[0].split(/\s+\/\s+/).map(x => x.trim()).filter(Boolean);
-        t.questions.push({ type: multi ? 'multi' : 'single', text, correctAnswers: correct, wrongAnswers: split(get(r, 'wrong')), hint: get(r, 'hint'), explanation: get(r, 'explanation') });
+        const q = { type: multi ? 'multi' : 'single', text, correctAnswers: correct, wrongAnswers: split(get(r, 'wrong')), hint: get(r, 'hint'), explanation: get(r, 'explanation') };
+        if (get(r, 'esQuestion')) {
+          let esCorrect = split(get(r, 'esCorrect'));
+          if (multi && esCorrect.length === 1) esCorrect = esCorrect[0].split(/\s+\/\s+/).map(x => x.trim()).filter(Boolean);
+          q.es = { text: get(r, 'esQuestion'), correctAnswers: esCorrect, wrongAnswers: split(get(r, 'esWrong')), hint: get(r, 'esHint'), explanation: get(r, 'esExplanation') };
+        }
+        t.questions.push(q);
       }
       topicImport = [...byTitle.values()];
       const existing = topicImport.filter(t => state.topics.some(x => x.title.toLowerCase() === t.title.toLowerCase())).length;
@@ -511,7 +624,7 @@
       <td>${escapeHtml(e.last4)}</td><td>${escapeHtml(e.department)}</td>
       <td data-last="${e.id}" class="small muted">…</td>
       <td data-pending="${e.id}"></td>
-      <td><button class="btn subtle" data-edit-staff="${e.id}">Edit</button></td></tr>`).join('')
+      <td style="white-space:nowrap"><button class="btn subtle" data-edit-staff="${e.id}">Edit</button><button class="btn subtle" data-record="${e.id}">Training record</button></td></tr>`).join('')
       || '<tr><td colspan="6" class="muted">No staff yet. Add them one at a time or import your roster from a spreadsheet.</td></tr>';
     fillStaffActivity();
     const sel = $('st-dept');
@@ -556,7 +669,47 @@
   $('staff-rows').addEventListener('click', e => {
     const b = e.target.closest('[data-edit-staff]');
     if (b) openStaff(state.employees.find(x => x.id === b.dataset.editStaff));
+    const rec = e.target.closest('[data-record]');
+    if (rec) printRecord(state.employees.find(x => x.id === rec.dataset.record));
   });
+  // A printable training record for one person, for their HR file.
+  async function printRecord(emp) {
+    const win = window.open('', '_blank');
+    if (!win) return alert('Your browser blocked the new window. Allow pop-ups for this site and try again.');
+    win.document.write('<p style="font-family:sans-serif">Loading…</p>');
+    try {
+      const [{ responses }, { topics }] = await Promise.all([api('/api/admin/responses?employeeId=' + encodeURIComponent(emp.id)), api('/api/admin/annual')]);
+      const done = responses.filter(r => r.completed);
+      const year = state.todayDate.slice(0, 4);
+      const thisYear = done.filter(r => r.date.startsWith(year));
+      const first = thisYear.filter(r => r.firstTryCorrect).length;
+      const yearly = topics.map(t => ({ title: t.title, p: t.people.find(x => x.id === emp.id) })).filter(x => x.p);
+      const words = { current: 'Up to date', soon: 'Due soon', overdue: 'Overdue', never: 'Not done yet' };
+      const kinds = { required: 'Required', scheduled: 'Scheduled', rotation: 'Rotation', starter: 'New hire', annual: 'Yearly', review: 'Review' };
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(emp.name)} training record</title><style>
+        body { font: 13px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #111; margin: 28px; }
+        h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 15px; margin: 18px 0 6px; } .meta { color: #444; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; } th, td { border: 1px solid #bbb; padding: 5px 7px; text-align: left; vertical-align: top; }
+        th { background: #eee; font-size: 12px; } .noprint { margin-bottom: 14px; }
+        @media print { .noprint { display: none; } body { margin: 0.4in; } tr { break-inside: avoid; } }
+      </style></head><body>
+        <div class="noprint"><button onclick="print()" style="font-size:15px;padding:6px 14px">Print or save as PDF</button></div>
+        <h1>${escapeHtml(state.settings.facilityName || '')} In-Service Training Record</h1>
+        <div class="meta"><strong>${escapeHtml(emp.name)}</strong> · ${escapeHtml(emp.department || 'No department')} · Workday last 4: ${escapeHtml(emp.last4)}${emp.hireDate ? ` · Hired ${fmtDate(emp.hireDate)}` : ''}<br>
+          ${year}: <strong>${thisYear.length}</strong> in-services completed${thisYear.length ? `, ${Math.round(100 * first / thisYear.length)}% correct on the first try` : ''}. All time: ${done.length}.</div>
+        ${yearly.length ? `<h2>Yearly requirements</h2><table><thead><tr><th>Topic</th><th>Status</th><th>Last completed</th><th>Due</th></tr></thead><tbody>
+          ${yearly.map(x => `<tr><td>${escapeHtml(x.title)}</td><td>${words[x.p.status]}</td><td>${x.p.last ? fmtDate(x.p.last) : ''}</td><td>${x.p.due ? fmtDate(x.p.due) : 'Now'}</td></tr>`).join('')}</tbody></table>` : ''}
+        <h2>Completed in-services</h2>
+        <table><thead><tr><th>Completed</th><th>Topic</th><th>Type</th><th>Knowledge check</th></tr></thead><tbody>
+        ${done.map(r => `<tr><td>${fmtWhen(r.completedAt)}</td><td>${escapeHtml(r.topicTitle)}</td><td>${kinds[r.kind] || ''}</td>
+          <td>${r.firstTryCorrect ? 'Correct first try' : `Correct on try ${r.attempts.length}`}</td></tr>`).join('') || '<tr><td colspan="4">None yet.</td></tr>'}
+        </tbody></table>
+        <p style="margin-top:14px;color:#666;font-size:11px">Printed ${escapeHtml(new Date().toLocaleString())} from the in-service admin page.</p>
+      </body></html>`);
+      win.document.close();
+    } catch (err) { win.close(); fail(err); }
+  }
   $('staff-form').addEventListener('submit', async e => {
     e.preventDefault();
     const body = { name: $('st-name').value, last4: $('st-last4').value, department: $('st-dept').value, active: $('st-active').checked,
@@ -654,7 +807,8 @@
     if ($('resp-missed').checked) p.set('missed', '1');
     return p.toString();
   }
-  const kindLabel = { required: '<span class="pill req">Required</span>', scheduled: '<span class="pill brand">Scheduled</span>', rotation: '<span class="pill">Rotation</span>' };
+  const kindLabel = { required: '<span class="pill req">Required</span>', scheduled: '<span class="pill brand">Scheduled</span>', rotation: '<span class="pill">Rotation</span>',
+    starter: '<span class="pill good">New hire</span>', annual: '<span class="pill req">Yearly</span>', review: '<span class="pill brand">Review</span>' };
   async function loadResponses() {
     try {
       const { responses } = await api('/api/admin/responses?' + respQuery());
@@ -669,7 +823,7 @@
         return `<tr>
         <td style="white-space:nowrap">${fmtWhen(r.submittedAt)}</td>
         <td>${escapeHtml(r.name)}${r.verified ? '' : ' <span class="pill" title="Typed their name; not on the roster">Not on roster</span>'}<div class="muted small">${escapeHtml(r.last4 || '')}</div></td>
-        <td>${escapeHtml(r.department || '')}</td><td>${kindLabel[r.kind] || ''}</td>
+        <td>${escapeHtml(r.department || '')}</td><td>${kindLabel[r.kind] || ''}${r.lang === 'es' ? ' <span class="pill">Español</span>' : ''}${r.offline ? ' <span class="pill" title="Answered while the iPad was offline, uploaded later">Saved offline</span>' : ''}</td>
         <td>${escapeHtml(r.topicTitle)}<div class="muted small">${escapeHtml(r.question)}</div></td>
         <td>${escapeHtml(r.attempts[0] || '')}</td><td>${result}</td></tr>`;
       }).join('');
@@ -826,6 +980,164 @@
     a.click();
   });
 
+  // ---------- reports ----------
+  function renderReportFilters() {
+    const t = $('rp-topic').value;
+    $('rp-topic').innerHTML = '<option value="">Choose a topic…</option>' + state.topics.slice().sort((a, b) => a.title.localeCompare(b.title))
+      .map(x => `<option value="${x.id}">${escapeHtml(x.title)}${x.status === 'retired' ? ' (retired)' : ''}</option>`).join('');
+    $('rp-topic').value = t;
+    for (const id of ['rp-dept', 'mm-dept']) {
+      const cur = $(id).value;
+      $(id).innerHTML = '<option value="">All departments</option>' + depts().map(d => `<option>${escapeHtml(d)}</option>`).join('');
+      $(id).value = cur;
+    }
+  }
+  const query = obj => new URLSearchParams(Object.entries(obj).filter(([, v]) => v)).toString();
+
+  // Printable sign-in sheet for surveyors: lesson, questions, and each person's first completion in the date range.
+  $('rp-print').addEventListener('click', async () => {
+    $('rp-error').textContent = '';
+    const t = topicById($('rp-topic').value);
+    if (!t) { $('rp-error').textContent = 'Choose a topic.'; return; }
+    const win = window.open('', '_blank'); // open now, while the click still counts, so it isn't blocked as a pop-up
+    if (!win) { $('rp-error').textContent = 'Your browser blocked the new window. Allow pop-ups for this site and try again.'; return; }
+    win.document.write('<p style="font-family:sans-serif">Loading…</p>');
+    try {
+      const from = $('rp-from').value, to = $('rp-to').value, dept = $('rp-dept').value;
+      const { responses } = await api('/api/admin/responses?' + query({ topicId: t.id, from, to, department: dept }));
+      const seen = new Map();
+      for (const r of responses.filter(x => x.completed).sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))) {
+        const k = r.employeeId || `${r.name.toLowerCase()}|${r.last4}`;
+        if (!seen.has(k)) seen.set(k, r);
+      }
+      const people = [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+      const first = people.filter(r => r.firstTryCorrect).length;
+      const range = from || to ? `${from ? fmtDate(from) : 'the start'} to ${to ? fmtDate(to) : 'today'}` : 'All dates';
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(t.title)} sign-in sheet</title><style>
+        body { font: 13px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #111; margin: 28px; }
+        h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 15px; margin: 18px 0 6px; }
+        .meta { color: #444; margin-bottom: 10px; } .box { border: 1px solid #bbb; border-radius: 6px; padding: 8px 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; } th, td { border: 1px solid #bbb; padding: 5px 7px; text-align: left; vertical-align: top; }
+        th { background: #eee; font-size: 12px; } ul { margin: 4px 0 8px; padding-left: 20px; } p { margin: 0 0 8px; }
+        .sign { margin-top: 28px; display: flex; gap: 28px; } .sign div { flex: 1; border-top: 1px solid #333; padding-top: 4px; font-size: 12px; }
+        .noprint { margin-bottom: 14px; } @media print { .noprint { display: none; } body { margin: 0.4in; } tr { break-inside: avoid; } }
+      </style></head><body>
+        <div class="noprint"><button onclick="print()" style="font-size:15px;padding:6px 14px">Print or save as PDF</button></div>
+        <h1>${escapeHtml(state.settings.facilityName || '')} In-Service Sign-In Sheet</h1>
+        <div class="meta"><strong>Topic:</strong> ${escapeHtml(t.title)}${t.category ? ` (${escapeHtml(t.category)})` : ''}<br>
+          <strong>Dates:</strong> ${range} &nbsp; <strong>Staff:</strong> ${dept ? escapeHtml(dept) : whoLabel(t.departments)}<br>
+          <strong>Format:</strong> Self-paced micro in-service on the facility iPad, with a knowledge check. Staff who answer wrong get a hint and must answer correctly to finish.</div>
+        <h2>Content presented</h2><div class="box">${formatLesson(t.lesson)}</div>
+        <h2>Knowledge check questions</h2><div class="box">${t.questions.map(q => `<div><strong>${escapeHtml(q.text)}</strong>
+          <ul>${q.correctAnswers.map(a => `<li>${escapeHtml(a)} (correct)</li>`).join('')}${q.wrongAnswers.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul></div>`).join('')}</div>
+        <h2>Attendance: ${people.length} staff completed${people.length ? `, ${Math.round(100 * first / people.length)}% correct on the first try` : ''}</h2>
+        <table><thead><tr><th>#</th><th>Name</th><th>Department</th><th>Workday last 4</th><th>Completed</th><th>Knowledge check</th></tr></thead><tbody>
+        ${people.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.department || '')}</td><td>${escapeHtml(r.last4 || '')}</td>
+          <td>${fmtWhen(r.completedAt)}</td><td>${r.firstTryCorrect ? 'Correct first try' : `Correct on try ${r.attempts.length}`}</td></tr>`).join('')
+          || '<tr><td colspan="6">No one has completed this topic in these dates.</td></tr>'}
+        </tbody></table>
+        <div class="sign"><div>In-service coordinator</div><div>Title</div><div>Date</div></div>
+        <p style="margin-top:14px;color:#666;font-size:11px">Printed ${escapeHtml(new Date().toLocaleString())} from the in-service admin page.</p>
+      </body></html>`);
+      win.document.close();
+    } catch (err) { win.close(); $('rp-error').textContent = err.message; }
+  });
+
+  // Most-missed questions, from every response in the date range.
+  async function loadMissed() {
+    try {
+      const { responses } = await api('/api/admin/responses?' + query({ from: $('mm-from').value, to: $('mm-to').value, department: $('mm-dept').value }));
+      const by = new Map();
+      for (const r of responses) {
+        const k = `${r.topicId}|${r.questionId}`;
+        const g = by.get(k) || { topicId: r.topicId, questionId: r.questionId, topicTitle: r.topicTitle, question: r.question, asked: 0, missed: 0, wrong: {} };
+        g.asked++;
+        if (!r.firstTryCorrect) { g.missed++; if (r.attempts[0]) g.wrong[r.attempts[0]] = (g.wrong[r.attempts[0]] || 0) + 1; }
+        by.set(k, g);
+      }
+      const rows = [...by.values()].filter(g => g.missed)
+        .sort((a, b) => (b.asked >= 5) - (a.asked >= 5) || b.missed / b.asked - a.missed / a.asked || b.missed - a.missed);
+      $('mm-rows').innerHTML = rows.slice(0, 50).map(g => {
+        const t = topicById(g.topicId);
+        const q = t && t.questions.find(x => x.id === g.questionId);
+        const [wrong, n] = Object.entries(g.wrong).sort((a, b) => b[1] - a[1])[0] || [];
+        const pct = Math.round(100 * g.missed / g.asked);
+        return `<tr class="${g.asked < 5 ? 'dim' : ''}"><td>${escapeHtml(q ? q.text : g.question)}<div class="muted small">${escapeHtml(t ? t.title : g.topicTitle)}</div></td>
+          <td>${g.asked}</td><td><strong>${pct}%</strong> <span class="muted small">(${g.missed})</span></td>
+          <td>${wrong ? `${escapeHtml(wrong)} <span class="muted small">(${n})</span>` : ''}</td>
+          <td>${t ? `<button class="btn subtle" data-mm-edit="${t.id}">Edit topic</button>` : ''}</td></tr>`;
+      }).join('') || '<tr><td colspan="5" class="muted">No missed questions for this selection.</td></tr>';
+    } catch (err) { fail(err); }
+  }
+  ['mm-from', 'mm-to', 'mm-dept'].forEach(id => $(id).addEventListener('change', loadMissed));
+  $('mm-rows').addEventListener('click', e => {
+    const b = e.target.closest('[data-mm-edit]');
+    if (b) openEditor(topicById(b.dataset.mmEdit));
+  });
+
+  // Spaced review
+  async function loadReviews() {
+    try {
+      const { reviews, thin, settings } = await api('/api/admin/reviews');
+      $('rv-on').checked = !!settings.on; $('rv-first').value = settings.firstDays; $('rv-second').value = settings.secondDays;
+      const today = state.todayDate;
+      $('rv-rows').innerHTML = reviews.map(r => `<tr><td>${escapeHtml(r.name)}<div class="muted small">${escapeHtml(r.department || '')}</div></td>
+        <td>${escapeHtml(r.title)}<div class="muted small">missed ${fmtDate(r.since)}</div></td>
+        <td>${r.stage === 1 ? 'First' : 'Final'}</td>
+        <td style="white-space:nowrap">${fmtDate(r.due)} ${r.due <= today ? '<span class="pill warn">Due now</span>' : ''}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="muted">No one has anything to review right now.</td></tr>';
+      $('rv-thin').innerHTML = thin.length ? `<strong>Topics with fewer than 3 questions</strong> <span class="muted">(add more so a review can ask it a different way):</span> ` +
+        thin.map(t => `<a href="#" data-thin="${t.id}">${escapeHtml(t.title)}</a> (${t.questions})`).join(', ') : '';
+    } catch (err) { fail(err); }
+  }
+  $('rv-thin').addEventListener('click', e => {
+    const a = e.target.closest('[data-thin]');
+    if (a) { e.preventDefault(); openEditor(topicById(a.dataset.thin)); }
+  });
+  $('rv-save').addEventListener('click', async () => {
+    try {
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ review: { on: $('rv-on').checked, firstDays: Number($('rv-first').value), secondDays: Number($('rv-second').value) } }) });
+      toast('Saved'); await refresh(); loadReviews();
+    } catch (err) { fail(err); }
+  });
+
+  // Yearly requirements
+  let annual = [];
+  const yrLabel = { current: '<span class="pill good">Up to date</span>', soon: '<span class="pill">Due soon</span>', overdue: '<span class="pill warn">Overdue</span>', never: '<span class="pill warn">Never done</span>' };
+  async function loadAnnual() {
+    try {
+      annual = (await api('/api/admin/annual')).topics;
+      $('yr-rows').innerHTML = annual.map(t => `<tr><td><a href="#" data-preview="${t.id}">${escapeHtml(t.title)}</a>${t.status !== 'active' ? ' <span class="pill warn">Not active</span>' : ''}</td>
+        <td class="small">${whoLabel(t.departments)}</td><td>${t.current}</td><td>${t.soon}</td>
+        <td>${t.overdue ? `<strong style="color:var(--warn)">${t.overdue}</strong>` : 0}</td><td>${t.never ? `<strong style="color:var(--warn)">${t.never}</strong>` : 0}</td>
+        <td><button class="btn subtle" data-yr-view="${t.id}">Who's due</button></td></tr>`).join('')
+        || '<tr><td colspan="7" class="muted">No yearly topics yet. Edit a topic and tick "Required every year".</td></tr>';
+    } catch (err) { fail(err); }
+  }
+  $('yr-rows').addEventListener('click', e => {
+    const b = e.target.closest('[data-yr-view]');
+    if (!b) return;
+    const t = annual.find(x => x.id === b.dataset.yrView);
+    const order = { overdue: 0, never: 1, soon: 2, current: 3 };
+    const people = t.people.slice().sort((a, c) => order[a.status] - order[c.status] || (a.due || '').localeCompare(c.due || '') || a.name.localeCompare(c.name));
+    $('vw-title').textContent = t.title;
+    $('vw-body').innerHTML = `<table style="margin-top:12px"><thead><tr><th>Name</th><th>Department</th><th>Status</th><th>Last done</th><th>Due</th></tr></thead><tbody>
+      ${people.map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.department || '')}</td><td>${yrLabel[p.status]}</td><td>${p.last ? fmtDate(p.last) : ''}</td><td>${p.due ? fmtDate(p.due) : 'Now'}</td></tr>`).join('')
+        || '<tr><td colspan="5" class="muted">No active staff in these departments.</td></tr>'}</tbody></table>`;
+    $('viewer').showModal();
+  });
+  $('yr-csv').addEventListener('click', () => {
+    const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const words = { soon: 'Due soon', overdue: 'Overdue', never: 'Never done' };
+    const lines = [['Topic', 'Name', 'Workday last 4', 'Department', 'Status', 'Last done', 'Due'].join(',')]
+      .concat(annual.flatMap(t => t.people.filter(p => p.status !== 'current').map(p => [t.title, p.name, p.last4, p.department, words[p.status], p.last || '', p.due || ''].map(cell).join(','))));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv' }));
+    a.download = `yearly-requirements-due-${isoDay(new Date())}.csv`;
+    a.click();
+  });
+
   // ---------- usage history ----------
   async function loadUsage() {
     try {
@@ -881,6 +1193,7 @@
         <td><button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
     }).join('') || '<tr><td colspan="4" class="muted">No announcements yet.</td></tr>';
     $('an-celebrate').checked = state.settings.celebrations !== false;
+    renderStreakSettings();
     if (document.activeElement !== $('an-bday-msgs')) $('an-bday-msgs').value = (state.settings.birthdayMessages || []).join('\n');
     if (document.activeElement !== $('an-anniv-msgs')) $('an-anniv-msgs').value = (state.settings.anniversaryMessages || []).join('\n');
     const up = state.upcomingCelebrations || [];
@@ -888,6 +1201,19 @@
       ? up.map(c => `<div>${fmtDate(c.date)}: ${c.type === 'birthday' ? '🎂' : '🎉'} ${escapeHtml(c.name)}${c.department ? ` <span class="muted">(${escapeHtml(c.department)})</span>` : ''} ${c.type === 'birthday' ? 'birthday' : `${c.years} year${c.years === 1 ? '' : 's'} at work`}</div>`).join('')
       : '<span class="muted">None. Add birthdays and hire dates on the Staff tab.</span>';
   }
+  function renderStreakSettings() {
+    const k = state.settings.streaks || { shoutOuts: false, leaderboard: 'off', top: 3 };
+    $('sk-shout').checked = !!k.shoutOuts; $('sk-where').value = k.leaderboard || 'off'; $('sk-top').value = String(k.top === 1 ? 1 : 3); $('sk-board').value = k.board || 'facility'; $('sk-button').checked = !!k.button;
+    const top = state.streakTop || [];
+    $('sk-now').innerHTML = top.length ? '<strong>Longest streaks right now:</strong> ' + top.map(l => `${escapeHtml(l.name)} (${escapeHtml(l.department || '')}) ${l.streak}`).join(' · ')
+      : '<span class="muted">No one has a streak of 3 or more yet.</span>';
+  }
+  $('sk-save').addEventListener('click', async () => {
+    try {
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ streaks: { shoutOuts: $('sk-shout').checked, leaderboard: $('sk-where').value, top: Number($('sk-top').value), board: $('sk-board').value, button: $('sk-button').checked } }) });
+      toast('Saved. The iPad picks it up within a minute.'); await refresh();
+    } catch (err) { fail(err); }
+  });
   $('an-show-past').addEventListener('change', renderAnnouncements);
   $('an-add').addEventListener('click', async () => {
     $('an-error').textContent = '';
