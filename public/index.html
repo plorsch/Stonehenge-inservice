@@ -100,10 +100,12 @@
   .forgot { display: flex; width: 100%; max-width: 380px; margin: 16px auto 0; min-height: 56px; font-size: 19px; }
 
   /* Announcements: one rotating line on the home screen, a short list on the end screen */
-  .news { margin-bottom: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 20px; font-size: 19px; font-weight: 600; text-align: center; transition: opacity .4s; }
+  .news { margin-bottom: 14px; background: var(--brand-soft); border: 1px solid #c9dfe8; color: var(--brand-dark); border-radius: 14px; padding: 14px 20px; font-size: 19px; font-weight: 600; text-align: center; transition: opacity .4s; }
   .news.fade { opacity: 0; }
-  .news-list { text-align: left; margin: 20px 0 0; border-top: 1px solid var(--line); padding-top: 14px; }
-  .news-list div { font-size: 19px; padding: 6px 0; }
+  .news-list { margin: 18px auto 0; max-width: 420px; text-align: center; background: var(--brand-soft); border: 1px solid #c9dfe8; border-radius: 14px; padding: 12px 18px; }
+  .news-list h3 { margin: 0 0 4px; font-size: 18px; color: var(--brand); }
+  .news-list div { font-size: 17px; padding: 6px 0; line-height: 1.35; }
+  .news-list div + div { border-top: 1px solid #c9dfe8; }
 
   /* Seasonal decor (home screen only) */
   #decor { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; display: none; }
@@ -1028,7 +1030,7 @@
     $('result-leaders').innerHTML = (g.length ? `<h3>🏅 ${T(g.length === 1 ? 'Streak leader' : 'Top streaks', g.length === 1 ? 'Líder de racha' : 'Mejores rachas')}</h3>` + g.map((p, i) => tierRow(MEDALS[i] || `${i + 1}.`, p)).join('') : '') +
       (myDept.length ? `<h3${g.length ? ' style="margin-top:10px"' : ''}>🏅 ${T(`${escapeHtml(myDept[0].department)} leader`, `Líder de ${escapeHtml(myDept[0].department)}`)}</h3>` + tierRow('', myDept.map(l => Object.assign({}, l, { department: '' }))) : '');
     $('result-leaders').hidden = !board.length && !myDept.length;
-    $('result-news').innerHTML = news.slice(0, 4).map(t => `<div>${formatInline(t)}</div>`).join('');
+    $('result-news').innerHTML = `<h3>📣 ${T('Announcements', 'Anuncios')}</h3>` + news.slice(0, 4).map(t => `<div>${formatInline(t)}</div>`).join('');
     $('result-news').hidden = !news.length;
     show('result');
     if (more) return;
