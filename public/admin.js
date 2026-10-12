@@ -1383,6 +1383,7 @@
 
   // ---------- going live: clear test data ----------
   async function loadTestData() {
+    if (!$('td-list').innerHTML) $('td-list').innerHTML = '<span class="muted small">Counting…</span>';
     try {
       const t = await api('/api/admin/test-data');
       const item = (key, label, n, on) => `<label style="display:flex;gap:8px;align-items:flex-start;margin:4px 0"><input type="checkbox" data-td="${key}"${on && n ? ' checked' : ''}${n ? '' : ' disabled'}> <span>${label}</span></label>`;
@@ -1392,7 +1393,12 @@
         item('sampleSchedules', `The sample "topic of the week" schedule <span class="muted">(${t.sampleSchedules})</span>`, t.sampleSchedules, true) +
         item('announcements', `All announcements <span class="muted">(${t.announcements})</span>`, t.announcements, false) +
         item('required', `All required education <span class="muted">(${t.required})</span>`, t.required, false);
-    } catch { $('td-list').textContent = ''; }
+    } catch (err) {
+      // Still offer the main choices if the counts can't be loaded.
+      $('td-list').innerHTML = `<div class="err small">Couldn't count the test data (${escapeHtml(err.message)}). You can still clear it.</div>` +
+        ['responses|All in-service answers and usage history', 'sampleStaff|Sample staff', 'sampleSchedules|The sample "topic of the week" schedule', 'announcements|All announcements', 'required|All required education']
+          .map((x, i) => { const [k, l] = x.split('|'); return `<label style="display:flex;gap:8px;margin:4px 0"><input type="checkbox" data-td="${k}"${i < 3 ? ' checked' : ''}> ${l}</label>`; }).join('');
+    }
   }
   $('td-go').addEventListener('click', async () => {
     const pick = {};

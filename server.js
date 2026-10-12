@@ -1494,14 +1494,14 @@ async function adminRoutes(req, res, p, m, url) {
 
   // Go live: remove what was entered while testing. A full copy is saved in the backups folder first.
   const SAMPLE_STAFF = new Set(loadJson(SEED_STAFF_FILE, []).map(s => `${String(s.name).toLowerCase()}|${s.last4}`));
-  const isSampleStaff = e => SAMPLE_STAFF.has(`${e.name.toLowerCase()}|${e.last4}`);
-  const isSampleSchedule = x => /^sample /i.test(x.note || '');
+  const isSampleStaff = e => !!e && SAMPLE_STAFF.has(`${String(e.name || '').toLowerCase()}|${e.last4}`);
+  const isSampleSchedule = x => !!x && /^sample /i.test(String(x.note || ''));
   if (m === 'GET' && p === '/api/admin/test-data') {
     return send(res, 200, {
-      responses: db.responses.length, usage: db.usage.length,
+      responses: (db.responses || []).length, usage: (db.usage || []).length,
       sampleStaff: db.employees.filter(isSampleStaff).map(e => e.name),
       sampleSchedules: db.schedules.filter(isSampleSchedule).length,
-      announcements: db.announcements.length, required: db.required.length
+      announcements: (db.announcements || []).length, required: (db.required || []).length
     });
   }
   if (m === 'POST' && p === '/api/admin/test-data/clear') {
