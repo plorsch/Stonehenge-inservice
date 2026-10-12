@@ -184,6 +184,7 @@
   @keyframes selectall-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 191, 0, .7); background: #ffcf33; }
     50% { transform: scale(1.03); box-shadow: 0 0 0 10px rgba(255, 191, 0, 0); background: #ffe680; } }
   @media (prefers-reduced-motion: reduce) { .select-all { animation: none; } }
+  .select-all-hint { text-align: center; font-style: italic; font-size: 17px; color: #6b5200; margin: -8px 0 14px; }
   .preview-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
     background: #222; color: #fff; padding: 8px 12px; font-size: 15px; }
   .preview-bar button { font: inherit; font-size: 14px; border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
@@ -371,6 +372,7 @@
         <div class="kicker" id="question-kicker">Question</div>
         <h2 id="question-text"></h2>
         <div class="select-all" id="select-all" hidden>Select all that apply</div>
+        <div class="select-all-hint" id="select-all-hint" hidden></div>
         <div class="answers" id="answers"></div>
         <div class="error" id="question-error"></div>
         <div class="row">
@@ -821,6 +823,7 @@
     $('to-question').textContent = T("I've read this", 'Ya lo leí');
     $('question-kicker').textContent = T('Question', 'Pregunta') + multi;
     $('select-all').textContent = T('Select all that apply', 'Seleccione todas las correctas');
+    $('select-all-hint').textContent = T('(then tap Submit answer at the bottom)', '(luego toque Enviar respuesta abajo)');
     $('review-lesson').textContent = it.kind === 'quiz' ? T('📖 Read the lesson again', '📖 Leer la lección otra vez') : T('Review lesson', 'Ver la lección');
     $('submit').textContent = T('Submit answer', 'Enviar respuesta');
     renderTryAgain();
@@ -838,6 +841,7 @@
   function renderQuestion() {
     $('question-text').innerHTML = formatInline(es() ? item().es.question : item().question.text);
     $('select-all').hidden = !isMulti();
+    $('select-all-hint').hidden = !isMulti();
     $('answers').innerHTML = s.answers.map((a, i) =>
       `<button class="answer${picked(i) ? ' on' : ''}${isMulti() ? ' multi' : ''}" data-i="${i}"><span class="letter">${isMulti() ? (picked(i) ? '✓' : '') : 'ABCDEFGH'[i]}</span><span>${escapeHtml(es() && a.es ? a.es : a.en)}</span></button>`).join('');
     $('submit').disabled = isMulti() ? s.choice.size === 0 : s.choice === null;
