@@ -502,6 +502,9 @@ const hasSpanish = (topic, q) => !!(topic.es && topic.es.lesson && q.es && q.es.
 function kioskItem(topic, employeeId, extra) {
   const q = pickQuestion(topic, employeeId, (extra && extra.avoid) || []);
   if (extra) delete extra.avoid;
+  return itemForQuestion(topic, q, extra);
+}
+function itemForQuestion(topic, q, extra) {
   const es = hasSpanish(topic, q);
   return Object.assign({
     topic: { id: topic.id, title: topic.title, category: topic.category, lesson: topic.lesson, image: topic.image || '' },
@@ -1496,6 +1499,39 @@ async function adminRoutes(req, res, p, m, url) {
   const SAMPLE_STAFF = new Set(loadJson(SEED_STAFF_FILE, []).map(s => `${String(s.name).toLowerCase()}|${s.last4}`));
   const isSampleStaff = e => !!e && SAMPLE_STAFF.has(`${String(e.name || '').toLowerCase()}|${e.last4}`);
   const isSampleSchedule = x => !!x && /^sample /i.test(String(x.note || ''));
+  // Practice run of a topic for the preview window: every question, one after another. Nothing is saved.
+  const pv = m === 'GET' && p.match(/^\/api\/admin\/preview\/([\w-]+)$/);
+  if (pv) {
+    const topic = findTopic(pv[1]);
+    if (!topic) return send(res, 404, { error: 'Topic not found.' });
+    const only = url.searchParams.get('q');
+    const qs = topic.questions.filter(q => !only || q.id === only);
+    return send(res, 200, {
+      who: { employeeId: null, name: 'Preview', firstName: 'Preview', department: '', last4: '' },
+      items: qs.map(q => itemForQuestion(topic, q, { kind: 'rotation' }))
+    });
+  }
+  if (m === 'POST' && p === '/api/admin/preview/answer') {
+    const b = await readBody(req);
+    const topic = findTopic(String(b.topicId || ''));
+    const q = topic && topic.questions.find(x => x.id === String(b.questionId || ''));
+    if (!topic || !q) return send(res, 400, { error: 'This topic or question was changed. Close the preview and open it again.' });
+    const chosen = cleanList(Array.isArray(b.answer) ? b.answer : [b.answer], 500, 8);
+    if (!chosen.length) return send(res, 400, { error: 'Please choose an answer.' });
+    const tried = cleanList(b.tried || [], 500, 20).map(a => a.toLowerCase()).concat(chosen.map(a => a.toLowerCase()));
+    const correct = isRightAnswer(q, chosen);
+    const all = choicesFor(q);
+    const remaining = q.type === 'multi' ? all : all.filter(a => !tried.includes(a.en.toLowerCase()));
+    const es = hasSpanish(topic, q) ? q.es : null;
+    return send(res, 200, {
+      responseId: null, correct, firstTryCorrect: correct && !(b.tried || []).length,
+      hint: correct ? '' : q.hint, hintEs: correct || !es ? '' : es.hint,
+      answers: correct ? [] : shuffle(remaining),
+      explanation: correct ? q.explanation : '', explanationEs: correct && es ? es.explanation : '',
+      offline: true   // hides "Was this helpful?"
+    });
+  }
+
   if (m === 'GET' && p === '/api/admin/test-data') {
     return send(res, 200, {
       responses: (db.responses || []).length, usage: (db.usage || []).length,
@@ -1561,6 +1597,13 @@ async function handle(req, res) {
     if (!requireAdmin(req, res)) return;
     if (m === 'GET' && (p === '/admin' || p === '/admin/')) return serveStatic(res, 'admin.html');
     if (m === 'GET' && p === '/admin.js') return serveStatic(res, 'admin.js');
+    // "Preview" on the admin page: the real kiosk screens, in practice mode. Nothing is saved.
+    if (m === 'GET' && p === '/admin/preview') {
+      return fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8', (err, html) => {
+        if (err) return send(res, 404, 'Not found', 'text/plain');
+        send(res, 200, html.replace('<head>', '<head><base href="/">'), 'text/html; charset=utf-8');
+      });
+    }
     if ((await adminRoutes(req, res, p, m, url)) !== false) return;
   }
   send(res, 404, { error: 'Not found' });

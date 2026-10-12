@@ -163,7 +163,18 @@
   .answer .letter { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); font-weight: 700; color: var(--muted); }
   .answer.on { border-color: var(--brand); background: var(--brand-soft); }
   .answer.on .letter { background: var(--brand); color: #fff; }
-  .select-all { display: inline-block; background: var(--brand-soft); color: var(--brand); font-weight: 700; border-radius: 8px; padding: 4px 12px; margin: -6px 0 12px; font-size: 17px; }
+  /* "Select all that apply" has to be impossible to miss: big, bright, and pulsing. */
+  .select-all { display: block; background: #ffcf33; color: #4a3200; font-weight: 800; border-radius: 12px; padding: 12px 16px; margin: -4px 0 14px;
+    font-size: 21px; text-align: center; text-transform: uppercase; letter-spacing: .5px; border: 3px solid #e0a800;
+    animation: selectall-pulse 1.1s ease-in-out infinite; }
+  .select-all::before, .select-all::after { content: "☑️"; margin: 0 8px; }
+  @keyframes selectall-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 191, 0, .7); background: #ffcf33; }
+    50% { transform: scale(1.03); box-shadow: 0 0 0 10px rgba(255, 191, 0, 0); background: #ffe680; } }
+  @media (prefers-reduced-motion: reduce) { .select-all { animation: none; } }
+  .preview-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+    background: #222; color: #fff; padding: 8px 12px; font-size: 15px; }
+  .preview-bar button { font: inherit; font-size: 14px; border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  body.previewing main { padding-bottom: 64px; }
   .answer.multi .letter { border-radius: 8px; border: 2px solid var(--line); background: #fff; color: #fff; }
   .answer.multi.on .letter { background: var(--brand); border-color: var(--brand); }
   .tryagain { background: var(--warn-soft); color: var(--warn); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; font-size: 18px; }
@@ -198,6 +209,7 @@
 </head>
 <body class="on-home">
 <div id="decor" aria-hidden="true"></div>
+<div class="preview-bar" id="preview-bar" hidden><strong>PREVIEW</strong><span>Practice run. Nothing is saved.</span><button id="preview-again">↻ Start over</button><button id="preview-close">Close</button></div>
 <div class="app">
   <header>
     <div class="brand"><span class="brand-emoji left" id="decor-emoji-left" aria-hidden="true" hidden></span><img src="logo.png" alt="" class="logo"><span class="brand-emoji" id="decor-emoji" aria-hidden="true" hidden></span><span id="facility" hidden>Stonehenge</span></div>
@@ -373,6 +385,8 @@
   const s = { pin: '', config: { departments: [], allowUnlisted: true }, dept: '', who: null, items: [], idx: 0,
     answers: [], choice: null, responseId: null, busy: false, lang: 'en', hint: null };
   let idleTimer = null, countdownTimer = null;
+  // Opened from "Preview" on the admin page (/admin/preview?topic=…): runs the topic's questions on the real screens without saving anything.
+  const previewTopic = location.pathname.startsWith('/admin/preview') ? new URLSearchParams(location.search).get('topic') : null;
   const loadedAt = Date.now();
 
   const item = () => s.items[s.idx];
@@ -394,6 +408,7 @@
     ['pin-error', 'unlisted-error', 'question-error', 'forgot-error'].forEach(id => { $(id).textContent = ''; });
     $('who-label').textContent = '';
     renderPin(); renderDepts();
+    if (previewTopic) return startPreview();
     show('home');
     if (Date.now() - loadedAt > RELOAD_EVERY_MS) location.reload();
   }
@@ -453,7 +468,7 @@
   async function loadConfig() {
     try {
       const cfg = await api('/api/kiosk/config' + (previewMonth ? '?month=' + previewMonth : '?waiting=' + readQueue().length));
-      if (!previewMonth) flushQueue();
+      if (!previewMonth && !previewTopic) flushQueue();
       // A new version of the site was deployed: reload so the iPad picks it up without anyone touching it.
       if (s.config && s.config.build && cfg.build !== s.config.build && $('s-home').classList.contains('active')) return location.reload();
       s.config = cfg;
@@ -667,7 +682,7 @@
     if (s.busy) return;
     s.busy = true;
     try {
-      const r = await api('/api/kiosk/start', identity);
+      const r = previewTopic ? await api('/api/admin/preview/' + encodeURIComponent(previewTopic)) : await api('/api/kiosk/start', identity);
       s.who = r.who; s.items = r.items; s.idx = 0;
       $('who-label').textContent = `${r.who.firstName}${r.who.department ? ' · ' + r.who.department : ''}`;
       if (!s.items.length) { show('empty'); return; }
@@ -685,11 +700,11 @@
 
   function openItem() {
     const it = item();
-    s.answers = it.question.answers; s.responseId = null; s.hint = null; s.offlineRec = null; s.tries = 0; clearChoice();
+    s.answers = it.question.answers; s.tried = []; s.responseId = null; s.hint = null; s.offlineRec = null; s.tries = 0; clearChoice();
     $('tryagain').hidden = true;
     renderItem();
     // A review starts with the question (recall first); the lesson is one tap away.
-    show(it.kind === 'review' ? 'question' : 'lesson');
+    show(it.kind === 'review' || (previewTopic && s.idx > 0) ? 'question' : 'lesson');
   }
   // Fills in the lesson and question screens in the chosen language.
   function renderItem() {
@@ -757,7 +772,10 @@
     try {
       let r;
       // Once an answer has been saved offline, keep this question offline so its tries stay together.
-      if (s.offlineRec) r = await gradeOffline(chosen);
+      if (previewTopic) {
+        r = await api('/api/admin/preview/answer', { topicId: it.topic.id, questionId: it.question.id, answer: isMulti() ? chosen : chosen[0], tried: s.tried || [] });
+        s.tried = (s.tried || []).concat(chosen);
+      } else if (s.offlineRec) r = await gradeOffline(chosen);
       else {
         try {
           r = await api('/api/kiosk/answer', {
@@ -874,7 +892,14 @@
   document.addEventListener('pointerdown', bumpIdle, true);
   document.addEventListener('keydown', bumpIdle, true);
 
-  loadConfig();
+  function startPreview() {
+    document.body.classList.add('previewing');
+    $('preview-bar').hidden = false;
+    begin({});
+  }
+  $('preview-again').addEventListener('click', () => { if (!s.busy) { clearInterval(countdownTimer); startPreview(); } });
+  $('preview-close').addEventListener('click', () => { window.close(); });
+  loadConfig().then(() => { if (previewTopic) startPreview(); });
   setInterval(() => { if ($('s-home').classList.contains('active')) loadConfig(); }, 60000);
   setInterval(() => { if ($('s-home').classList.contains('active') && Date.now() - loadedAt > RELOAD_EVERY_MS) location.reload(); }, 10 * 60000);
 

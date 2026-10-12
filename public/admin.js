@@ -324,7 +324,7 @@
         <td>${st ? st.responses : 0}</td>
         <td>${pct}${st && st.helpful + st.notHelpful ? `<div class="small" title="See who rated this lesson"><a href="#" data-ratings="${t.id}">👍 ${st.helpful} · 👎 ${st.notHelpful}</a></div>` : ''}</td>
         <td style="white-space:nowrap">
-          <button class="btn subtle" data-act="preview" data-id="${t.id}">Preview</button>
+          <button class="btn subtle" data-act="preview" data-id="${t.id}" title="Try it on the kiosk screens. Nothing is saved.">Preview</button><button class="btn subtle" data-act="details" data-id="${t.id}" title="All questions and answers on one page">Answer key</button>
           <button class="btn subtle" data-act="edit" data-id="${t.id}">Edit</button>
           <button class="btn subtle" data-act="duplicate" data-id="${t.id}">Copy</button>
           ${retired ? `<button class="btn subtle" data-act="restore" data-id="${t.id}">Restore</button>`
@@ -352,6 +352,7 @@
     const id = b.dataset.id, act = b.dataset.act, t = topicById(id);
     try {
       if (act === 'preview') return showPreview(t);
+      if (act === 'details') return showDetails(t);
       if (act === 'edit') return openEditor(t);
       if (act === 'duplicate') {
         const { topic } = await post(`/api/admin/topics/${id}/duplicate`);
@@ -366,7 +367,15 @@
     } catch (err) { fail(err); }
   });
 
+  // "Preview" opens the real kiosk screens in a new window, in practice mode (nothing is saved).
   function showPreview(t) {
+    if (!t) return;
+    if (!t.questions.length) return showDetails(t);
+    const w = window.open('/admin/preview?topic=' + encodeURIComponent(t.id), 'inservice-preview', 'width=820,height=1080');
+    if (!w) return alert('Your browser blocked the preview window. Allow pop-ups for this site and try again.');
+    w.focus();
+  }
+  function showDetails(t) {
     if (!t) return;
     $('vw-title').textContent = t.title;
     $('vw-body').innerHTML = `<div class="muted small" style="margin-top:12px">For: ${whoLabel(t.departments)}</div>
