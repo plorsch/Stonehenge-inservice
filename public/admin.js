@@ -2706,7 +2706,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const places = [...new Set(top.map(l => l.streak))];
     $('sk-now').innerHTML = top.length ? top.map(l => { const i = places.indexOf(l.streak); return `<div class="sk-row"><div class="sk-rank">${medal[i] || i + 1}</div>
         <div class="sk-who"><button class="linkish" data-up-staff="${escapeHtml(l.id)}">${escapeHtml(l.name)}</button>${l.department ? ` <small>· ${escapeHtml(l.department)}</small>` : ''}</div>
-        <div class="sk-n">🔥 ${l.streak} in a row</div></div>`; }).join('')
+        <div class="sk-n">🔥 ${l.streak} days in a row</div></div>`; }).join('')
       : '<div class="muted small">No one has a streak of 3 or more yet.</div>';
   }
   // Segmented buttons write to the hidden input named in data-for, then save.

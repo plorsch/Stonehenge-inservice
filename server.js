@@ -578,20 +578,23 @@ function newResponse(b, topic, q, at = new Date()) {
 
 // Encouragement after a correct answer: in-service milestones for the year, or a first-try streak.
 const MILESTONES = [10, 25, 50, 75, 100, 150, 200, 250, 300, 365];
-// A first-try miss resets the streak, even if the person never finished that question.
+// Streaks count days: the first answer each day adds one if right on the first try, or resets it if not
+// (even if the person never finished that question). More answers the same day don't change it.
 // Returns { employeeId: { streak, year, events } }, where events are the milestones reached today.
 function streakStats(onlyId) {
   const by = {};
   const date = today(), year = date.slice(0, 4);
   for (const r of db.responses) {
     if (!r.employeeId || !r.attempts.length || (onlyId && r.employeeId !== onlyId)) continue;
-    const x = by[r.employeeId] || (by[r.employeeId] = { streak: 0, year: 0, events: [] });
-    x.streak = r.firstTryCorrect ? x.streak + 1 : 0;
+    const x = by[r.employeeId] || (by[r.employeeId] = { streak: 0, year: 0, events: [], day: null });
+    // Only the first answer of each day counts, so taking it again can't add to or break the streak.
+    const grew = x.day !== r.date && !!r.firstTryCorrect;
+    if (x.day !== r.date) { x.streak = r.firstTryCorrect ? x.streak + 1 : 0; x.day = r.date; }
     if (r.completed && r.date.startsWith(year)) {
       x.year++;
       if (r.date === date && MILESTONES.includes(x.year)) x.events.push({ type: 'year', n: x.year });
     }
-    if (r.date === date && r.firstTryCorrect && x.streak >= 5 && x.streak % 5 === 0) x.events.push({ type: 'streak', n: x.streak });
+    if (r.date === date && grew && x.streak >= 5 && x.streak % 5 === 0) x.events.push({ type: 'streak', n: x.streak });
   }
   return by;
 }
@@ -603,7 +606,7 @@ function cheerFor(emp) {
   if (!last || (last.type === 'year' ? last.n !== x.year : last.n !== x.streak)) return null;
   return last.type === 'year'
     ? { en: `🏆 That's your ${last.n}th in-service this year!`, es: `🏆 ¡Es su in-service número ${last.n} este año!` }
-    : { en: `🔥 ${last.n} in a row right on the first try!`, es: `🔥 ¡${last.n} seguidas correctas al primer intento!` };
+    : { en: `🔥 ${last.n} days in a row right on the first try!`, es: `🔥 ¡${last.n} días seguidos correctos al primer intento!` };
 }
 // What to tell the person about spaced review after they finish a question.
 function reviewNote(r) {
@@ -625,7 +628,7 @@ function publicStreaks() {
   const liveEvent = x => x.events.filter(ev => ev.type === 'year' || x.streak >= ev.n).pop();
   const shoutOuts = !set.shoutOuts ? [] : active.filter(e => liveEvent(stats[e.id])).map(e => {
     const ev = liveEvent(stats[e.id]);
-    return { id: e.id, text: ev.type === 'year' ? `🏆 ${shortName(e.name)}: ${ev.n} in-services this year!` : `🔥 ${shortName(e.name)} is on a ${ev.n}-in-a-row streak!` };
+    return { id: e.id, text: ev.type === 'year' ? `🏆 ${shortName(e.name)}: ${ev.n} in-services this year!` : `🔥 ${shortName(e.name)} is on a ${ev.n}-day streak!` };
   });
   const ranked = !boardOn ? [] : active.filter(e => stats[e.id].streak >= STREAK_LEADER_MIN)
     .sort((a, b) => stats[b.id].streak - stats[a.id].streak || a.name.localeCompare(b.name))

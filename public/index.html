@@ -619,7 +619,7 @@
   const deptLine = list => '🏅 Department streak leaders: ' + tiers(byDept(list)).map(g => `${g[0].department}: ${tierNames(g)} ${g[0].streak}`).join(' · ');
   function leadersLine(list) {
     const g = tiers(list);
-    if (g.length === 1) return `🏅 Streak leader${g[0].length > 1 ? 's' : ''}: ${tierNames(g[0])}, ${g[0][0].streak} in a row right on the first try!`;
+    if (g.length === 1) return `🏅 Streak leader${g[0].length > 1 ? 's' : ''}: ${tierNames(g[0])}, ${g[0][0].streak} days in a row right on the first try!`;
     return '🏅 Top streaks: ' + g.map(p => `${tierNames(p)} ${p[0].streak}`).join(' · ');
   }
   const deptTag = l => l.department ? ` <i class="lb-dept">(${escapeHtml(l.department)})</i>` : '';
@@ -627,14 +627,14 @@
   function tierRow(label, g) {
     const me = s.who && g.some(l => l.id === s.who.employeeId);
     const who = g.length === 1 ? `${tierNames(g, true)}${deptTag(g[0])}` : `${tierNames(g, true)}<i class="lb-tie">${T(`${g.length}-way tie`, `empate de ${g.length}`)}</i>`;
-    return `<div class="${me ? 'me' : ''}"><b>${label}</b><span>${who}</span><span>🔥 ${g[0].streak}${T(' in a row', ' seguidas')}</span></div>`;
+    return `<div class="${me ? 'me' : ''}"><b>${label}</b><span>${who}</span><span>🔥 ${g[0].streak}${T(' days in a row', ' días seguidos')}</span></div>`;
   }
   // The 🏆 button: the full leaderboard, ranked the way it's set in admin.
   function renderBoard() {
     const str = st(s.config), g = tiers(str.leaders);
     const html = (g.length ? `<div class="leaders"><h3>${g.length === 1 ? 'Facility leader' : 'Top streaks'}</h3>${g.map((p, i) => tierRow(MEDALS[i] || `${i + 1}.`, p)).join('')}</div>` : '') +
       (str.deptLeaders.length ? `<div class="leaders"><h3>Department leaders</h3>${tiers(byDept(str.deptLeaders)).map(p => `<div><b style="width:auto;min-width:140px">${escapeHtml(p[0].department)}</b><span>${tierNames(p, true)}</span><span>🔥 ${p[0].streak}</span></div>`).join('')}</div>` : '');
-    $('board-lists').innerHTML = html || '<p style="margin-top:18px">No one has 3 in a row yet. Be the first!</p>';
+    $('board-lists').innerHTML = html || '<p style="margin-top:18px">No one has 3 days in a row yet. Be the first!</p>';
   }
   let boardTimer = null;
   function closeBoard() { $('board-pop').hidden = true; clearTimeout(boardTimer); }
