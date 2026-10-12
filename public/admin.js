@@ -1898,10 +1898,13 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   function renderSettings() {
     const s = state.settings;
     $('set-facility').value = s.facilityName || '';
-    $('set-depts').value = depts().join('\n');
-    $('set-leaders').value = Object.entries(s.leaders || {}).map(([d, l]) => `${d}: ${l}`).join('\n');
+    $('set-depts').querySelectorAll('.re-row').forEach(r => r.remove());
+    depts().forEach(d => addDeptRow(d));
+    $('set-leaders').querySelectorAll('.re-row').forEach(r => r.remove());
+    Object.entries(s.leaders || {}).forEach(([d, l]) => addLeaderRow(d, l));
     $('set-unlisted').checked = !!s.allowUnlisted;
-    $('set-closing').value = (s.closingMessages || []).join('\n');
+    $('set-closing').innerHTML = '';
+    (s.closingMessages || []).forEach(m => addClosingRow(m));
     $('set-news-seconds').value = s.newsSeconds || 3;
     const main = state.isMainAdmin !== false;
     $('pw-env').hidden = !state.passwordFromEnv || !main;
@@ -1914,21 +1917,66 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('pw-form').hidden = !!state.passwordFromEnv && main;
     $('pw-form').querySelector('.muted').innerHTML = main ? 'Used to open this admin page. The username is <code>admin</code>.' : `You're signed in as <code>${escapeHtml(state.me || '')}</code>. Change your own password here.`;
   }
-  $('save-settings').addEventListener('click', async () => {
+  // Simple row editors: one box per item, with a remove button.
+  const EMAIL_RE = /[^\s<>,;:"'()]+@[^\s<>,;:"'()]+\.[a-z]{2,}/gi;
+  function reRow(box, inner) {
+    const row = document.createElement('div');
+    row.className = 're-row';
+    row.innerHTML = inner + '<button type="button" class="re-x" title="Remove">×</button>';
+    box.appendChild(row);
+    return row;
+  }
+  function addDeptRow(v = '') { return reRow($('set-depts'), `<input type="text" data-clear="1" maxlength="60" placeholder="Department" value="${escapeHtml(v)}">`); }
+  function addClosingRow(v = '') { return reRow($('set-closing'), `<input type="text" data-clear="1" maxlength="200" placeholder="Thanks for keeping our residents safe!" value="${escapeHtml(v)}">`); }
+  function addLeaderRow(dept = '', leader = '') {
+    const emails = String(leader).match(EMAIL_RE) || [];
+    const name = String(leader).replace(EMAIL_RE, '').replace(/[\s,;<>()]+$/, '').replace(/^[\s,;<>()]+/, '').replace(/[\s,;]+(?=[,;])/g, '').trim();
+    const opts = [...new Set([...depts(), ...mainDepts(), dept].filter(Boolean))];
+    return reRow($('set-leaders'), `<select>${opts.map(d => `<option${sameDept(d, dept) ? ' selected' : ''}>${escapeHtml(d)}</option>`).join('')}</select>
+      <input type="text" data-clear="1" maxlength="80" placeholder="Name" value="${escapeHtml(name)}">
+      <input type="text" data-clear="1" maxlength="200" placeholder="name@stonehenge.com" value="${escapeHtml(emails.join(', '))}">`);
+  }
+  const focusLast = row => row.querySelector('input').focus();
+  $('add-dept').addEventListener('click', () => focusLast(addDeptRow()));
+  $('add-closing').addEventListener('click', () => focusLast(addClosingRow()));
+  $('add-leader').addEventListener('click', () => focusLast(addLeaderRow()));
+  ['set-depts', 'set-leaders', 'set-closing'].forEach(id => $(id).addEventListener('click', e => { const x = e.target.closest('.re-x'); if (x) x.closest('.re-row').remove(); }));
+  $('set-leaders').addEventListener('input', e => {
+    const i = e.target;
+    if ((i.placeholder || '').includes('@')) i.classList.toggle('bad', !!i.value.trim() && (i.value.replace(EMAIL_RE, '').replace(/[\s,;]/g, '') !== ''));
+  });
+  const rowValues = id => [...$(id).querySelectorAll('.re-row input')].map(i => i.value.trim()).filter(Boolean);
+  function leaderValues() {
+    const out = {}, bad = [];
+    for (const row of $('set-leaders').querySelectorAll('.re-row')) {
+      const [sel, name, email] = row.querySelectorAll('select, input');
+      const emails = email.value.match(EMAIL_RE) || [];
+      if (email.value.trim() && email.value.replace(EMAIL_RE, '').replace(/[\s,;]/g, '')) bad.push(sel.value);
+      const v = [name.value.trim(), ...emails].filter(Boolean).join(', ');
+      if (sel.value && v) out[sel.value] = out[sel.value] ? out[sel.value] + ', ' + v : v;
+    }
+    return { out, bad };
+  }
+  async function saveSettings() {
+    const lv = leaderValues();
+    if (lv.bad.length) return alert(`Check the email for ${lv.bad.join(', ')}. It doesn't look like an email address.`);
     try {
       await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({
         facilityName: $('set-facility').value,
-        departments: splitLines($('set-depts').value),
-        leaders: Object.fromEntries(splitLines($('set-leaders').value).map(l => l.split(/\s*[:=]\s*/)).filter(x => x.length > 1 && x[0] && x[1])),
+        departments: [...new Set(rowValues('set-depts'))],
+        leaders: lv.out,
         allowUnlisted: $('set-unlisted').checked,
-        closingMessages: splitLines($('set-closing').value),
+        closingMessages: rowValues('set-closing'),
         newsSeconds: Number($('set-news-seconds').value)
       }) });
       $('sc-depts').dataset.init = ''; $('rq-depts').dataset.init = ''; $('an-depts').dataset.init = '';
       toast('Settings saved');
       await refresh();
     } catch (err) { fail(err); }
-  });
+  }
+  $('save-settings').addEventListener('click', saveSettings);
+  $('save-depts').addEventListener('click', saveSettings);
+  $('save-closing').addEventListener('click', saveSettings);
   // ---------- email alerts and follow-ups ----------
   async function loadEmailStatus() {
     try {

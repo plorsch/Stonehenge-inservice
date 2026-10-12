@@ -204,6 +204,21 @@ table.la tr:hover td { background: transparent; }
 .la-req { background: #fff6e0; border-radius: 10px; padding: 8px 12px; font-size: 13px; margin-bottom: 6px; }
 .flash-card { animation: flashc 1.4s ease; }
 @keyframes flashc { 0%, 60% { box-shadow: 0 0 0 4px #f4b400; } 100% { box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,.08)); } }
+
+/* Row editors in Settings */
+.card.wide { grid-column: 1 / -1; }
+.dl-grid { display: grid; grid-template-columns: minmax(220px, 1fr) 2.2fr; gap: 24px; }
+@media (max-width: 900px) { .dl-grid { grid-template-columns: 1fr; } }
+.rows-ed { display: grid; gap: 6px; margin: 4px 0 8px; }
+.re-row, .re-head { display: grid; grid-template-columns: 1fr 34px; gap: 6px; align-items: center; }
+#set-leaders .re-row, #set-leaders .re-head { grid-template-columns: 1fr 1fr 1.6fr 34px; }
+.re-head { font-size: 12px; color: #6b7a86; font-weight: 600; }
+.re-row input, .re-row select { width: 100%; min-width: 0; }
+.re-row input.bad { border-color: #c2501c; background: #fff6f0; }
+.re-x { border: 0; background: transparent; color: #8a97a3; font-size: 20px; cursor: pointer; border-radius: 8px; height: 34px; }
+.closing-grid { grid-template-columns: 1fr 1fr; column-gap: 18px; }
+@media (max-width: 900px) { .closing-grid { grid-template-columns: 1fr; } }
+.re-x:hover { background: #fdece4; color: #c2501c; }
 </style>
 </head>
 <body>
@@ -652,16 +667,33 @@ table.la tr:hover td { background: transparent; }
         <h2>Kiosk</h2>
         <label class="block" for="set-facility">Facility name <span class="hint">shown at the top of the iPad</span></label>
         <input type="text" id="set-facility" style="width:100%">
-        <label class="block" for="set-depts">Departments <span class="hint">one per line</span></label>
-        <textarea id="set-depts" rows="8"></textarea>
-        <label class="block" for="set-leaders">Department leaders <span class="hint">one per line, like "Dietary: Andi, andi@stonehenge.com". Groups the Clock-in check list; the email gets follow-ups when someone in that department misses a question. Several emails are fine.</span></label>
-        <textarea id="set-leaders" rows="6"></textarea>
-        <label class="block" for="set-closing">End-screen messages <span class="hint">one per line; the iPad shows one at random after each in-service</span></label>
-        <textarea id="set-closing" rows="10"></textarea>
         <label class="block" for="set-news-seconds">Announcement banner speed <span class="hint">seconds each announcement or birthday shows on the home screen</span></label>
         <input type="number" id="set-news-seconds" min="1" max="60" style="width:90px">
         <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px"><input type="checkbox" id="set-unlisted" style="margin-top:4px"> <span>Let staff who aren't on the roster type their name instead<br><span class="hint">They are marked "not on roster" in responses and do not get required education.</span></span></label>
         <div style="margin-top:14px"><button class="btn" id="save-settings">Save</button></div>
+      </div>
+      <div class="card wide" id="dept-card">
+        <h2>Departments and leaders</h2>
+        <div class="dl-grid">
+          <div>
+            <label class="block">Departments <span class="hint">shown on the iPad and in every department filter</span></label>
+            <div class="rows-ed" id="set-depts"></div>
+            <button class="btn subtle" id="add-dept">+ Add a department</button>
+          </div>
+          <div>
+            <label class="block">Department leaders <span class="hint">groups the Clock-in check list, and gets the follow-up email when someone in that department misses a question</span></label>
+            <div class="rows-ed" id="set-leaders"><div class="re-head"><span>Department</span><span>Leader name</span><span>Email <span class="hint">separate several with commas</span></span><span></span></div></div>
+            <button class="btn subtle" id="add-leader">+ Add a leader</button>
+          </div>
+        </div>
+        <div style="margin-top:14px"><button class="btn" id="save-depts">Save</button></div>
+      </div>
+      <div class="card wide" id="closing-card">
+        <h2>End-screen messages</h2>
+        <div class="muted small">The iPad shows one of these at random after each in-service.</div>
+        <div class="rows-ed closing-grid" id="set-closing"></div>
+        <button class="btn subtle" id="add-closing">+ Add a message</button>
+        <div style="margin-top:14px"><button class="btn" id="save-closing">Save</button></div>
       </div>
       <div class="card">
         <h2>Admin password</h2>
