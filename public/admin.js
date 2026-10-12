@@ -514,7 +514,7 @@
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
       const name = wb.SheetNames.find(n => prefer && prefer.test(n)) || wb.SheetNames[0];
       return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' })
-        .map(r => r.map(c => c instanceof Date ? isoDay(c) : String(c)))
+        .map(r => r.map(c => c instanceof Date ? isoDay(new Date(Math.round(c.getTime() / 60000) * 60000)) : String(c)))
         .filter(r => r.some(c => c.trim()));
     }
     return parseCsv((await file.text()).replace(/^﻿/, ''));
@@ -619,14 +619,17 @@
       .filter(e => f === 'all' || (f === 'active' ? e.active : !e.active))
       .filter(e => !q || [e.name, e.last4, e.department].join(' ').toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name));
+    staffShown = rows.map(e => e.id);
     $('staff-rows').innerHTML = rows.map(e => `<tr class="${e.active ? '' : 'dim'}">
-      <td><strong>${escapeHtml(e.name)}</strong>${e.active ? '' : ' <span class="pill">Inactive</span>'}</td>
-      <td>${escapeHtml(e.last4)}</td><td>${escapeHtml(e.department)}</td>
+      <td><input type="checkbox" data-pick="${e.id}"${staffPicked.has(e.id) ? ' checked' : ''}></td>
+      <td><strong>${escapeHtml(e.name)}</strong>${e.active ? '' : ' <span class="pill">Inactive</span>'}${e.birthday ? `<div class="muted small">🎂 ${e.birthday.split('-').map(Number).join('/')}</div>` : ''}</td>
+      <td>${escapeHtml(e.last4)}</td><td>${escapeHtml(e.department)}${e.jobTitle && e.jobTitle !== e.department ? `<div class="muted small">${escapeHtml(e.jobTitle)}</div>` : ''}</td>
       <td data-last="${e.id}" class="small muted">…</td>
       <td data-pending="${e.id}"></td>
       <td style="white-space:nowrap"><button class="btn subtle" data-edit-staff="${e.id}">Edit</button><button class="btn subtle" data-record="${e.id}">Training record</button></td></tr>`).join('')
-      || '<tr><td colspan="6" class="muted">No staff yet. Add them one at a time or import your roster from a spreadsheet.</td></tr>';
+      || '<tr><td colspan="7" class="muted">No staff yet. Add them one at a time or import your roster from a spreadsheet.</td></tr>';
     fillStaffActivity();
+    renderBulk();
     const sel = $('st-dept');
     sel.innerHTML = '<option value="">No department</option>' + depts().map(d => `<option>${escapeHtml(d)}</option>`).join('');
   }
@@ -650,6 +653,85 @@
       }
     } catch { /* leave placeholders */ }
   }
+  // ----- bulk select and edit -----
+  const staffPicked = new Set();
+  let staffShown = [];
+  function renderBulk() {
+    for (const id of [...staffPicked]) if (!state.employees.some(e => e.id === id)) staffPicked.delete(id);
+    $('staff-bulk').hidden = !staffPicked.size;
+    $('staff-bulk-n').textContent = `${staffPicked.size} selected`;
+    $('staff-all').checked = staffShown.length > 0 && staffShown.every(id => staffPicked.has(id));
+    const cur = $('staff-bulk-dept').value;
+    $('staff-bulk-dept').innerHTML = '<option value="">No department</option>' + depts().map(d => `<option>${escapeHtml(d)}</option>`).join('');
+    if (cur) $('staff-bulk-dept').value = cur;
+  }
+  $('staff-rows').addEventListener('change', e => {
+    const c = e.target.closest('[data-pick]');
+    if (!c) return;
+    if (c.checked) staffPicked.add(c.dataset.pick); else staffPicked.delete(c.dataset.pick);
+    renderBulk();
+  });
+  $('staff-all').addEventListener('change', () => {
+    staffShown.forEach(id => $('staff-all').checked ? staffPicked.add(id) : staffPicked.delete(id));
+    renderStaff();
+  });
+  async function bulk(change, label) {
+    try {
+      const r = await post('/api/admin/employees/bulk', Object.assign({ ids: [...staffPicked] }, change));
+      toast(`${label}: ${r.changed} staff`);
+      staffPicked.clear();
+      await refresh();
+    } catch (err) { fail(err); }
+  }
+  $('staff-bulk-move').addEventListener('click', () => bulk({ department: $('staff-bulk-dept').value }, 'Moved to ' + ($('staff-bulk-dept').value || 'no department')));
+  $('staff-bulk-off').addEventListener('click', () => { if (confirm(`Mark ${staffPicked.size} staff inactive? They won't be able to sign in on the iPad.`)) bulk({ active: false }, 'Marked inactive'); });
+  $('staff-bulk-on').addEventListener('click', () => bulk({ active: true }, 'Marked active'));
+  $('staff-bulk-clear').addEventListener('click', () => { staffPicked.clear(); renderStaff(); });
+
+  // ----- job titles -> departments -----
+  const MAIN_DEPTS = ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration', 'Transport'];
+  // Best guess for a job title, following the facility's Job Profile -> Dept lookup.
+  function suggestDept(title) {
+    const t = String(title || '').toLowerCase();
+    const map = state.settings.jobDepartments || {};
+    if (map[title]) return map[title];
+    if (/staffing/.test(t)) return 'Administration';
+    if (/\bcna\b|nursing assistant|nurse aide|\blna\b|caregiver/.test(t)) return 'CNA';
+    if (/\brn\b|\blpn\b|\blvn\b|nurse|\badon\b|\bdon\b|\bmds\b|nursing/.test(t)) return 'Nursing';
+    if (/diet|cook|food|kitchen|nutrition/.test(t)) return 'Dietary';
+    if (/housekeep|laundry|environmental/.test(t)) return 'Housekeeping';
+    if (/therap|rehab|\bpta?\b|\bota?\b|\bslp\b|speech|physical|occupational/.test(t)) return 'Therapy';
+    if (/activit/.test(t)) return 'Activities';
+    if (/social/.test(t)) return 'Social Services';
+    if (/driver|transport/.test(t)) return 'Transport';
+    return 'Administration';
+  }
+  const mainDepts = () => [...new Set(MAIN_DEPTS.concat(Object.keys(state.settings.leaders || {})))];
+  $('staff-group-btn').addEventListener('click', () => {
+    const main = mainDepts().map(d => d.toLowerCase());
+    const counts = {};
+    depts().forEach(d => { if (!main.includes(d.toLowerCase())) counts[d] = 0; }); // extra departments in Settings, even with no one in them
+    state.employees.forEach(e => { if (e.department && !main.includes(e.department.toLowerCase())) counts[e.department] = (counts[e.department] || 0) + 1; });
+    const titles = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    $('sg-error').textContent = '';
+    $('sg-rows').innerHTML = titles.map(t => `<tr><td>${escapeHtml(t)}</td><td>${counts[t]}</td>
+      <td><select data-title="${escapeHtml(t)}"><option value="">Leave as is</option>${mainDepts().map(d => `<option${d === suggestDept(t) ? ' selected' : ''}>${escapeHtml(d)}</option>`).join('')}</select></td></tr>`).join('')
+      || '<tr><td colspan="3" class="muted">Every staff member is already in one of the main departments.</td></tr>';
+    $('sg-go').disabled = !titles.length;
+    $('staff-group').showModal();
+  });
+  $('sg-go').addEventListener('click', async () => {
+    const map = {};
+    $('sg-rows').querySelectorAll('select[data-title]').forEach(s => { if (s.value) map[s.dataset.title] = s.value; });
+    try {
+      const r = await post('/api/admin/departments/group', { map });
+      $('staff-group').close();
+      $('sc-depts').dataset.init = ''; $('rq-depts').dataset.init = ''; $('an-depts').dataset.init = '';
+      toast(`Moved ${r.moved} staff into their departments`);
+      await refresh();
+    } catch (err) { $('sg-error').textContent = err.message; }
+  });
+
   $('staff-search').addEventListener('input', renderStaff);
   $('staff-filter').addEventListener('change', renderStaff);
   function openStaff(e) {
@@ -736,32 +818,56 @@
     rows.filter(r => r.department && r.leader).forEach(r => { const c = count[r.department] = count[r.department] || {}; c[r.leader] = (c[r.leader] || 0) + 1; });
     return Object.fromEntries(Object.entries(count).map(([d, c]) => [d, Object.keys(c).sort((a, b) => c[b] - c[a])[0]]));
   }
+  // Other tabs in the same workbook with names and birthdays (e.g. a "Birthdays" tab) become birthday-only rows.
+  async function birthdayTabs(file, prefer) {
+    if (!/\.xlsx?$/i.test(file.name)) return [];
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+    const main = wb.SheetNames.find(n => prefer.test(n)) || wb.SheetNames[0];
+    const out = [];
+    for (const n of wb.SheetNames.filter(x => x !== main)) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }).map(r => r.map(c => c instanceof Date ? isoDay(new Date(Math.round(c.getTime() / 60000) * 60000)) : String(c)));
+      const hi = rows.slice(0, 10).findIndex(r => r.some(c => /birth|\bdob\b/i.test(c)) && r.some(c => /name|worker|employee/i.test(c)));
+      if (hi < 0) continue;
+      const h = rows[hi].map(c => String(c).trim());
+      const nc = findCol(h, [/name/i, /^worker$/i, /^employee$/i]), bc = findCol(h, [/birth/i, /\bdob\b/i]);
+      rows.slice(hi + 1).forEach(r => { const name = firstLast(String(r[nc] || '').trim()), b = String(r[bc] || '').trim(); if (name && b) out.push({ name, last4: '', birthday: b, keepBlank: true, birthdayOnly: true }); });
+    }
+    return out;
+  }
   $('staff-import-btn').addEventListener('click', () => {
     staffRows = null;
     $('imp-file').value = ''; $('imp-text').value = ''; $('imp-preview').innerHTML = ''; $('imp-error').textContent = ''; $('imp-go').disabled = true;
     $('staff-import').showModal();
   });
-  function previewStaff(rows) {
+  function previewStaff(rows, extraBirthdays) {
     $('imp-error').textContent = ''; $('imp-go').disabled = true; staffRows = null;
     if (!rows.length) { $('imp-preview').innerHTML = ''; return; }
     // Some sheets put a title above the column headings; use the first row that names a name or worker column.
     const hi = Math.max(0, rows.slice(0, 10).findIndex(r => r.some(c => /name|worker/i.test(String(c)))));
     let header = rows[hi].map(c => String(c).trim());
     let nameC = findCol(header, [/name/i, /^worker$/i, /^employee$/i]), idC = findCol(header, [/workday|employee.?id|ee.?id|\bid\b|last ?4/i]);
-    let deptC = findCol(header, [/^dep/i]);
-    if (deptC < 0) deptC = findCol(header, [/dep|role|position|job/i]);
+    const deptC = findCol(header, [/^dep/i]);
+    let jobC = findCol(header, [/job/i, /title/i, /position/i, /role/i]);
+    if (jobC === nameC) jobC = -1;
     let leaderC = findCol(header, [/^(leader|supervisor|manager)$/i]);
-    let bdayC = findCol(header, [/birth/i]), hireC = findCol(header, [/hire/i, /anniversary/i, /^start date$/i]);
+    let bdayC = findCol(header, [/birth/i, /^dob$/i, /\bdob\b/i]), hireC = findCol(header, [/hire/i, /anniversary/i, /^start date$/i]);
     let body = rows.slice(hi + 1);
-    if (nameC < 0 || idC < 0) { nameC = 0; idC = 1; deptC = header.length > 2 ? 2 : -1; leaderC = bdayC = hireC = -1; body = rows; } // no header row
-    staffRows = body.map(r => ({ name: firstLast(String(r[nameC] || '').trim()), last4: padId(r[idC]),
-      department: deptC >= 0 ? String(r[deptC] || '').trim() : '', leader: leaderC >= 0 ? String(r[leaderC] || '').trim() : '',
-      ...(bdayC >= 0 ? { birthday: String(r[bdayC] || '').trim(), keepBlank: true } : {}), ...(hireC >= 0 ? { hireDate: String(r[hireC] || '').trim(), keepBlank: true } : {}) }))
-      .filter(r => r.name || r.last4);
-    const bad = staffRows.filter(r => !r.name || String(r.last4).replace(/\D/g, '').length < 4).length;
+    const nameOnly = nameC >= 0 && idC < 0 && (bdayC >= 0 || hireC >= 0); // e.g. a birthday list: fills in people already on Staff
+    if (!nameOnly && (nameC < 0 || idC < 0)) { nameC = 0; idC = 1; jobC = header.length > 2 ? 2 : -1; leaderC = bdayC = hireC = -1; body = rows; } // no header row
+    const cell = (r, c) => c >= 0 ? String(r[c] == null ? '' : r[c]).trim() : '';
+    staffRows = body.map(r => {
+      const job = cell(r, jobC).replace(/\s+-\s+(Hourly|Salaried)$/i, '').replace(/\s+/g, ' ');
+      return { name: firstLast(cell(r, nameC)), last4: nameOnly ? '' : padId(r[idC]),
+        department: cell(r, deptC) || (job ? suggestDept(job) : ''), leader: cell(r, leaderC),
+        ...(job ? { jobTitle: job, keepBlank: true } : {}),
+        ...(bdayC >= 0 ? { birthday: cell(r, bdayC), keepBlank: true } : {}), ...(hireC >= 0 ? { hireDate: cell(r, hireC), keepBlank: true } : {}) };
+    }).filter(r => r.name || r.last4).concat(extraBirthdays || []);
+    const bad = staffRows.filter(r => !r.name || (!nameOnly && !r.birthdayOnly && String(r.last4).replace(/\D/g, '').length < 4)).length;
+    const bdays = staffRows.filter(r => r.birthday).length;
     const newDepts = [...new Set(staffRows.map(r => r.department).filter(d => d && !depts().some(x => x.toLowerCase() === d.toLowerCase())))];
     const leaders = Object.entries(staffLeaders(staffRows));
-    $('imp-preview').innerHTML = `<strong>${staffRows.length} people found.</strong>${bad ? ` <span class="err">${bad} are missing a name or ID and will be skipped.</span>` : ''}
+    $('imp-preview').innerHTML = `<strong>${nameOnly ? `${staffRows.length} names found. Birthdays and hire dates will be filled in for matching people already on Staff; no one new is added.` : `${staffRows.length} people found.`}</strong>${bad ? ` <span class="err">${bad} are missing a name or ID and will be skipped.</span>` : ''}
+      ${bdays ? `<div class="muted" style="margin-top:4px">${bdays} birthdays found${extraBirthdays && extraBirthdays.length ? ' (including the birthday tab)' : ''}.</div>` : ''}
       ${newDepts.length ? `<div class="muted" style="margin-top:4px">New departments that will be added to Settings: ${newDepts.map(escapeHtml).join(', ')}</div>` : ''}
       ${leaders.length ? `<div class="muted" style="margin-top:4px">Leaders for the Clock-in check: ${leaders.map(([d, l]) => `${escapeHtml(d)}: ${escapeHtml(l)}`).join(', ')}</div>` : ''}
       <div class="table-wrap" style="max-height:200px;margin-top:8px"><table><thead><tr><th>Name</th><th>Last 4</th><th>Department</th></tr></thead><tbody>
@@ -772,7 +878,7 @@
   $('imp-file').addEventListener('change', async e => {
     const f = e.target.files[0];
     if (!f) return;
-    try { previewStaff(await readSheet(f, /id ref|staff|roster|employee/i)); } catch (err) { $('imp-error').textContent = err.message; }
+    try { previewStaff(await readSheet(f, /id ref|staff|roster|employee/i), await birthdayTabs(f, /id ref|staff|roster|employee/i)); } catch (err) { $('imp-error').textContent = err.message; }
   });
   $('imp-text').addEventListener('input', () => previewStaff(parseCsv($('imp-text').value)));
   $('imp-go').addEventListener('click', async () => {

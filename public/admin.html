@@ -32,6 +32,7 @@
   .btn.danger { color: var(--warn); }
   .btn:disabled { opacity: .5; cursor: default; }
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .bulkbar { background: var(--brand-soft, #e4f0f5); border-radius: 10px; padding: 8px 12px; position: sticky; top: 0; z-index: 2; }
   .toolbar .grow { flex: 1; }
   input[type=text], input[type=date], input[type=password], input[type=number], select, textarea {
     font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); max-width: 100%;
@@ -311,11 +312,19 @@
       <div class="toolbar">
         <input type="text" id="staff-search" placeholder="Search staff" class="grow">
         <select id="staff-filter"><option value="active">Active staff</option><option value="inactive">Inactive</option><option value="all">All</option></select>
+        <button class="btn ghost" id="staff-group-btn">Group job titles into departments</button>
         <button class="btn ghost" id="staff-import-btn">Import from spreadsheet</button>
         <button class="btn" id="staff-add-btn">+ Add staff</button>
       </div>
+      <div class="toolbar bulkbar" id="staff-bulk" hidden>
+        <strong id="staff-bulk-n"></strong>
+        <label>Move to <select id="staff-bulk-dept"></select></label> <button class="btn" id="staff-bulk-move">Apply</button>
+        <button class="btn ghost" id="staff-bulk-off">Mark inactive</button>
+        <button class="btn ghost" id="staff-bulk-on">Mark active</button>
+        <button class="btn subtle" id="staff-bulk-clear">Clear selection</button>
+      </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Name</th><th>Workday last 4</th><th>Department</th><th>Last in-service</th><th>Pending required</th><th></th></tr></thead>
+        <thead><tr><th style="width:28px"><input type="checkbox" id="staff-all" title="Select all shown"></th><th>Name</th><th>Workday last 4</th><th>Department</th><th>Last in-service</th><th>Pending required</th><th></th></tr></thead>
         <tbody id="staff-rows"></tbody>
       </table></div>
       <div class="muted small" style="margin-top:8px">Staff sign in on the iPad with the last 4 digits of their Workday ID, then tap their name to confirm. If two people share the same last 4, both names appear and each taps their own.</div>
@@ -553,7 +562,7 @@
       <label class="block" for="st-last4">Last 4 of Workday ID</label><input type="text" id="st-last4" inputmode="numeric" maxlength="12" style="width:160px">
       <label class="block" for="st-dept">Department</label><select id="st-dept" style="width:100%"></select>
       <div class="toolbar" style="gap:16px">
-        <div><label class="block" for="st-birthday">Birthday <span class="hint">month/day, optional</span></label><input type="text" id="st-birthday" placeholder="3/7" style="width:120px"></div>
+        <div><label class="block" for="st-birthday">Birthday <span class="hint">month/day, optional</span></label><input type="text" id="st-birthday" placeholder="MM/DD" style="width:120px"></div>
         <div><label class="block" for="st-hire">Hire date <span class="hint">optional</span></label><input type="date" id="st-hire"></div>
       </div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" id="st-active"> Active</label>
@@ -566,11 +575,25 @@
   </form>
 </dialog>
 
+<!-- Group job titles into departments -->
+<dialog id="staff-group" style="width:min(720px,96vw)">
+  <div class="dlg-head"><h2 style="margin:0">Group job titles into departments</h2></div>
+  <div class="dlg-body">
+    <p class="muted small">These are the departments on your Staff list that look like job titles. Pick the department each belongs to, so everyone in it gets that department's in-services (for example, RN and LPN both go to Nursing). The app remembers this for future imports, and removes the extra departments from Settings. Suggestions are filled in for you.</p>
+    <div class="table-wrap"><table><thead><tr><th>Now</th><th>Staff</th><th>Belongs to</th></tr></thead><tbody id="sg-rows"></tbody></table></div>
+    <div class="err" id="sg-error"></div>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn" id="sg-go">Apply</button>
+  </div>
+</dialog>
+
 <!-- Staff import -->
 <dialog id="staff-import">
   <div class="dlg-head"><h2 style="margin:0">Import staff from a spreadsheet</h2></div>
   <div class="dlg-body">
-    <p class="muted small">Choose an Excel or CSV file, or copy the columns from Excel and paste them below. You need three columns: <strong>name</strong>, <strong>Workday ID</strong> (full ID or last 4), and <strong>department</strong>. Staff already on the roster with the same name and last 4 are updated, not duplicated.</p>
+    <p class="muted small">Choose an Excel or CSV file, or copy the columns from Excel and paste them below. You need: <strong>name</strong>, <strong>Workday ID</strong> (full ID or last 4), and <strong>department</strong> or <strong>job title</strong>. Optional: Birthday or DOB, Hire date, Leader. People already on Staff (same last 4 and same first and last name) are updated, not duplicated. A file with only names and birthdays, or a birthday tab in the same workbook, fills in birthdays for people already on Staff.</p>
     <input type="file" id="imp-file" accept=".xlsx,.xls,.csv,text/csv,text/plain">
     <label class="block" for="imp-text">Or paste here</label>
     <textarea id="imp-text" rows="6" placeholder="Name, Workday ID, Department"></textarea>

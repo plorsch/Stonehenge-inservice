@@ -76,6 +76,19 @@ function weekStart(date = today()) {
 const weekday = (date = today()) => { const [y, m, d] = date.split('-').map(Number); return new Date(y, m - 1, d).getDay(); };
 const pickRandom = arr => arr[crypto.randomInt(arr.length)];
 const sameText = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+// "Breinholt, John Philip", "John Philip Breinholt" and "John Breinholt" are the same person:
+// same first and last name, ignoring middle names, commas and case.
+function nameParts(n) {
+  let s = String(n || '').toLowerCase().replace(/[^a-z,'\s-]/g, ' ').trim();
+  const m = s.match(/^([^,]+),\s*(.+)$/);
+  if (m) s = `${m[2]} ${m[1]}`;
+  return s.split(/\s+/).filter(Boolean);
+}
+function looseSameName(a, b) {
+  const x = nameParts(a), y = nameParts(b);
+  if (!x.length || !y.length) return false;
+  return x[0] === y[0] && x[x.length - 1] === y[y.length - 1];
+}
 
 // ---------- Storage ----------
 
@@ -110,6 +123,7 @@ function defaultSettings() {
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
     leaders: {},              // { department: leader name }, for the Clock-in check follow-up lists
+    jobDepartments: {},       // { job title: department }, so titles like "Registered Nurse (RN)" land in Nursing
     // New hire starter set: topics given one per visit, in this order, for this many days after the hire date.
     starter: { topicIds: [], days: 60 },
     // Spaced review: a first-try miss brings the topic back after firstDays, then after secondDays, asked a different way.
@@ -700,6 +714,7 @@ function validateEmployee(input) {
   // Only touch these when given, so a roster import without them keeps what was entered by hand.
   if ('birthday' in input && (input.birthday || !input.keepBlank)) e.birthday = cleanMonthDay(input.birthday);
   if ('hireDate' in input && (input.hireDate || !input.keepBlank)) e.hireDate = cleanFullDate(input.hireDate);
+  if ('jobTitle' in input && (input.jobTitle || !input.keepBlank)) e.jobTitle = cleanText(input.jobTitle, 100);
   const errors = [];
   if (!e.name) errors.push('Name is required.');
   if (!e.last4) errors.push('Enter the last 4 digits of the Workday ID.');
@@ -1204,14 +1219,66 @@ async function adminRoutes(req, res, p, m, url) {
     let added = 0, updated = 0;
     const skipped = [];
     rows.forEach((row, i) => {
-      const { employee, errors } = validateEmployee(row || {});
+      row = row || {};
+      // A row with a name but no Workday ID (like a birthday list) only updates someone already on the roster.
+      if (!cleanLast4(row.last4) && cleanText(row.name) && ('birthday' in row || 'hireDate' in row)) {
+        const found = db.employees.filter(e => looseSameName(e.name, row.name));
+        if (found.length !== 1) { skipped.push(`${cleanText(row.name, 100)}: ${found.length ? 'more than one person with this name' : 'no one on Staff with this name'}`); return; }
+        const extra = {};
+        if (row.birthday && cleanMonthDay(row.birthday)) extra.birthday = cleanMonthDay(row.birthday);
+        if (row.hireDate && cleanFullDate(row.hireDate)) extra.hireDate = cleanFullDate(row.hireDate);
+        if (!Object.keys(extra).length) return;
+        Object.assign(found[0], extra); updated++;
+        return;
+      }
+      const { employee, errors } = validateEmployee(row);
       if (errors.length) { skipped.push(`Row ${i + 2}: ${errors.join(' ')}`); return; }
-      const existing = db.employees.find(e => e.last4 === employee.last4 && sameText(e.name, employee.name));
-      if (existing) { Object.assign(existing, employee); updated++; }
+      if (!employee.department && employee.jobTitle) employee.department = (db.settings.jobDepartments || {})[employee.jobTitle] || '';
+      const existing = db.employees.find(e => e.last4 === employee.last4 && sameText(e.name, employee.name))
+        || db.employees.find(e => e.last4 === employee.last4 && looseSameName(e.name, employee.name));
+      if (existing) { if (!employee.department) delete employee.department; Object.assign(existing, employee); updated++; }
       else { db.employees.push(Object.assign(employee, { id: newId(), createdAt: nowIso() })); added++; }
     });
     saveDb();
     return send(res, 200, { added, updated, skipped });
+  }
+  // Several staff at once: change department and/or active.
+  if (m === 'POST' && p === '/api/admin/employees/bulk') {
+    const b = await readBody(req);
+    const ids = new Set(Array.isArray(b.ids) ? b.ids.map(String) : []);
+    let changed = 0;
+    for (const e of db.employees) {
+      if (!ids.has(e.id)) continue;
+      if (typeof b.department === 'string') e.department = cleanText(b.department, 60);
+      if (typeof b.active === 'boolean') e.active = b.active;
+      changed++;
+    }
+    saveDb();
+    return send(res, 200, { changed });
+  }
+  // Fold job titles that were imported as departments into real departments ({ "Registered Nurse (RN)": "Nursing" }).
+  // Remembered, so later imports with those titles land in the right department.
+  if (m === 'POST' && p === '/api/admin/departments/group') {
+    const map = (await readBody(req)).map || {};
+    const s = db.settings;
+    s.jobDepartments = s.jobDepartments || {};
+    let moved = 0;
+    for (const [fromRaw, toRaw] of Object.entries(map)) {
+      const from = cleanText(fromRaw, 100), to = cleanText(toRaw, 60);
+      if (!from || !to || from === to) continue;
+      for (const e of db.employees) {
+        if (e.department === from) { e.jobTitle = e.jobTitle || from; e.department = to; moved++; }
+      }
+      s.jobDepartments[from] = to;
+      if (!s.departments.includes(to)) s.departments.push(to);
+      s.departments = s.departments.filter(d => d !== from);
+      for (const list of [db.schedules, db.required, db.announcements]) {
+        for (const x of list) if (Array.isArray(x.departments) && x.departments.includes(from)) x.departments = [...new Set(x.departments.map(d => d === from ? to : d))];
+      }
+      if (s.leaders) delete s.leaders[from];
+    }
+    saveDb();
+    return send(res, 200, { moved });
   }
   mt = p.match(/^\/api\/admin\/employees\/(\w+)$/);
   if (mt && m === 'PUT') {
