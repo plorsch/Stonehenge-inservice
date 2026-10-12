@@ -1738,6 +1738,40 @@ async function adminRoutes(req, res, p, m, url) {
     });
   }
 
+  // Today tab dashboard: the last 14 days, this week by department, and the most-missed questions.
+  if (m === 'GET' && p === '/api/admin/dashboard') {
+    const t = today(), start14 = addDays(t, -13), start7 = addDays(t, -6);
+    const days = Array.from({ length: 14 }, (_, i) => ({ date: addDays(start14, i), right: 0, missed: 0 }));
+    const byDay = Object.fromEntries(days.map(d => [d.date, d]));
+    const depts = new Map(), missedQ = new Map();
+    let unlistedToday = 0, unfinishedToday = 0;
+    for (const r of db.responses) {
+      if (r.date < start14) continue;
+      if (r.date === t && !r.verified) unlistedToday++;
+      if (!r.completed) { if (r.date === t) unfinishedToday++; continue; }
+      const d = byDay[r.date];
+      if (d) r.firstTryCorrect ? d.right++ : d.missed++;
+      if (r.date >= start7) {
+        const k = r.department || 'No department';
+        const g = depts.get(k) || { department: k, right: 0, missed: 0 };
+        r.firstTryCorrect ? g.right++ : g.missed++;
+        depts.set(k, g);
+        if (!r.firstTryCorrect) {
+          const qk = `${r.topicId}|${r.questionId}`;
+          const q = missedQ.get(qk) || { topicId: r.topicId, topicTitle: r.topicTitle, question: r.question, missed: 0 };
+          q.missed++; missedQ.set(qk, q);
+        }
+      }
+    }
+    return send(res, 200, {
+      today: t, start7, days,
+      departments: [...depts.values()].sort((a, b) => (b.right + b.missed) - (a.right + a.missed)),
+      topMissed: [...missedQ.values()].sort((a, b) => b.missed - a.missed).slice(0, 5),
+      unlistedToday, unfinishedToday,
+      followupsOpen: db.followups.filter(f => !f.attestedAt).length,
+      celebrationsToday: db.settings.celebrations ? todaysCelebrations() : []
+    });
+  }
   if (m === 'GET' && p === '/api/admin/followups') {
     return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, ...f }) => f), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30) });
   }

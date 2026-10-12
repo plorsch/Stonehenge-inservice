@@ -242,6 +242,11 @@
   function renderToday() {
     $('stat-today').textContent = state.responseCountToday;
     $('stat-missed').textContent = state.missedToday;
+    const h = new Date().getHours();
+    const who = state.me && state.me !== 'admin' ? ', ' + state.me.charAt(0).toUpperCase() + state.me.slice(1) : '';
+    $('hello-title').textContent = (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + who + ' 👋';
+    $('hello-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    loadDashboard();
     $('stat-required').textContent = state.required.filter(q => q.active).length;
     $('stat-staff').textContent = state.employees.filter(e => e.active).length;
     $('kiosk-urls').innerHTML = state.kioskUrls.length
@@ -261,6 +266,107 @@
       return `<tr><td><strong>${escapeHtml(d.department || 'Everyone')}</strong></td><td>${title}${reqNote}</td><td>${why}</td><td>${swap}</td></tr>`;
     }).join('');
   }
+  // ----- Today dashboard -----
+  // Opens the Responses tab with these filters (blank = no filter).
+  function openResponses(f) {
+    respPerson = null;
+    $('resp-from').value = f.from || ''; $('resp-to').value = f.to || ''; $('resp-dept').value = f.department || '';
+    $('resp-topic').value = f.topicId || ''; $('resp-missed').checked = !!f.missed; $('resp-helpful').value = '';
+    goTab('responses');
+    if (document.querySelector('#nav button.on').dataset.tab === 'responses') loadResponses();
+  }
+  let dash = null;
+  async function loadDashboard() {
+    try { dash = await api('/api/admin/dashboard'); } catch { return; }
+    const done = dash.days[dash.days.length - 1];
+    const total = done.right + done.missed;
+    $('stat-rate').textContent = total ? Math.round(100 * done.right / total) + '%' : '–';
+    $('stat-fu').textContent = dash.followupsOpen;
+    $('tile-fu').classList.toggle('alert', dash.followupsOpen > 0);
+    $('tile-missed').classList.toggle('alert', state.missedToday > 0);
+    drawDays(dash.days);
+    drawDepts(dash.departments);
+    $('dash-missq').innerHTML = dash.topMissed.length ? dash.topMissed.map(q => `<button class="missq" data-missq="${escapeHtml(q.topicId)}"><b>${q.missed}×</b>${escapeHtml(q.question)}<div class="muted small">${escapeHtml(q.topicTitle)}</div></button>`).join('')
+      + '<div style="margin-top:10px"><a href="#" class="small" data-go="missed-report">Full missed-questions report →</a></div>'
+      : '<div class="muted">Nobody missed a question this week. 🎉</div>';
+    const cel = dash.celebrationsToday || [];
+    const line = (icon, html) => `<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)"><span>${icon}</span><span>${html}</span></div>`;
+    $('dash-glance').innerHTML =
+      line('🎂', cel.length ? cel.map(c => `${escapeHtml(c.name)} <span class="muted">(${c.type === 'birthday' ? 'birthday' : c.years + '-year anniversary'})</span>`).join(', ') : '<span class="muted">No birthdays or work anniversaries today</span>') +
+      line('🙋', dash.unlistedToday ? `<a href="#" data-go="today-all">${dash.unlistedToday} not on the roster today</a>` : '<span class="muted">Everyone today was on the roster</span>') +
+      line('⏸️', dash.unfinishedToday ? `<a href="#" data-go="today-all">${dash.unfinishedToday} started but didn't finish</a>` : '<span class="muted">No unfinished in-services today</span>') +
+      line('📌', `${state.required.filter(q => q.active).length} required education item${state.required.filter(q => q.active).length === 1 ? '' : 's'} open`);
+  }
+  const tip = document.createElement('div');
+  tip.className = 'viz-tip'; tip.hidden = true; document.body.appendChild(tip);
+  const showTip = (e, html) => { tip.innerHTML = html; tip.hidden = false; const r = tip.getBoundingClientRect();
+    tip.style.left = Math.min(innerWidth - r.width - 8, e.clientX + 14) + 'px'; tip.style.top = Math.max(8, e.clientY - r.height - 12) + 'px'; };
+  const hideTip = () => { tip.hidden = true; };
+  const dayLabel = d => { const [y, m, day] = d.split('-').map(Number); return new Date(y, m - 1, day); };
+  // Stacked columns: right first try on the bottom, missed on top, 2px gap between, rounded top.
+  function drawDays(days) {
+    const W = 640, H = 230, L = 34, R = 6, T = 10, B = 34;
+    const max = Math.max(1, ...days.map(d => d.right + d.missed));
+    const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500].find(s => max / s <= 5) || Math.ceil(max / 5);
+    const top = Math.ceil(max / step) * step;
+    const y = v => T + (H - T - B) * (1 - v / top);
+    const slot = (W - L - R) / days.length, bw = Math.min(30, slot * 0.62);
+    const topRound = (x, y0, w, h, r) => h <= 0 ? '' : `M${x},${y0 + h}V${y0 + Math.min(r, h)}Q${x},${y0} ${x + Math.min(r, w / 2)},${y0}H${x + w - Math.min(r, w / 2)}Q${x + w},${y0} ${x + w},${y0 + Math.min(r, h)}V${y0 + h}Z`;
+    let g = '';
+    for (let v = 0; v <= top; v += step) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--axis)">${v}</text>`;
+    const cols = days.map((d, i) => {
+      const x = L + i * slot + (slot - bw) / 2, base = y(0);
+      const hr = base - y(d.right), hm = d.missed ? base - y(d.missed) : 0;
+      const gap = d.right && d.missed ? 2 : 0;
+      const rightPath = d.missed ? `<rect x="${x}" y="${base - hr}" width="${bw}" height="${hr}" fill="var(--series-1)"/>` : `<path d="${topRound(x, base - hr, bw, hr, 4)}" fill="var(--series-1)"/>`;
+      const missPath = d.missed ? `<path d="${topRound(x, base - hr - gap - hm, bw, hm, 4)}" fill="var(--series-2)"/>` : '';
+      const dt = dayLabel(d.date), isToday = d.date === dash.today;
+      const lbl = isToday ? 'Today' : (i % 2 === (days.length - 1) % 2 ? `${dt.getMonth() + 1}/${dt.getDate()}` : '');
+      return `<g class="bar" data-day="${d.date}">${d.right ? rightPath : ''}${missPath}
+        <text x="${x + bw / 2}" y="${H - B + 16}" text-anchor="middle" font-size="11" fill="${isToday ? 'var(--ink)' : 'var(--axis)'}" font-weight="${isToday ? 700 : 400}">${lbl}</text>
+        <rect class="hit" x="${L + i * slot}" y="${T}" width="${slot}" height="${H - T - B + 20}" fill="transparent"/></g>`;
+    }).join('');
+    const empty = days.every(d => !d.right && !d.missed);
+    $('dash-days').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="In-services per day for the last 14 days">${g}<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="#c9d3da"/>${cols}</svg>`
+      + (empty ? '<div class="muted small" style="margin-top:-120px;text-align:center;height:120px">No in-services in the last 14 days yet.</div>' : '');
+  }
+  $('dash-days').addEventListener('mousemove', e => {
+    const g = e.target.closest('[data-day]');
+    if (!g) return hideTip();
+    const d = dash.days.find(x => x.date === g.dataset.day), t = d.right + d.missed;
+    showTip(e, `<strong>${dayLabel(d.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</strong><br>
+      <i style="background:#2a78d6"></i>Right first try: ${d.right}<br><i style="background:#eb6834"></i>Missed first try: ${d.missed}${t ? `<br><span style="opacity:.75">${Math.round(100 * d.right / t)}% first try · click to see</span>` : ''}`);
+  });
+  $('dash-days').addEventListener('mouseleave', hideTip);
+  $('dash-days').addEventListener('click', e => { const g = e.target.closest('[data-day]'); if (g) { hideTip(); openResponses({ from: g.dataset.day, to: g.dataset.day }); } });
+  function drawDepts(list) {
+    const max = Math.max(1, ...list.map(d => d.right + d.missed));
+    $('dash-depts').innerHTML = list.length ? list.slice(0, 10).map(d => {
+      const t = d.right + d.missed;
+      return `<div class="hbar" data-dept="${escapeHtml(d.department)}" title="${escapeHtml(d.department)}: ${d.right} right first try, ${d.missed} missed. Click to see."><span class="name">${escapeHtml(d.department)}</span>
+        <span class="track">${d.right ? `<span class="r" style="width:${100 * d.right / max}%"></span>` : ''}${d.missed ? `<span class="m" style="width:${100 * d.missed / max}%"></span>` : ''}</span><span class="val">${t}</span></div>`;
+    }).join('') : '<div class="muted">No in-services this week yet.</div>';
+  }
+  $('dash-depts').addEventListener('click', e => {
+    const r = e.target.closest('[data-dept]');
+    if (r) openResponses({ from: dash.start7, to: dash.today, department: r.dataset.dept === 'No department' ? '' : r.dataset.dept });
+  });
+  $('dash-missq').addEventListener('click', e => {
+    const b = e.target.closest('[data-missq]');
+    if (b) openResponses({ from: dash.start7, to: dash.today, topicId: b.dataset.missq, missed: true });
+  });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-go]');
+    if (!b) return;
+    e.preventDefault();
+    const go = b.dataset.go, t = state.todayDate;
+    if (go === 'today-all') openResponses({ from: t, to: t });
+    else if (go === 'today-missed') openResponses({ from: t, to: t, missed: true });
+    else if (go === 'followups') { $('fu-filter').value = 'open'; goTab('reports'); setTimeout(() => $('fu-card').scrollIntoView({ behavior: 'smooth' }), 80); }
+    else if (go === 'missed-report') { goTab('reports'); setTimeout(() => $('mm-rows').closest('.card').scrollIntoView({ behavior: 'smooth' }), 80); }
+    else goTab(go);
+  });
+
   $('today-rows').addEventListener('click', async e => {
     const sw = e.target.closest('[data-swap]');
     if (sw) {
