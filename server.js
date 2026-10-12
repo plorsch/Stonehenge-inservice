@@ -1863,7 +1863,7 @@ async function adminRoutes(req, res, p, m, url) {
     const mine = db.layouts[req.adminUser] = db.layouts[req.adminUser] || {};
     if (b.reset) delete mine[page];
     else mine[page] = (Array.isArray(b.tiles) ? b.tiles : []).slice(0, 40)
-      .map(t => ({ id: cleanText(t && t.id, 30), span: Math.min(12, Math.max(3, Math.round(Number(t && t.span) || 6))) }))
+      .map(t => ({ id: cleanText(t && t.id, 30), span: Math.min(12, Math.max(3, Math.round(Number(t && t.span) || 6))), h: Number(t && t.h) >= 120 ? Math.min(3000, Math.round(Number(t.h))) : 0 }))
       .filter(t => /^[a-z]+$/.test(t.id));
     saveDb();
     return send(res, 200, { ok: true });

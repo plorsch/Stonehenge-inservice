@@ -1984,27 +1984,36 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   const tiles = () => [...$('set-grid').children].filter(c => c.dataset.tile);
   function applyLayout() {
     const saved = (state.layouts && state.layouts.settings) || [];
-    const order = saved.length ? saved.map(t => [t.id, t.span]) : TILE_DEFAULT;
+    const order = saved.length ? saved.map(t => [t.id, t.span, t.h]) : TILE_DEFAULT;
     const byId = Object.fromEntries(tiles().map(t => [t.dataset.tile, t]));
     const placed = new Set();
-    for (const [id, span] of order) {
+    for (const [id, span, h] of order) {
       const t = byId[id];
       if (!t) continue;
       t.style.setProperty('--span', span);
+      setTileHeight(t, h || 0);
       $('set-grid').appendChild(t);
       placed.add(id);
     }
     // Tiles added after the layout was saved go at the end, at their default width.
-    for (const [id, span] of TILE_DEFAULT) if (!placed.has(id) && byId[id]) { byId[id].style.setProperty('--span', span); $('set-grid').appendChild(byId[id]); }
+    for (const [id, span] of TILE_DEFAULT) if (!placed.has(id) && byId[id]) { byId[id].style.setProperty('--span', span); setTileHeight(byId[id], 0); $('set-grid').appendChild(byId[id]); }
     tiles().forEach(markWidth);
   }
   const spanOf = t => Number(getComputedStyle(t).getPropertyValue('--span')) || 6;
+  // A chosen height: the tile scrolls inside when its content is taller. 0 = fit the content.
+  function setTileHeight(t, h) {
+    t.dataset.h = h || 0;
+    t.classList.toggle('fixed-h', !!h);
+    t.style.setProperty('--h', h ? h + 'px' : 'none');
+    const lab = t.querySelector('.tile-ctl .hlab');
+    if (lab) lab.innerHTML = h ? `${h}px tall <button type="button" class="hauto" title="Fit the content again">Auto</button>` : 'Auto height';
+  }
   function markWidth(t) {
     const span = spanOf(t);
     t.querySelectorAll('.tile-ctl .w button').forEach(b => b.classList.toggle('on', Number(b.dataset.span) === span));
   }
   async function saveLayout() {
-    const list = tiles().map(t => ({ id: t.dataset.tile, span: spanOf(t) }));
+    const list = tiles().map(t => ({ id: t.dataset.tile, span: spanOf(t), h: Number(t.dataset.h) || 0 }));
     state.layouts = Object.assign({}, state.layouts, { settings: list });
     try { await api('/api/admin/layout', { method: 'PUT', body: JSON.stringify({ page: 'settings', tiles: list }) }); } catch (err) { fail(err); }
   }
@@ -2013,12 +2022,27 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       if (t.querySelector(':scope > .tile-ctl')) continue;
       const ctl = document.createElement('div');
       ctl.className = 'tile-ctl';
-      ctl.innerHTML = `<span class="grip">⠿</span><span class="t">${escapeHtml(t.dataset.title || '')}</span><span class="w">${WIDTHS.map(([n, l]) => `<button type="button" data-span="${n}" title="${l === 'Full' ? 'Full width' : l + ' width'}">${l}</button>`).join('')}</span>`;
+      ctl.innerHTML = `<span class="grip">⠿</span><span class="t">${escapeHtml(t.dataset.title || '')}</span><span class="hlab small"></span><span class="w">${WIDTHS.map(([n, l]) => `<button type="button" data-span="${n}" title="${l === 'Full' ? 'Full width' : l + ' width'}">${l}</button>`).join('')}</span>`;
       t.prepend(ctl);
       const rz = document.createElement('div');
       rz.className = 'tile-resize';
       rz.title = 'Drag to make wider or narrower';
       t.appendChild(rz);
+      const rh = document.createElement('div');
+      rh.className = 'tile-resize-b';
+      rh.title = 'Drag to make taller or shorter';
+      t.appendChild(rh);
+      setTileHeight(t, Number(t.dataset.h) || 0);
+      ctl.addEventListener('click', e => { if (e.target.closest('.hauto')) { setTileHeight(t, 0); saveLayout(); } });
+      // Drag the bottom edge to set the height; the content scrolls inside if it's taller.
+      rh.addEventListener('pointerdown', e => {
+        e.preventDefault(); e.stopPropagation();
+        rh.setPointerCapture(e.pointerId);
+        const top = t.getBoundingClientRect().top;
+        const move = ev => setTileHeight(t, Math.max(160, Math.round(ev.clientY - top)));
+        const up = () => { rh.removeEventListener('pointermove', move); rh.removeEventListener('pointerup', up); rh.removeEventListener('pointercancel', up); saveLayout(); };
+        rh.addEventListener('pointermove', move); rh.addEventListener('pointerup', up); rh.addEventListener('pointercancel', up);
+      });
       ctl.querySelector('.w').addEventListener('click', e => {
         const b = e.target.closest('[data-span]');
         if (!b) return;
@@ -2027,7 +2051,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       // Drag anywhere on a tile to move it (mouse, trackpad or touch). The tile follows the pointer,
       // a dashed space shows where it will land, and the other tiles slide out of the way.
       t.addEventListener('pointerdown', e => {
-        if (!$('set-grid').classList.contains('editing') || e.button > 0 || e.target.closest('.w, .tile-resize')) return;
+        if (!$('set-grid').classList.contains('editing') || e.button > 0 || e.target.closest('.w, .tile-resize, .tile-resize-b, .hauto')) return;
         e.preventDefault();
         const grid = $('set-grid');
         const r0 = t.getBoundingClientRect();
