@@ -530,18 +530,32 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
 - At most one question may be "select all that apply", with 2 or 3 correct answers.
 - Simple, everyday words. No trick questions.
 - Never mention a real resident, staff member, or anyone's personal or health information.`,
-      `Reply with plain text in exactly this format and nothing else:\n\n` + (more ? '' : `TITLE: a short title\nLESSON:\nlead sentence\n- bullet\n- bullet\n` + (es ? `SPANISH TITLE: ...\nSPANISH LESSON:\n...\n` : '') + '\n') + qFormat + `\n\n(repeat the QUESTION block for each question)`
+      `Put your whole reply inside ONE code block (so it can be copied with line breaks), in exactly this format, and nothing else:\n\n` + (more ? '' : `TITLE: a short title\nLESSON:\nlead sentence\n- bullet\n- bullet\n` + (es ? `SPANISH TITLE: ...\nSPANISH LESSON:\n...\n` : '') + '\n') + qFormat + `\n\n(repeat the QUESTION block for each question)`
     ].join('\n\n');
   }
   // Reads the AI's answer. Forgiving about markdown, numbering and spacing.
   function parseAi(text) {
     const out = { title: '', lesson: [], es: { title: '', lesson: [] }, questions: [] };
     let q = null, into = null;
-    for (const raw of String(text).replace(/\r/g, '').split('\n')) {
+    // Copying from a chat window often loses the line breaks ("TITLE: x LESSON: y - z QUESTION: ..."), so put each label back on its own line.
+    const LABEL = /(?<!SPANISH)\s+(?=(?:\*\*)?(?:SPANISH\s+)?(?:TITLE|LESSON|QUESTION|TYPE|CORRECT|WRONG|HINT|EXPLANATION)(?:\s+ANSWERS?)?\s*\d*\s*(?:\*\*)?\s*:)/g;
+    let body = String(text).replace(/\r/g, '').replace(/```\w*/g, '').replace(LABEL, '\n');
+    // Inside a squashed lesson, " - " or " • " starts a bullet.
+    body = body.replace(/((?:^|\n)(?:SPANISH\s+)?LESSON\s*:[^\n]*)/gi, m => m.replace(/\s+[-•*]\s+(?=\S)/g, '\n- '));
+    // "WRONG: a | b" or a list under the label both work; a bullet under CORRECT/WRONG becomes its own line of that kind.
+    let lastKey = null;
+    body = body.split('\n').map(line => {
+      const k = line.match(/^[\s*_]*(?:SPANISH\s+)?(CORRECT|WRONG)\b/i);
+      if (k) { lastKey = line.match(/^[\s*_]*((?:SPANISH\s+)?(?:CORRECT|WRONG))/i)[1].toUpperCase(); return line; }
+      if (/^[\s*_]*(?:SPANISH\s+)?(TITLE|LESSON|QUESTION|TYPE|HINT|EXPLANATION)\b/i.test(line)) lastKey = null;
+      const b = lastKey && line.match(/^\s*(?:[-•*]|[a-d][.)])\s+(.+)$/i);
+      return b ? `${lastKey}: ${b[1]}` : line;
+    }).join('\n');
+    for (const raw of body.split('\n')) {
       const clean = raw.replace(/^[\s>#*_`]*(\d+[.)]\s*)?[*_`]*/, '').replace(/^[-•]\s+(?=[A-Za-z ]+:)/, '');
       const m = clean.match(/^(spanish\s+)?(title|lesson|question|type|correct(?:\s+answers?)?|wrong(?:\s+answers?)?|hint|explanation)\s*\d*\s*[*_]*\s*:\s*[*_]*\s*(.*)$/i);
       if (m) {
-        const sp = !!m[1], key = m[2].toLowerCase().split(/\s/)[0], val = m[3].replace(/[*_]+$/, '').trim();
+        const sp = !!m[1], key = m[2].toLowerCase().split(/\s/)[0], val = m[3].replace(/[*_]+$/, '').replace(/\s+\d+[.)]$/, '').trim();
         if (key === 'question' && !sp) { q = { text: val, type: 'single', correctAnswers: [], wrongAnswers: [], hint: '', explanation: '', es: { text: '', correctAnswers: [], wrongAnswers: [], hint: '', explanation: '' } }; out.questions.push(q); into = null; continue; }
         if (key === 'title') { (sp ? out.es : out).title = val; into = null; continue; }
         if (key === 'lesson') { into = sp ? out.es.lesson : out.lesson; if (val) into.push(val); continue; }
