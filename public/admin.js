@@ -1,5 +1,30 @@
 (() => {
   const $ = id => document.getElementById(id);
+  // Our own pop-up instead of the browser's: the text can be selected, and there's a Copy button.
+  function alert(message) {
+    let d = document.getElementById('notice');
+    if (!d) {
+      d = document.createElement('dialog');
+      d.id = 'notice';
+      d.innerHTML = '<div class="dlg-body"><div id="notice-text"></div></div><div class="dlg-foot"><span id="notice-copied" class="muted small"></span><button type="button" class="btn ghost" id="notice-copy">📋 Copy</button><button type="button" class="btn" id="notice-ok">OK</button></div>';
+      document.body.appendChild(d);
+      d.querySelector('#notice-ok').addEventListener('click', () => d.close());
+      d.querySelector('#notice-copy').addEventListener('click', async () => {
+        const text = d.querySelector('#notice-text').innerText;
+        try { await navigator.clipboard.writeText(text); }
+        catch {
+          const r = document.createRange(); r.selectNodeContents(d.querySelector('#notice-text'));
+          const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); document.execCommand('copy');
+        }
+        d.querySelector('#notice-copied').textContent = 'Copied ✓';
+      });
+    }
+    d.querySelector('#notice-text').textContent = String(message);
+    d.querySelector('#notice-copied').textContent = '';
+    if (d.open) d.close();
+    d.showModal();
+    d.querySelector('#notice-ok').focus();
+  }
   let state = null;
   let editingTopicId = null;
   let editingStaffId = null;
