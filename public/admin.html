@@ -206,7 +206,6 @@ table.la tr:hover td { background: transparent; }
 @keyframes flashc { 0%, 60% { box-shadow: 0 0 0 4px #f4b400; } 100% { box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,.08)); } }
 
 /* Row editors in Settings */
-.card.wide { grid-column: 1 / -1; }
 .dl-grid { display: grid; grid-template-columns: minmax(220px, 1fr) 2.2fr; gap: 24px; }
 @media (max-width: 900px) { .dl-grid { grid-template-columns: 1fr; } }
 .rows-ed { display: grid; gap: 6px; margin: 4px 0 8px; }
@@ -232,6 +231,28 @@ table.la tr:hover td { background: transparent; }
 .fmt-bar button { width: 30px; height: 28px; border: 1px solid #d5dee5; background: #fff; border-radius: 7px; cursor: pointer; font-size: 14px; color: #17485d; padding: 0; }
 .fmt-bar button:hover { background: #e9f3f7; border-color: #8fb3c2; }
 .fmt-tip { font-size: 12px; color: #8a97a3; margin-left: 6px; }
+
+/* Settings tiles and the layout editor */
+.layout-bar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.lay-help { margin-right: auto; font-size: 13px; color: #17485d; background: #e9f3f7; padding: 6px 12px; border-radius: 999px; }
+.tiles-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.tiles-grid > .card { grid-column: span var(--span, 6); margin: 0; min-width: 0; position: relative; }
+@media (max-width: 760px) { .tiles-grid > .card { grid-column: 1 / -1 !important; } }
+.tile-ctl { display: none; }
+.tiles-grid.editing > .card { outline: 2px dashed #8fb3c2; outline-offset: 2px; padding-top: 0; overflow: hidden; }
+.tiles-grid.editing > .card > :not(.tile-ctl):not(.tile-resize) { pointer-events: none; opacity: .55; user-select: none; }
+.tiles-grid.editing .tile-ctl { display: flex; align-items: center; gap: 8px; margin: 0 -22px 14px; padding: 8px 12px; background: #e9f3f7; cursor: grab; touch-action: none; user-select: none; }
+.tile-ctl .grip { font-size: 18px; color: #1f6f8b; }
+.tile-ctl .t { font-weight: 700; color: #17485d; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-ctl .w { display: flex; gap: 3px; }
+.tile-ctl .w button { border: 1px solid #c9d9e1; background: #fff; border-radius: 6px; font-size: 12px; padding: 2px 7px; cursor: pointer; color: #17485d; }
+.tile-ctl .w button.on { background: #1f6f8b; color: #fff; border-color: #1f6f8b; }
+.tile-resize { display: none; position: absolute; top: 0; right: 0; width: 14px; height: 100%; cursor: ew-resize; touch-action: none; }
+.tile-resize::after { content: ''; position: absolute; top: 50%; right: 4px; width: 4px; height: 44px; margin-top: -22px; border-radius: 4px; background: #1f6f8b; opacity: .6; }
+.tiles-grid.editing .tile-resize { display: block; }
+.tiles-grid > .card.dragging { opacity: .4; }
+.tiles-grid > .card.drop-before { box-shadow: -6px 0 0 #f4b400; }
+.tiles-grid > .card.drop-after { box-shadow: 6px 0 0 #f4b400; }
 </style>
 </head>
 <body>
@@ -675,8 +696,13 @@ table.la tr:hover td { background: transparent; }
 
   <!-- Settings -->
   <section class="tab" id="tab-settings">
-    <div class="grid">
-      <div class="card">
+    <div class="layout-bar" id="lay-bar">
+      <span class="lay-help" id="lay-help" hidden>Drag a tile by its top bar to move it. Drag its right edge, or pick a width, to resize. Changes save for your login.</span>
+      <button class="btn ghost" id="lay-reset" hidden>Reset to default</button>
+      <button class="btn ghost" id="lay-edit">✥ Edit layout</button>
+    </div>
+    <div class="tiles-grid" id="set-grid">
+      <div class="card" data-tile="kiosk" data-title="Kiosk">
         <h2>Kiosk</h2>
         <label class="block" for="set-facility">Facility name <span class="hint">shown at the top of the iPad</span></label>
         <input type="text" id="set-facility" style="width:100%">
@@ -685,7 +711,7 @@ table.la tr:hover td { background: transparent; }
         <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px"><input type="checkbox" id="set-unlisted" style="margin-top:4px"> <span>Let staff who aren't on the roster type their name instead<br><span class="hint">They are marked "not on roster" in responses and do not get required education.</span></span></label>
         <div style="margin-top:14px"><button class="btn" id="save-settings">Save</button></div>
       </div>
-      <div class="card wide" id="dept-card">
+      <div class="card" id="dept-card" data-tile="depts" data-title="Departments and leaders">
         <h2>Departments and leaders</h2>
         <div class="dl-grid">
           <div>
@@ -696,19 +722,19 @@ table.la tr:hover td { background: transparent; }
           <div>
             <label class="block">Department leaders <span class="hint">groups the Clock-in check list, and gets the follow-up email when someone in that department misses a question</span></label>
             <div class="rows-ed" id="set-leaders"><div class="re-head"><span>Department</span><span>Leader name</span><span>Email <span class="hint">separate several with commas</span></span><span></span></div></div>
-            <button class="btn subtle" id="add-leader">+ Add a leader</button>
+            <button class="btn subtle" id="add-leader">+ Add a leader</button> <button class="btn subtle" id="bulk-leaders">📋 Paste or upload a list</button>
           </div>
         </div>
         <div style="margin-top:14px"><button class="btn" id="save-depts">Save</button></div>
       </div>
-      <div class="card wide" id="closing-card">
+      <div class="card" id="closing-card" data-tile="closing" data-title="End-screen messages">
         <h2>End-screen messages</h2>
         <div class="muted small">The iPad shows one of these at random after each in-service.</div>
         <div class="rows-ed closing-grid" id="set-closing"></div>
         <button class="btn subtle" id="add-closing">+ Add a message</button>
         <div style="margin-top:14px"><button class="btn" id="save-closing">Save</button></div>
       </div>
-      <div class="card">
+      <div class="card" data-tile="password" data-title="Admin password">
         <h2>Admin password</h2>
         <div id="pw-env" class="muted small" hidden>The password is set by the hosting service (ADMIN_PASSWORD), so it can't be changed here.</div>
         <div id="pw-form">
@@ -717,7 +743,9 @@ table.la tr:hover td { background: transparent; }
           <input type="password" id="set-pw" style="width:100%" autocomplete="new-password">
           <div style="margin-top:10px"><button class="btn" id="save-pw">Change password</button></div>
         </div>
-        <h2 style="margin-top:24px">Admin logins</h2>
+      </div>
+      <div class="card" data-tile="logins" data-title="Admin logins">
+        <h2>Admin logins</h2>
         <div class="muted small" id="au-intro">Give each person their own login for this admin page. They sign in with their username and password.</div>
         <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Name</th><th>Username</th><th>Last signed in</th><th></th></tr></thead><tbody id="au-rows"></tbody></table></div>
         <div id="au-add">
@@ -730,28 +758,34 @@ table.la tr:hover td { background: transparent; }
           <div style="margin-top:10px"><button class="btn" id="au-go">Add login</button> <button class="btn ghost" id="au-gen" type="button">Make up a password</button></div>
           <div class="err" id="au-error"></div>
         </div>
-        <h2 style="margin-top:24px">Email alerts</h2>
+      </div>
+      <div class="card" data-tile="email" data-title="Email alerts">
+        <h2>Email alerts</h2>
         <div class="small" id="em-status"></div>
         <label class="block" for="set-alert-emails">Email when someone not on the roster does an in-service <span class="hint">one or more addresses, one per line</span></label>
         <textarea id="set-alert-emails" rows="3" placeholder="name@stonehenge.com"></textarea>
-        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" id="set-missed-followup" style="margin-top:4px"> <span>When someone misses a question on the first try, email their department leader (from Department leaders above) with an "I've educated them" button. Listed on Reports → Needs follow-up either way.</span></label>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" id="set-missed-followup" style="margin-top:4px"> <span>When someone misses a question on the first try, email their department leader (from Departments and leaders) with an "I've educated them" button. Listed on Reports → Needs follow-up either way.</span></label>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="save-email">Save email settings</button><button class="btn ghost" id="test-email">Send a test email</button></div>
         <details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Recent emails</summary><div id="em-log" class="small"></div></details>
-        <h2 style="margin-top:24px">Backup</h2>
+      </div>
+      <div class="card" data-tile="backup" data-title="Backup">
+        <h2>Backup</h2>
         <div class="muted small">Download a copy at least weekly and keep it somewhere safe.</div>
         <div class="toolbar" style="margin-top:10px">
           <a class="btn ghost" href="/api/admin/backup">Download full backup</a>
           <a class="btn ghost" href="/api/admin/responses.csv">Download all responses (CSV)</a>
         </div>
-        <h2 style="margin-top:24px">Going live: clear test data</h2>
-        <div class="muted small">Removes what was entered while trying the app out. Topics, your real staff, settings and decor are kept. A full copy is saved on the server first, and you can also download a backup above.</div>
-        <div id="td-list" style="margin-top:8px"></div>
-        <div style="margin-top:10px"><button class="btn" id="td-go" style="background:var(--warn);color:#fff">Clear selected</button></div>
         <h3 style="margin-top:16px">Restore from a backup</h3>
         <div class="muted small">Replaces all current data with the backup file. A copy of the current data is saved first.</div>
         <div style="margin-top:8px"><input type="file" id="restore-file" accept=".json,application/json"></div>
       </div>
-      <div class="card" style="grid-column:1/-1">
+      <div class="card" data-tile="golive" data-title="Going live: clear test data">
+        <h2>Going live: clear test data</h2>
+        <div class="muted small">Removes what was entered while trying the app out. Topics, your real staff, settings and decor are kept. A full copy is saved on the server first, and you can also download a backup above.</div>
+        <div id="td-list" style="margin-top:8px"></div>
+        <div style="margin-top:10px"><button class="btn" id="td-go" style="background:var(--warn);color:#fff">Clear selected</button></div>
+      </div>
+      <div class="card" data-tile="decor" data-title="Home screen decor">
         <h2>Home screen decor</h2>
         <div class="muted small">The iPad's home screen changes with the month: the decorations float in the background, the message shows above the keypad, and the color tints the screen. Separate decorations with spaces. Leave a month blank for no decor.</div>
         <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="decor-on"> Show seasonal decor</label>
@@ -908,6 +942,17 @@ table.la tr:hover td { background: transparent; }
     <button class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button>
     <button class="btn" id="ai-fill">Fill in the topic</button>
   </div>
+</dialog>
+
+<dialog id="leader-bulk" style="width:min(640px,96vw)">
+  <div class="dlg-head"><h2 style="margin:0">Add leaders from a list</h2></div>
+  <div class="dlg-body">
+    <div class="muted small" style="margin-top:10px">Copy three columns from Excel (Department, Leader name, Email) and paste them below, or upload the spreadsheet. A header row is fine. Several emails in one cell are fine too.</div>
+    <textarea id="lb-text" rows="8" style="width:100%;margin-top:8px" placeholder="Dietary&#9;Andi Smith&#9;andi@stonehenge.com&#10;Nursing&#9;Bo Lee&#9;bo@stonehenge.com"></textarea>
+    <div style="margin-top:8px"><label class="small">Or upload Excel or CSV: <input type="file" id="lb-file" accept=".xlsx,.xls,.csv,text/csv"></label></div>
+    <div id="lb-preview" class="small" style="margin-top:10px"></div>
+  </div>
+  <div class="dlg-foot"><button class="btn ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn" type="button" id="lb-go" disabled>Add to the list</button></div>
 </dialog>
 
 <!-- Generic viewer (preview, progress) -->

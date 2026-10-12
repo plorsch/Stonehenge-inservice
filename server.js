@@ -1336,7 +1336,8 @@ async function adminRoutes(req, res, p, m, url) {
       newHires: newHireList(),
       streakTop: (() => { const st = streakStats(); return db.employees.filter(e => e.active && st[e.id] && st[e.id].streak >= STREAK_LEADER_MIN)
         .sort((a, b) => st[b.id].streak - st[a.id].streak).slice(0, 5).map(e => ({ name: e.name, department: e.department, streak: st[e.id].streak })); })(),
-      kioskUrls: kioskUrls(), passwordFromEnv, me: req.adminUser, isMainAdmin: req.adminUser === config.adminUser
+      kioskUrls: kioskUrls(), passwordFromEnv, me: req.adminUser, isMainAdmin: req.adminUser === config.adminUser,
+      layouts: (db.layouts || {})[req.adminUser] || {}
     });
   }
 
@@ -1820,6 +1821,21 @@ async function adminRoutes(req, res, p, m, url) {
     return send(res, 200, { today: today(), start, mode: db.settings.fallbackMode, cultureDay: db.settings.cultureDay,
       days: all.filter(d => d.date >= start),
       required: db.required.filter(q => q.active && (!q.endDate || q.endDate >= start)).map(q => ({ id: q.id, title: (findTopic(q.topicId) || {}).title || '', departments: q.departments, endDate: q.endDate || null })) });
+  }
+
+  // Each login's own tile order and widths, e.g. for the Settings tab.
+  if (m === 'PUT' && p === '/api/admin/layout') {
+    const b = await readBody(req);
+    const page = cleanText(b.page, 30);
+    if (!/^[a-z]+$/.test(page)) return send(res, 400, { error: 'Unknown page.' });
+    db.layouts = db.layouts || {};
+    const mine = db.layouts[req.adminUser] = db.layouts[req.adminUser] || {};
+    if (b.reset) delete mine[page];
+    else mine[page] = (Array.isArray(b.tiles) ? b.tiles : []).slice(0, 40)
+      .map(t => ({ id: cleanText(t && t.id, 30), span: Math.min(12, Math.max(3, Math.round(Number(t && t.span) || 6))) }))
+      .filter(t => /^[a-z]+$/.test(t.id));
+    saveDb();
+    return send(res, 200, { ok: true });
   }
 
   if (m === 'GET' && p === '/api/admin/dashboard') {

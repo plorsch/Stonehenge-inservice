@@ -1920,8 +1920,112 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   }
 
   // ---------- settings ----------
+  // ---------- Settings tiles: order and width, saved per login ----------
+  const TILE_DEFAULT = [['kiosk', 6], ['email', 6], ['depts', 12], ['closing', 12], ['logins', 6], ['password', 6], ['backup', 6], ['golive', 6], ['decor', 12]];
+  const WIDTHS = [[4, '⅓'], [6, '½'], [8, '⅔'], [12, 'Full']];
+  const tiles = () => [...$('set-grid').children].filter(c => c.dataset.tile);
+  function applyLayout() {
+    const saved = (state.layouts && state.layouts.settings) || [];
+    const order = saved.length ? saved.map(t => [t.id, t.span]) : TILE_DEFAULT;
+    const byId = Object.fromEntries(tiles().map(t => [t.dataset.tile, t]));
+    const placed = new Set();
+    for (const [id, span] of order) {
+      const t = byId[id];
+      if (!t) continue;
+      t.style.setProperty('--span', span);
+      $('set-grid').appendChild(t);
+      placed.add(id);
+    }
+    // Tiles added after the layout was saved go at the end, at their default width.
+    for (const [id, span] of TILE_DEFAULT) if (!placed.has(id) && byId[id]) { byId[id].style.setProperty('--span', span); $('set-grid').appendChild(byId[id]); }
+    tiles().forEach(markWidth);
+  }
+  const spanOf = t => Number(getComputedStyle(t).getPropertyValue('--span')) || 6;
+  function markWidth(t) {
+    const span = spanOf(t);
+    t.querySelectorAll('.tile-ctl .w button').forEach(b => b.classList.toggle('on', Number(b.dataset.span) === span));
+  }
+  async function saveLayout() {
+    const list = tiles().map(t => ({ id: t.dataset.tile, span: spanOf(t) }));
+    state.layouts = Object.assign({}, state.layouts, { settings: list });
+    try { await api('/api/admin/layout', { method: 'PUT', body: JSON.stringify({ page: 'settings', tiles: list }) }); } catch (err) { fail(err); }
+  }
+  function addTileControls() {
+    for (const t of tiles()) {
+      if (t.querySelector(':scope > .tile-ctl')) continue;
+      const ctl = document.createElement('div');
+      ctl.className = 'tile-ctl';
+      ctl.innerHTML = `<span class="grip">⠿</span><span class="t">${escapeHtml(t.dataset.title || '')}</span><span class="w">${WIDTHS.map(([n, l]) => `<button type="button" data-span="${n}" title="${l === 'Full' ? 'Full width' : l + ' width'}">${l}</button>`).join('')}</span>`;
+      t.prepend(ctl);
+      const rz = document.createElement('div');
+      rz.className = 'tile-resize';
+      rz.title = 'Drag to make wider or narrower';
+      t.appendChild(rz);
+      ctl.querySelector('.w').addEventListener('click', e => {
+        const b = e.target.closest('[data-span]');
+        if (!b) return;
+        t.style.setProperty('--span', b.dataset.span); markWidth(t); saveLayout();
+      });
+      // Drag to move (mouse, trackpad or touch).
+      ctl.addEventListener('pointerdown', e => {
+        if (e.target.closest('.w') || !$('set-grid').classList.contains('editing')) return;
+        e.preventDefault();
+        ctl.setPointerCapture(e.pointerId);
+        t.classList.add('dragging');
+        let target = null, after = false;
+        const clear = () => tiles().forEach(x => x.classList.remove('drop-before', 'drop-after'));
+        const move = ev => {
+          clear();
+          const el = document.elementFromPoint(ev.clientX, ev.clientY);
+          const over = el && el.closest('#set-grid > .card');
+          if (!over || over === t) { target = null; return; }
+          const r = over.getBoundingClientRect();
+          after = ev.clientX > r.left + r.width / 2;
+          target = over;
+          over.classList.add(after ? 'drop-after' : 'drop-before');
+        };
+        const up = () => {
+          ctl.removeEventListener('pointermove', move); ctl.removeEventListener('pointerup', up); ctl.removeEventListener('pointercancel', up);
+          clear(); t.classList.remove('dragging');
+          if (target) { target.insertAdjacentElement(after ? 'afterend' : 'beforebegin', t); saveLayout(); }
+        };
+        ctl.addEventListener('pointermove', move); ctl.addEventListener('pointerup', up); ctl.addEventListener('pointercancel', up);
+      });
+      // Drag the right edge to resize; it snaps to the 12-column grid.
+      rz.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        rz.setPointerCapture(e.pointerId);
+        const grid = $('set-grid').getBoundingClientRect();
+        const gap = parseFloat(getComputedStyle($('set-grid')).columnGap) || 18;
+        const colW = (grid.width + gap) / 12;
+        const left = t.getBoundingClientRect().left;
+        const move = ev => {
+          const span = Math.min(12, Math.max(3, Math.round((ev.clientX - left + gap) / colW)));
+          t.style.setProperty('--span', span); markWidth(t);
+        };
+        const up = () => { rz.removeEventListener('pointermove', move); rz.removeEventListener('pointerup', up); rz.removeEventListener('pointercancel', up); saveLayout(); };
+        rz.addEventListener('pointermove', move); rz.addEventListener('pointerup', up); rz.addEventListener('pointercancel', up);
+      });
+    }
+  }
+  $('lay-edit').addEventListener('click', () => {
+    const on = !$('set-grid').classList.contains('editing');
+    addTileControls();
+    tiles().forEach(markWidth);
+    $('set-grid').classList.toggle('editing', on);
+    $('lay-edit').textContent = on ? '✓ Done' : '✥ Edit layout';
+    $('lay-edit').classList.toggle('ghost', !on);
+    $('lay-help').hidden = !on; $('lay-reset').hidden = !on;
+  });
+  $('lay-reset').addEventListener('click', async () => {
+    state.layouts = Object.assign({}, state.layouts, { settings: [] });
+    applyLayout();
+    try { await api('/api/admin/layout', { method: 'PUT', body: JSON.stringify({ page: 'settings', reset: true }) }); toast('Back to the default layout'); } catch (err) { fail(err); }
+  });
+
   function renderSettings() {
     const s = state.settings;
+    applyLayout();
     $('set-facility').value = s.facilityName || '';
     $('set-depts').querySelectorAll('.re-row').forEach(r => r.remove());
     depts().forEach(d => addDeptRow(d));
@@ -1982,6 +2086,51 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     }
     return { out, bad };
   }
+  // Bulk add leaders: paste three columns from Excel, or upload the sheet.
+  let lbRows = [];
+  function parseLeaderRows(rows) {
+    if (!rows.length) return [];
+    const head = rows[0].map(c => String(c).trim());
+    let di = findCol(head, [/^dep/i, /^dept/i, /^unit/i]), ni = findCol(head, [/name|leader|manager|supervisor/i]), ei = findCol(head, [/e-?mail/i]);
+    const hasHeader = di >= 0 && (ni >= 0 || ei >= 0) && !String(rows[0].join(' ')).match(EMAIL_RE);
+    if (!hasHeader) { di = 0; ni = 1; ei = 2; }
+    const out = [];
+    for (const r of rows.slice(hasHeader ? 1 : 0)) {
+      const cells = r.map(c => String(c).trim());
+      const dept = cells[di] || '';
+      // Emails anywhere in the row count, so a missing or shifted column still works.
+      const emails = [...new Set((cells.join(' ').match(EMAIL_RE) || []).map(e => e.toLowerCase()))];
+      let name = (ni >= 0 ? cells[ni] : '') || '';
+      if (name.match(EMAIL_RE)) name = '';
+      if (dept && (name || emails.length)) out.push({ dept, name, emails });
+    }
+    return out;
+  }
+  function showLeaderPreview() {
+    $('lb-go').disabled = !lbRows.length;
+    $('lb-preview').innerHTML = lbRows.length
+      ? `<b>${lbRows.length} leader${lbRows.length === 1 ? '' : 's'} found:</b><table style="margin-top:6px"><tbody>${lbRows.map(r => `<tr><td>${escapeHtml(r.dept)}</td><td>${escapeHtml(r.name)}</td><td>${r.emails.length ? escapeHtml(r.emails.join(', ')) : '<span class="err">no email</span>'}</td></tr>`).join('')}</tbody></table>`
+      : ($('lb-text').value.trim() ? '<span class="err">Couldn\'t find any rows with a department and a name or email.</span>' : '');
+  }
+  $('bulk-leaders').addEventListener('click', () => { $('lb-text').value = ''; $('lb-file').value = ''; lbRows = []; showLeaderPreview(); $('leader-bulk').showModal(); });
+  $('lb-text').addEventListener('input', () => { lbRows = parseLeaderRows(parseCsv($('lb-text').value)); showLeaderPreview(); });
+  $('lb-file').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try { lbRows = parseLeaderRows(await readSheet(f, /leader|manager/i)); showLeaderPreview(); } catch (err) { fail(err); }
+  });
+  $('lb-go').addEventListener('click', () => {
+    let added = 0, updated = 0;
+    for (const r of lbRows) {
+      const existing = [...$('set-leaders').querySelectorAll('.re-row')].find(row => sameDept(row.querySelector('select').value, r.dept));
+      if (existing) existing.remove();
+      addLeaderRow(r.dept, [r.name, ...r.emails].filter(Boolean).join(', '));
+      existing ? updated++ : added++;
+    }
+    $('leader-bulk').close();
+    $('dept-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    alert(`${added ? `${added} added` : ''}${added && updated ? ', ' : ''}${updated ? `${updated} updated` : ''}. Press Save under Departments and leaders to keep them.`);
+  });
   async function saveSettings() {
     const lv = leaderValues();
     if (lv.bad.length) return alert(`Check the email for ${lv.bad.join(', ')}. It doesn't look like an email address.`);
