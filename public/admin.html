@@ -34,6 +34,11 @@
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
   .bulkbar { background: var(--brand-soft, #e4f0f5); border-radius: 10px; padding: 8px 12px; position: sticky; top: 0; z-index: 2; }
   .toolbar .grow { flex: 1; }
+  .clearwrap { position: relative; display: inline-block; max-width: 100%; }
+  .clearwrap.grow { flex: 1; }
+  .clearwrap > input { width: 100%; padding-right: 28px !important; }
+  .clearbtn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border: 0; border-radius: 50%; background: #dbe3e9; color: #3b4a56; font-size: 16px; line-height: 22px; padding: 0; cursor: pointer; }
+  .clearbtn:hover { background: #c5d0d8; }
   input[type=text], input[type=date], input[type=password], input[type=number], select, textarea {
     font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); max-width: 100%;
   }
@@ -129,7 +134,7 @@
   <section class="tab" id="tab-announcements">
     <div class="card">
       <h2>Add an announcement</h2>
-      <div class="muted small">No question, nothing to tap. Announcements show under the keypad on the iPad and on the last screen after someone finishes their in-service. Keep them to one short line.</div>
+      <div class="muted small">No question, nothing to tap. Announcements show above the keypad on the iPad and on the last screen after someone finishes their in-service. Keep them to one short line.</div>
       <div class="grid" style="margin-top:6px">
         <div>
           <label class="block" for="an-text">Announcement</label>

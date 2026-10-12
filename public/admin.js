@@ -1395,5 +1395,33 @@
     finally { e.target.value = ''; }
   });
 
+
+  // A small × in every text box that clears it (and tells its filters it changed).
+  function addClearButtons(root) {
+    root.querySelectorAll('input[type=text]:not([data-clear]), input[type=search]:not([data-clear])').forEach(input => {
+      input.dataset.clear = '1';
+      const wrap = document.createElement('span');
+      wrap.className = 'clearwrap' + (input.classList.contains('grow') ? ' grow' : '');
+      if (input.style.width) { wrap.style.width = input.style.width; input.style.width = '100%'; }
+      if (input.style.minWidth) { wrap.style.minWidth = input.style.minWidth; input.style.minWidth = ''; }
+      input.parentNode.insertBefore(wrap, input);
+      wrap.appendChild(input);
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'clearbtn'; btn.setAttribute('aria-label', 'Clear'); btn.textContent = '×';
+      wrap.appendChild(btn);
+      const sync = () => { btn.hidden = !input.value; };
+      input.addEventListener('input', sync); sync();
+      btn.addEventListener('click', () => {
+        input.value = ''; sync(); input.focus();
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+  }
+  // Values set from code (e.g. opening an editor) don't fire 'input', so check every so often.
+  setInterval(() => document.querySelectorAll('.clearwrap').forEach(w => { const i = w.querySelector('input'), b = w.querySelector('.clearbtn'); if (i && b) b.hidden = !i.value; }), 500);
+  addClearButtons(document);
+  new MutationObserver(() => addClearButtons(document)).observe(document.body, { childList: true, subtree: true });
+
   refresh().catch(fail);
 })();
