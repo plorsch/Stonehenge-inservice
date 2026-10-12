@@ -1666,13 +1666,16 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('set-unlisted').checked = !!s.allowUnlisted;
     $('set-closing').value = (s.closingMessages || []).join('\n');
     $('set-news-seconds').value = s.newsSeconds || 3;
-    $('pw-env').hidden = !state.passwordFromEnv;
+    const main = state.isMainAdmin !== false;
+    $('pw-env').hidden = !state.passwordFromEnv || !main;
+    loadAdminUsers();
     renderDecor();
     loadTestData();
     $('set-alert-emails').value = (s.alertEmails || []).join('\n');
     $('set-missed-followup').checked = s.missedFollowup !== false;
     loadEmailStatus();
-    $('pw-form').hidden = !!state.passwordFromEnv;
+    $('pw-form').hidden = !!state.passwordFromEnv && main;
+    $('pw-form').querySelector('.muted').innerHTML = main ? 'Used to open this admin page. The username is <code>admin</code>.' : `You're signed in as <code>${escapeHtml(state.me || '')}</code>. Change your own password here.`;
   }
   $('save-settings').addEventListener('click', async () => {
     try {
@@ -1875,6 +1878,48 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       toast('Decor saved. The iPad picks it up within a few minutes.');
       await refresh();
     } catch (err) { fail(err); }
+  });
+  // ----- extra admin logins -----
+  async function loadAdminUsers() {
+    try {
+      const { users } = await api('/api/admin/users');
+      const main = state.isMainAdmin !== false;
+      $('au-add').hidden = !main;
+      $('au-rows').innerHTML = `<tr><td>Main login</td><td><code>admin</code></td><td class="muted small">–</td><td></td></tr>` + users.map(u => `<tr>
+        <td><strong>${escapeHtml(u.name)}</strong></td><td><code>${escapeHtml(u.username)}</code></td>
+        <td class="small">${u.lastSeen ? fmtWhen(u.lastSeen) : '<span class="muted">Not yet</span>'}</td>
+        <td style="white-space:nowrap">${main ? `<button class="btn subtle" data-au-pw="${u.id}">New password</button><button class="btn subtle danger" data-au-del="${u.id}">Remove</button>` : ''}</td></tr>`).join('');
+    } catch { /* leave */ }
+  }
+  const makePassword = () => { const w = 'apple brave cedar delta eagle maple ocean pearl river stone tiger tulip'.split(' '); return w[Math.floor(Math.random() * w.length)] + '-' + w[Math.floor(Math.random() * w.length)] + '-' + (10 + Math.floor(Math.random() * 90)); };
+  $('au-gen').addEventListener('click', () => { $('au-pass').value = makePassword(); });
+  $('au-name').addEventListener('input', () => { if (!$('au-user').dataset.touched) $('au-user').value = $('au-name').value.trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z0-9._-]/g, ''); });
+  $('au-user').addEventListener('input', () => { $('au-user').dataset.touched = 1; });
+  $('au-go').addEventListener('click', async () => {
+    $('au-error').textContent = '';
+    try {
+      await post('/api/admin/users', { name: $('au-name').value, username: $('au-user').value, password: $('au-pass').value });
+      alert(`Login added. Send ${$('au-name').value.trim()} these:\n\nAddress: ${location.origin}/admin\nUsername: ${$('au-user').value.trim().toLowerCase()}\nPassword: ${$('au-pass').value}\n\nThey can change their password in Settings after signing in.`);
+      $('au-name').value = ''; $('au-user').value = ''; $('au-pass').value = ''; delete $('au-user').dataset.touched;
+      loadAdminUsers();
+    } catch (err) { $('au-error').textContent = err.message; }
+  });
+  $('au-rows').addEventListener('click', async e => {
+    const pw = e.target.closest('[data-au-pw]'), del = e.target.closest('[data-au-del]');
+    try {
+      if (pw) {
+        const np = prompt('New password (8+ characters):', makePassword());
+        if (!np) return;
+        await post(`/api/admin/users/${pw.dataset.auPw}/password`, { password: np });
+        alert('Password changed to: ' + np);
+      }
+      if (del) {
+        if (!confirm('Remove this login? They will no longer be able to open the admin page.')) return;
+        await api('/api/admin/users/' + del.dataset.auDel, { method: 'DELETE' });
+        toast('Login removed');
+      }
+      loadAdminUsers();
+    } catch (err) { alert(err.message); }
   });
   $('save-pw').addEventListener('click', async () => {
     try {

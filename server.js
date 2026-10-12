@@ -186,6 +186,7 @@ function upgradeDb(d) {
   d.announcements = Array.isArray(d.announcements) ? d.announcements : [];
   d.followups = Array.isArray(d.followups) ? d.followups : [];
   d.emailLog = Array.isArray(d.emailLog) ? d.emailLog : [];
+  d.admins = Array.isArray(d.admins) ? d.admins : [];
   const old = d.settings || {};
   d.settings = Object.assign(defaultSettings(), old);
   d.settings.review = Object.assign({ on: true, firstDays: 2, secondDays: 7 }, d.settings.review);
@@ -768,17 +769,33 @@ function readBody(req, maxBytes = 1e6) {
   });
 }
 
+// Admin sign-in: the main "admin" login (ADMIN_PASSWORD), plus extra logins added in Settings (db.admins, scrypt-hashed passwords).
+const hashPassword = (password, salt = crypto.randomBytes(16).toString('hex')) => ({ salt, hash: crypto.scryptSync(password, salt, 32).toString('hex') });
+const okLogins = new Map();   // recently checked "user:password" -> username, so each page request doesn't re-run scrypt
 function isAdmin(req) {
   const header = req.headers.authorization || '';
-  if (!header.startsWith('Basic ')) return false;
+  if (!header.startsWith('Basic ')) return null;
   const [user, ...rest] = Buffer.from(header.slice(6), 'base64').toString('utf8').split(':');
-  const given = Buffer.from(`${user}:${rest.join(':')}`);
+  const pass = rest.join(':');
+  const given = Buffer.from(`${user}:${pass}`);
   const expected = Buffer.from(`${config.adminUser}:${config.adminPassword}`);
-  return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+  if (given.length === expected.length && crypto.timingSafeEqual(given, expected)) return config.adminUser;
+  const key = crypto.createHash('sha256').update(header).digest('hex');
+  const hit = okLogins.get(key);
+  const a = (db.admins || []).find(x => x.username === String(user).trim().toLowerCase());
+  if (!a) return null;
+  if (hit && hit.u === a.username && hit.v === a.hash && Date.now() - hit.at < 600000) return a.username;
+  const h = Buffer.from(hashPassword(pass, a.salt).hash, 'hex');
+  if (!crypto.timingSafeEqual(h, Buffer.from(a.hash, 'hex'))) return null;
+  okLogins.set(key, { u: a.username, v: a.hash, at: Date.now() });
+  if (okLogins.size > 200) okLogins.delete(okLogins.keys().next().value);
+  if (!a.lastSeen || Date.now() - Date.parse(a.lastSeen) > 3600000) { a.lastSeen = nowIso(); saveDb(); }
+  return a.username;
 }
 
 function requireAdmin(req, res) {
-  if (isAdmin(req)) return true;
+  req.adminUser = isAdmin(req);
+  if (req.adminUser) return true;
   send(res, 401, 'Admin sign-in required.', 'text/plain', { 'WWW-Authenticate': 'Basic realm="In-Service Admin", charset="UTF-8"' });
   return false;
 }
@@ -1270,7 +1287,7 @@ async function adminRoutes(req, res, p, m, url) {
       newHires: newHireList(),
       streakTop: (() => { const st = streakStats(); return db.employees.filter(e => e.active && st[e.id] && st[e.id].streak >= STREAK_LEADER_MIN)
         .sort((a, b) => st[b.id].streak - st[a.id].streak).slice(0, 5).map(e => ({ name: e.name, department: e.department, streak: st[e.id].streak })); })(),
-      kioskUrls: kioskUrls(), passwordFromEnv
+      kioskUrls: kioskUrls(), passwordFromEnv, me: req.adminUser, isMainAdmin: req.adminUser === config.adminUser
     });
   }
 
@@ -1585,7 +1602,47 @@ async function adminRoutes(req, res, p, m, url) {
     return send(res, 200, { topicId: t.id });
   }
 
+  // Extra admin logins. Only the main "admin" login can add or remove them; anyone can change their own password.
+  const adminList = () => db.admins.map(a => ({ id: a.id, username: a.username, name: a.name, createdAt: a.createdAt, lastSeen: a.lastSeen || null }));
+  if (m === 'GET' && p === '/api/admin/users') return send(res, 200, { users: adminList(), mainUser: config.adminUser });
+  if (m === 'POST' && p === '/api/admin/users') {
+    if (req.adminUser !== config.adminUser) return send(res, 403, { error: 'Only the main admin login can add logins.' });
+    const b = await readBody(req);
+    const name = cleanText(b.name, 80), username = cleanText(b.username, 40).toLowerCase(), password = String(b.password || '');
+    if (!name) return send(res, 400, { error: 'Type their name.' });
+    if (!/^[a-z0-9._-]{3,40}$/.test(username)) return send(res, 400, { error: 'Usernames are 3 or more letters or numbers, no spaces.' });
+    if (username === config.adminUser || db.admins.some(a => a.username === username)) return send(res, 400, { error: 'That username is taken.' });
+    if (password.length < 8) return send(res, 400, { error: 'The password needs at least 8 characters.' });
+    db.admins.push(Object.assign({ id: newId(), username, name, createdAt: nowIso(), lastSeen: null }, hashPassword(password)));
+    saveDb();
+    return send(res, 200, { users: adminList() });
+  }
+  const au = p.match(/^\/api\/admin\/users\/([\w-]+)(\/password)?$/);
+  if (au) {
+    const a = db.admins.find(x => x.id === au[1]);
+    if (!a) return send(res, 404, { error: 'Not found.' });
+    const isMain = req.adminUser === config.adminUser;
+    if (m === 'DELETE' && !au[2]) {
+      if (!isMain) return send(res, 403, { error: 'Only the main admin login can remove logins.' });
+      db.admins = db.admins.filter(x => x !== a); okLogins.clear(); saveDb();
+      return send(res, 200, { users: adminList() });
+    }
+    if (m === 'POST' && au[2]) {
+      if (!isMain && req.adminUser !== a.username) return send(res, 403, { error: 'You can only change your own password.' });
+      const password = String((await readBody(req)).password || '');
+      if (password.length < 8) return send(res, 400, { error: 'The password needs at least 8 characters.' });
+      Object.assign(a, hashPassword(password)); okLogins.clear(); saveDb();
+      return send(res, 200, { users: adminList() });
+    }
+  }
   if (m === 'POST' && p === '/api/admin/password') {
+    if (req.adminUser !== config.adminUser) {   // an extra login changing its own password
+      const a = db.admins.find(x => x.username === req.adminUser);
+      const pw = String((await readBody(req)).password || '');
+      if (!a || pw.length < 8) return send(res, 400, { error: 'Use at least 8 characters.' });
+      Object.assign(a, hashPassword(pw)); okLogins.clear(); saveDb();
+      return send(res, 200, { ok: true });
+    }
     if (passwordFromEnv) return send(res, 400, { error: 'The password is set by the ADMIN_PASSWORD setting on the server. Change it there.' });
     const pw = String((await readBody(req)).password || '');
     if (pw.length < 6) return send(res, 400, { error: 'Use at least 6 characters.' });

@@ -529,6 +529,19 @@
           <input type="password" id="set-pw" style="width:100%" autocomplete="new-password">
           <div style="margin-top:10px"><button class="btn" id="save-pw">Change password</button></div>
         </div>
+        <h2 style="margin-top:24px">Admin logins</h2>
+        <div class="muted small" id="au-intro">Give each person their own login for this admin page. They sign in with their username and password.</div>
+        <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Name</th><th>Username</th><th>Last signed in</th><th></th></tr></thead><tbody id="au-rows"></tbody></table></div>
+        <div id="au-add">
+          <h3 style="margin-top:14px">Add a login</h3>
+          <div class="grid" style="gap:0 12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+            <div><label class="block" for="au-name">Name</label><input type="text" id="au-name" style="width:100%" placeholder="Carter Gee"></div>
+            <div><label class="block" for="au-user">Username</label><input type="text" id="au-user" style="width:100%" placeholder="carter" autocomplete="off"></div>
+            <div><label class="block" for="au-pass">Password <span class="hint">8+ characters</span></label><input type="text" id="au-pass" style="width:100%" autocomplete="off"></div>
+          </div>
+          <div style="margin-top:10px"><button class="btn" id="au-go">Add login</button> <button class="btn ghost" id="au-gen" type="button">Make up a password</button></div>
+          <div class="err" id="au-error"></div>
+        </div>
         <h2 style="margin-top:24px">Email alerts</h2>
         <div class="small" id="em-status"></div>
         <label class="block" for="set-alert-emails">Email when someone not on the roster does an in-service <span class="hint">one or more addresses, one per line</span></label>
