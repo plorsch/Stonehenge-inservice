@@ -2062,6 +2062,7 @@ async function handle(req, res) {
   const p = url.pathname;
   const m = req.method;
 
+  if (m === 'HEAD' && p === '/') { res.writeHead(200, { 'Cache-Control': 'no-store' }); return res.end(); } // the iPad checks the site is up before reloading
   if (m === 'GET' && (p === '/' || p === '/index.html')) return serveStatic(res, 'index.html');
   // The leader's "I've educated them" link from the follow-up email. The long random token is the key; no sign-in needed.
   const at = p.match(/^\/attest\/([a-f0-9]{36})$/);

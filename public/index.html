@@ -407,6 +407,10 @@
 
 <script src="format.js"></script>
 <script>
+  // Saved copy of this page for when the site is restarting (see sw.js). Not for the admin preview.
+  if ('serviceWorker' in navigator && !location.pathname.startsWith('/admin')) navigator.serviceWorker.register('/sw.js').catch(() => {});
+</script>
+<script>
 (() => {
   const IDLE_RESET_MS = 60000;          // back to the keypad after 1 minute without a touch
   const RESULT_RESET_S = 15;            // final screen returns to the keypad after this many seconds
@@ -443,7 +447,7 @@
     renderPin(); renderDepts();
     if (previewTopic) return startPreview();
     show('home');
-    if (Date.now() - loadedAt > RELOAD_EVERY_MS) location.reload();
+    if (Date.now() - loadedAt > RELOAD_EVERY_MS) safeReload();
   }
 
   const OFFLINE_MSG = "The iPad can't reach the internet right now. Please try again in a minute.";
@@ -452,8 +456,8 @@
     if (body) { opts.method = 'POST'; opts.body = JSON.stringify(body); }
     let res;
     const offline = () => Object.assign(new Error(OFFLINE_MSG), { offline: true });
-    try { res = await fetch(path, opts); } catch { throw offline(); }
-    if (res.status >= 502) throw offline(); // the site is restarting or unreachable
+    try { res = await fetch(path, opts); } catch { s.wasDown = true; throw offline(); }
+    if (res.status >= 502) { s.wasDown = true; throw offline(); } // the site is restarting or unreachable
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
     return data;
@@ -498,12 +502,19 @@
       answers: correct ? [] : remaining.sort(() => Math.random() - .5), explanation: correct ? o.explanation : '', explanationEs: correct ? o.explanationEs : '' };
   }
 
+  // Reload only when the site answers, so a reload never lands on the host's error page mid-restart.
+  async function safeReload() {
+    try { const r = await fetch('/', { cache: 'no-store', method: 'HEAD' }); if (r.ok) location.reload(); } catch { /* try again next time */ }
+  }
   async function loadConfig() {
     try {
       const cfg = await api('/api/kiosk/config' + (previewMonth ? '?month=' + previewMonth : '?waiting=' + readQueue().length));
       if (!previewMonth && !previewTopic) flushQueue();
       // A new version of the site was deployed: reload so the iPad picks it up without anyone touching it.
-      if (s.config && s.config.build && cfg.build !== s.config.build && $('s-home').classList.contains('active')) return location.reload();
+      if (s.config && s.config.build && cfg.build !== s.config.build && $('s-home').classList.contains('active')) return safeReload();
+      // The site was down (restarting) and is back: reload so the page is the current version, not the saved copy.
+      if (s.wasDown && !location.pathname.startsWith('/admin') && $('s-home').classList.contains('active')) return safeReload();
+      s.wasDown = false;
       s.config = cfg;
       $('facility').textContent = s.config.facilityName || 'Stonehenge';
       $('unlisted-link').hidden = !s.config.allowUnlisted;
@@ -1028,7 +1039,7 @@
   $('preview-close').addEventListener('click', () => { window.close(); });
   loadConfig().then(() => { if (previewTopic) startPreview(); });
   setInterval(() => { if ($('s-home').classList.contains('active')) loadConfig(); }, 60000);
-  setInterval(() => { if ($('s-home').classList.contains('active') && Date.now() - loadedAt > RELOAD_EVERY_MS) location.reload(); }, 10 * 60000);
+  setInterval(() => { if ($('s-home').classList.contains('active') && Date.now() - loadedAt > RELOAD_EVERY_MS) safeReload(); }, 10 * 60000);
 
   // A small × in every text box that clears it (and tells its filters it changed).
   function addClearButtons(root) {
