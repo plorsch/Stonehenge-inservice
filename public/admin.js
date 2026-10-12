@@ -2083,7 +2083,69 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     return row;
   }
   function addDeptRow(v = '') { return reRow($('set-depts'), `<input type="text" data-clear="1" maxlength="60" placeholder="Department" value="${escapeHtml(v)}">`); }
-  function addClosingRow(v = '') { return reRow($('set-closing'), `<input type="text" data-clear="1" maxlength="200" placeholder="Thanks for keeping our residents safe!" value="${escapeHtml(v)}">`); }
+  // End-screen message rows: the text, plus an optional font, color, size and GIF.
+  function addClosingRow(v = '') {
+    const m = typeof v === 'string' ? { text: v } : v;
+    const row = reRow($('set-closing'), `<textarea class="cm-text" rows="1" maxlength="300" placeholder="Thanks for keeping our residents safe!">${escapeHtml(m.text || '')}</textarea>
+      <button type="button" class="re-x cm-look" title="See it like the iPad shows it">👁</button>
+      <button type="button" class="re-x cm-toggle" title="Font, color, size and GIF">🎨</button>`);
+    row.classList.add('cm-row');
+    const panel = document.createElement('div');
+    panel.className = 'cm-style';
+    panel.hidden = true;
+    panel.innerHTML = `<label>Font <select class="cm-font">${Object.entries(MESSAGE_FONTS).map(([k, f]) => `<option value="${k}"${(m.font || '') === k ? ' selected' : ''} style="font-family:${escapeHtml(f.css)}">${f.label}</option>`).join('')}</select></label>
+      <label>Size <select class="cm-size">${Object.entries(MESSAGE_SIZES).map(([k, [l]]) => `<option value="${k === 'm' ? '' : k}"${(m.size || '') === (k === 'm' ? '' : k) ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label>Color <input type="color" class="cm-color" value="${/^#[0-9a-f]{6}$/i.test(m.color || '') ? m.color : '#1f6f8b'}"> <label class="small"><input type="checkbox" class="cm-color-on"${m.color ? ' checked' : ''}> use it</label></label>
+      <div class="cm-gif-line"><span>GIF or picture</span> <input type="file" class="cm-gif-file" accept="image/gif,image/png,image/jpeg,image/webp">
+        <input type="text" class="cm-gif" data-clear="1" placeholder="or paste a link (https://...)" value="${escapeHtml(m.gif || '')}"> <a href="https://giphy.com" target="_blank" rel="noopener" class="small">Find one on GIPHY</a></div>
+      <div class="cm-preview"></div>`;
+    row.appendChild(panel);
+    const sync = () => {
+      const msg = closingFromRow(row);
+      const styled = typeof msg === 'object';
+      row.querySelector('.cm-toggle').classList.toggle('on', styled);
+      row.querySelector('.cm-text').setAttribute('style', messageStyle(Object.assign({}, msg, { size: '' })));
+      panel.querySelector('.cm-preview').innerHTML = `<div class="muted small">On the iPad:</div>` + (msg && msg.gif ? `<img src="${escapeHtml(msg.gif)}" alt="">` : '') +
+        `<div style="font-size:26px;font-weight:700;color:#1f6f8b;${messageStyle(msg)}">${formatMessage(messageText(msg)) || '<span class="muted">Type a message</span>'}</div>`;
+      const ta = row.querySelector('.cm-text'); ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px';
+    };
+    row.addEventListener('input', sync);
+    row.addEventListener('change', sync);
+    row.querySelector('.cm-toggle').addEventListener('click', () => { panel.hidden = !panel.hidden; });
+    row.querySelector('.cm-look').addEventListener('click', () => showMessagePreview(closingFromRow(row)));
+    panel.querySelector('.cm-color').addEventListener('input', () => { panel.querySelector('.cm-color-on').checked = true; });
+    panel.querySelector('.cm-gif-file').addEventListener('change', async e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      if (f.size > 10e6) return alert('That file is over 10 MB. Please use a smaller one.');
+      try {
+        const dataUrl = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = bad; r.readAsDataURL(f); });
+        const r = await post('/api/admin/media', { dataUrl });
+        panel.querySelector('.cm-gif').value = r.url; sync();
+        toast('Uploaded. Press Save to keep it.');
+      } catch (err) { fail(err); }
+    });
+    sync();
+    if (typeof v !== 'string' && (m.gif || m.font || m.color || m.size)) panel.hidden = true;
+    return row;
+  }
+  // The end screen as the iPad shows it, with this message.
+  function showMessagePreview(msg) {
+    $('vw-title').textContent = 'End-screen preview';
+    $('vw-body').innerHTML = `<div class="ipad-mock"><div class="ipad-screen">
+      <div class="ipad-check">✓</div><div class="ipad-great">Correct!</div>
+      ${msg && msg.gif ? `<img src="${escapeHtml(msg.gif)}" alt="">` : ''}
+      <div class="ipad-msg" style="${messageStyle(msg)}">${formatMessage(messageText(msg))}</div></div></div>`;
+    $('viewer').showModal();
+  }
+  function closingFromRow(row) {
+    const q = c => row.querySelector(c);
+    const m = { text: q('.cm-text').value.trim(), font: q('.cm-font').value, size: q('.cm-size').value,
+      color: q('.cm-color-on').checked ? q('.cm-color').value : '', gif: q('.cm-gif').value.trim() };
+    for (const k of Object.keys(m)) if (!m[k]) delete m[k];
+    return Object.keys(m).length === 1 && m.text ? m.text : m;
+  }
+  const closingValues = () => [...$('set-closing').querySelectorAll('.cm-row')].map(closingFromRow).filter(m => typeof m === 'string' ? m : (m.text || m.gif));
   function addLeaderRow(dept = '', leader = '') {
     const emails = String(leader).match(EMAIL_RE) || [];
     const name = String(leader).replace(EMAIL_RE, '').replace(/[\s,;<>()]+$/, '').replace(/^[\s,;<>()]+/, '').replace(/[\s,;]+(?=[,;])/g, '').trim();
@@ -2096,7 +2158,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   $('add-dept').addEventListener('click', () => focusLast(addDeptRow()));
   $('add-closing').addEventListener('click', () => focusLast(addClosingRow()));
   $('add-leader').addEventListener('click', () => focusLast(addLeaderRow()));
-  ['set-depts', 'set-leaders', 'set-closing'].forEach(id => $(id).addEventListener('click', e => { const x = e.target.closest('.re-x'); if (x) x.closest('.re-row').remove(); }));
+  ['set-depts', 'set-leaders', 'set-closing'].forEach(id => $(id).addEventListener('click', e => { const x = e.target.closest('.re-x:not(.cm-toggle):not(.cm-look)'); if (x) x.closest('.re-row').remove(); }));
   $('set-leaders').addEventListener('input', e => {
     const i = e.target;
     if ((i.placeholder || '').includes('@')) i.classList.toggle('bad', !!i.value.trim() && (i.value.replace(EMAIL_RE, '').replace(/[\s,;]/g, '') !== ''));
@@ -2167,7 +2229,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         departments: [...new Set(rowValues('set-depts'))],
         leaders: lv.out,
         allowUnlisted: $('set-unlisted').checked,
-        closingMessages: rowValues('set-closing'),
+        closingMessages: closingValues(),
         newsSeconds: Number($('set-news-seconds').value)
       }) });
       $('sc-depts').dataset.init = ''; $('rq-depts').dataset.init = ''; $('an-depts').dataset.init = '';
@@ -2514,7 +2576,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       g.parentNode.insertBefore(fmtBar(null), g);
     });
   }
-  const isFmtField = el => el && el.matches && (el.matches(FMT_FIELDS) || !!el.closest(FMT_GROUPS) && el.matches('input, textarea'));
+  const isFmtField = el => el && el.matches && (el.matches(FMT_FIELDS) || !!el.closest(FMT_GROUPS) && el.matches('.cm-text'));
   document.addEventListener('focusin', e => { if (isFmtField(e.target)) lastFmt = e.target; });
   document.addEventListener('keydown', e => {
     if (!(e.ctrlKey || e.metaKey) || !isFmtField(e.target)) return;

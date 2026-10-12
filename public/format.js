@@ -35,3 +35,26 @@ function stripFormat(text) {
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// Fonts for end-screen messages. Built into iPads and Macs, with look-alike fallbacks elsewhere.
+const MESSAGE_FONTS = {
+  '': { label: 'Standard', css: "" },
+  hand: { label: 'Handwritten', css: "'Bradley Hand', 'Noteworthy', 'Segoe Print', cursive" },
+  marker: { label: 'Marker', css: "'Marker Felt', 'Chalkboard SE', 'Comic Sans MS', cursive" },
+  chalk: { label: 'Chalkboard', css: "'Chalkboard SE', 'Chalkboard', 'Comic Sans MS', cursive" },
+  script: { label: 'Fancy script', css: "'Snell Roundhand', 'Apple Chancery', 'Brush Script MT', cursive" },
+  type: { label: 'Typewriter', css: "'American Typewriter', 'Courier New', monospace" },
+  serif: { label: 'Classic serif', css: "Georgia, 'Times New Roman', serif" },
+  bold: { label: 'Big and bold', css: "Futura, 'Avenir Next', 'Arial Black', sans-serif", weight: 800 }
+};
+const MESSAGE_SIZES = { s: ['Small', 20], m: ['Normal', 26], l: ['Large', 34], xl: ['Huge', 46] };
+// An end-screen message is plain text, or { text, font, color, size, gif }.
+const messageText = m => typeof m === 'string' ? m : (m && m.text) || '';
+function messageStyle(m) {
+  if (!m || typeof m === 'string') return '';
+  const f = MESSAGE_FONTS[m.font] || MESSAGE_FONTS[''];
+  return [f.css && `font-family:${f.css}`, f.weight && `font-weight:${f.weight}`, /^#[0-9a-f]{6}$/i.test(m.color || '') && `color:${m.color}`,
+    MESSAGE_SIZES[m.size] && `font-size:${MESSAGE_SIZES[m.size][1]}px`].filter(Boolean).join(';');
+}
+// A message with line breaks kept, each line styled.
+const formatMessage = text => String(text || '').split('\n').map(formatInline).join('<br>');

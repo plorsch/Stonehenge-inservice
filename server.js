@@ -1314,6 +1314,24 @@ function newHireList() {
   });
 }
 
+// An end-screen message: plain text, or { text, font, color, size, gif } when it has a style or a GIF.
+function cleanMessage(m) {
+  if (typeof m === 'string') return cleanText(m, 300);
+  if (!m || typeof m !== 'object') return '';
+  const text = cleanText(m.text, 300);
+  const gif = cleanText(m.gif, 500);
+  const out = {
+    text,
+    font: ['hand', 'marker', 'chalk', 'script', 'type', 'serif', 'bold'].includes(m.font) ? m.font : '',
+    color: /^#[0-9a-f]{6}$/i.test(m.color || '') ? m.color : '',
+    size: ['s', 'l', 'xl'].includes(m.size) ? m.size : '',
+    gif: /^\/media\/[\w.-]+$/.test(gif) || /^https:\/\/[^\s"'<>]+$/.test(gif) ? gif : ''
+  };
+  for (const k of Object.keys(out)) if (!out[k]) delete out[k];
+  if (!out.text && !out.gif) return '';
+  return Object.keys(out).length === 1 && out.text ? out.text : out;
+}
+
 async function adminRoutes(req, res, p, m, url) {
   if (m === 'GET' && p === '/api/admin/state') {
     const topicStats = {};
@@ -1611,7 +1629,7 @@ async function adminRoutes(req, res, p, m, url) {
     if (Array.isArray(b.birthdayMessages)) s.birthdayMessages = cleanList(b.birthdayMessages, 250, 300);
     if (Array.isArray(b.anniversaryMessages)) s.anniversaryMessages = cleanList(b.anniversaryMessages, 250, 300);
     if ('newsSeconds' in b) { const n = Number(b.newsSeconds); if (n >= 1 && n <= 60) s.newsSeconds = Math.round(n); }
-    if (Array.isArray(b.closingMessages)) s.closingMessages = cleanList(b.closingMessages, 200, 100);
+    if (Array.isArray(b.closingMessages)) s.closingMessages = b.closingMessages.slice(0, 100).map(cleanMessage).filter(Boolean);
     if (b.decor && typeof b.decor === 'object' && Array.isArray(b.decor.months) && b.decor.months.length === 12) {
       s.decor = { on: !!b.decor.on, months: b.decor.months.map(x => ({
         emoji: cleanText(x && x.emoji, 60), message: cleanText(x && x.message, 100),

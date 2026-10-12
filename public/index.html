@@ -215,6 +215,7 @@
   .party-sub { font-size: 18px; font-weight: 700; opacity: .95; margin-top: 4px; text-shadow: 0 1px 4px rgba(0,0,0,.25); }
   @keyframes party-bg { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
   @keyframes party-bounce { 0%, 100% { transform: translateY(0) scale(1) rotate(-4deg); } 50% { transform: translateY(-12px) scale(1.12) rotate(4deg); } }
+  .closing-gif { display: block; max-width: min(320px, 70%); max-height: 200px; margin: 0 auto 10px; border-radius: 14px; }
   .closing.celebrating { background: #fff4f8; border: 2px dashed #ff9fbf; border-radius: 16px; padding: 14px 16px; color: #b0245b; }
   @media (prefers-reduced-motion: reduce) { .party, .party-emoji, .floaters span { animation: none; } }
   .badge { width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 16px; font-size: 50px; font-weight: 700; background: var(--good-soft); color: var(--good); }
@@ -854,10 +855,10 @@
   function closingLine() {
     const all = (s.config && s.config.closingMessages) || [];
     if (!all.length) return '';
-    let pool = all.filter(m => !recentClosings.includes(m));
+    let pool = all.filter(m => !recentClosings.includes(JSON.stringify(m)));
     if (!pool.length) pool = all;
     const line = pool[Math.floor(Math.random() * pool.length)];
-    recentClosings.push(line);
+    recentClosings.push(JSON.stringify(line));
     while (recentClosings.length > Math.min(8, all.length - 1)) recentClosings.shift();
     return line;
   }
@@ -956,7 +957,12 @@
     $('result-closing').hidden = more;
     const news = more ? [] : newsFor(s.who);
     const personal = more ? '' : personalLine(s.who);
-    if (!more) $('result-closing').innerHTML = formatInline(personal || closingLine());
+    if (!more) {
+      const msg = personal || closingLine();
+      const gif = typeof msg === 'object' && msg.gif ? msg.gif : '';
+      $('result-closing').innerHTML = (gif ? `<img class="closing-gif" src="${escapeHtml(gif)}" alt="">` : '') +
+        (messageText(msg) ? `<span style="${messageStyle(msg)}">${formatMessage(messageText(msg))}</span>` : '');
+    }
     const party = !more && personal ? myCelebrations(s.who) : [];
     $('result-closing').classList.toggle('celebrating', !!party.length);
     $('result-party').hidden = !party.length;
