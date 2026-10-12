@@ -848,7 +848,7 @@
     $('f-image-preview').style.display = v ? 'block' : 'none';
     if (v) $('f-image-preview').src = v;
   }
-  $('f-image').addEventListener('input', updateImagePreview);
+  $('f-image').addEventListener('input', () => { const g = gifUrl($('f-image').value); if (g !== $('f-image').value.trim()) $('f-image').value = g; updateImagePreview(); });
   $('f-image-clear').addEventListener('click', () => { $('f-image').value = ''; $('f-image-file').value = ''; updateImagePreview(); });
   $('f-image-file').addEventListener('change', async () => {
     const f = $('f-image-file').files[0];
@@ -2120,7 +2120,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       <label>Size <select class="cm-size">${Object.entries(MESSAGE_SIZES).map(([k, [l]]) => `<option value="${k === 'm' ? '' : k}"${(m.size || '') === (k === 'm' ? '' : k) ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
       <label>Color <input type="color" class="cm-color" value="${/^#[0-9a-f]{6}$/i.test(m.color || '') ? m.color : '#1f6f8b'}"> <label class="small"><input type="checkbox" class="cm-color-on"${m.color ? ' checked' : ''}> use it</label></label>
       <div class="cm-gif-line"><span>GIF or picture</span> <input type="file" class="cm-gif-file" accept="image/gif,image/png,image/jpeg,image/webp">
-        <input type="text" class="cm-gif" data-clear="1" placeholder="or paste a link (https://...)" value="${escapeHtml(m.gif || '')}"> <a href="https://giphy.com" target="_blank" rel="noopener" class="small">Find one on GIPHY</a></div>
+        <input type="text" class="cm-gif" data-clear="1" placeholder="or paste a link, including a GIPHY page link" value="${escapeHtml(m.gif || '')}"> <a href="https://giphy.com" target="_blank" rel="noopener" class="small">Find one on GIPHY</a></div>
       <div class="cm-preview"></div>`;
     row.appendChild(panel);
     const sync = () => {
@@ -2132,7 +2132,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         `<div style="font-size:26px;font-weight:700;color:#1f6f8b;${messageStyle(msg)}">${formatMessage(messageText(msg)) || '<span class="muted">Type a message</span>'}</div>`;
       const ta = row.querySelector('.cm-text'); ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px';
     };
-    row.addEventListener('input', sync);
+    row.addEventListener('input', e => { if (e.target.classList.contains('cm-gif')) { const g = gifUrl(e.target.value); if (g !== e.target.value.trim()) e.target.value = g; } sync(); });
     row.addEventListener('change', sync);
     row.querySelector('.cm-toggle').addEventListener('click', () => { panel.hidden = !panel.hidden; });
     row.querySelector('.cm-look').addEventListener('click', () => showMessagePreview(closingFromRow(row)));

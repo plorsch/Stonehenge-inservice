@@ -58,3 +58,9 @@ function messageStyle(m) {
 }
 // A message with line breaks kept, each line styled.
 const formatMessage = text => String(text || '').split('\n').map(formatInline).join('<br>');
+// A GIPHY page link (giphy.com/gifs/happy-dance-abc123) becomes the GIF itself, so either kind of link works.
+function gifUrl(v) {
+  const s = String(v || '').trim();
+  const m = s.match(/^https?:\/\/(?:www\.)?giphy\.com\/(?:gifs|stickers)\/(?:[\w-]*-)?([A-Za-z0-9]+)\/?(?:[?#].*)?$/) || s.match(/^https?:\/\/gph\.is\/g\/([A-Za-z0-9]+)/);
+  return m && !/^https?:\/\/gph/.test(s) ? `https://media.giphy.com/media/${m[1]}/giphy.gif` : s;
+}
