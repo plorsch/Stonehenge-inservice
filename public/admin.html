@@ -66,6 +66,41 @@
   tr.group th { background: var(--bg, #f3f6f8); color: var(--ink, #1d2b36); font-size: 14px; text-transform: none; letter-spacing: 0; padding-top: 14px; }
   tr.dim td { color: var(--muted); }
   .table-wrap { overflow-x: auto; }
+  .sk-head { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; }
+  .sk-icon { width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg,#ffb36b,#ff6b6b); display: grid; place-items: center; font-size: 24px; flex: none; }
+  .sk-grid { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 18px; }
+  @media (max-width: 860px) { .sk-grid { grid-template-columns: 1fr; } }
+  .sk-opts { display: flex; flex-direction: column; gap: 10px; }
+  .sk-opt { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fbfcfd; }
+  .sk-opt.col { flex-direction: column; align-items: stretch; gap: 8px; }
+  .sk-t { font-weight: 650; }
+  .sk-d { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .sw { position: relative; width: 46px; height: 26px; flex: none; cursor: pointer; }
+  .sw input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .sw span { position: absolute; inset: 0; background: #cdd6dd; border-radius: 26px; transition: background .2s; }
+  .sw span::before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+  .sw input:checked + span { background: var(--good); }
+  .sw input:checked + span::before { transform: translateX(20px); }
+  .sw input:focus-visible + span { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .seg { display: flex; flex-wrap: wrap; background: var(--bg); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button { flex: 1 1 auto; border: 0; background: transparent; padding: 7px 10px; border-radius: 8px; font: inherit; font-size: 13.5px; color: var(--muted); cursor: pointer; }
+  .seg button:hover { color: var(--ink); }
+  .seg button.on { background: #fff; color: var(--brand); font-weight: 650; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .sk-board-prev { border-radius: 14px; padding: 16px; background: linear-gradient(160deg,#fff8ec,#fff1f1); border: 1px solid #f6dfc8; }
+  .sk-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #fff; border-radius: 10px; margin-bottom: 6px; }
+  .sk-rank { width: 26px; text-align: center; font-size: 18px; }
+  .sk-who { flex: 1; min-width: 0; }
+  .sk-who small { color: var(--muted); }
+  .sk-n { font-weight: 700; color: #c2410c; white-space: nowrap; }
+  .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--brand); cursor: pointer; text-align: left; }
+  .linkish:hover { text-decoration: underline; }
+  .up-list { display: flex; flex-direction: column; gap: 6px; }
+  .up-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .up-date { width: 46px; text-align: center; line-height: 1.1; flex: none; }
+  .up-date b { display: block; font-size: 18px; }
+  .up-date span { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+  .up-when { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .up-when.today { color: var(--good); font-weight: 650; }
   .pill { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--bg); color: var(--muted); white-space: nowrap; }
   .pill.good { background: var(--good-soft); color: var(--good); }
   .pill.warn { background: var(--warn-soft); color: var(--warn); }
@@ -399,22 +434,27 @@ table.la tr:hover td { background: transparent; }
       </div>
       <div style="margin-top:10px"><button class="btn" id="an-save-msgs">Save messages</button></div>
       <h3 style="margin-top:14px">Coming up in the next 30 days</h3>
-      <div id="an-upcoming" class="small"></div>
+      <div id="an-upcoming" class="up-list"></div>
     </div>
-    <div class="card">
-      <h2>Streaks and leaderboard</h2>
-      <div class="muted small">Staff always see their own streaks and milestones privately after their in-service (5, 10, 15... in a row right on the first try, and their 10th, 25th, 50th... in-service of the year). These switches make them public, with first name and last initial only.</div>
-      <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="sk-shout"> Shout-outs on the home screen the day someone hits a streak or milestone <span class="hint">e.g. "🔥 Maria L is on a 10-in-a-row streak!"</span></label>
-      <div class="toolbar" style="margin-top:12px">
-        <label>Streak leaderboard
-          <select id="sk-where"><option value="off">Off</option><option value="home">On the home screen</option><option value="end">After the in-service</option><option value="both">Both</option></select></label>
-        <label>Rank <select id="sk-board"><option value="facility">Whole facility</option><option value="dept">Leader of each department</option><option value="both">Both</option></select></label>
-        <label>Facility <select id="sk-top"><option value="3">Top 3</option><option value="1">Leader only</option></select></label>
-        <button class="btn" id="sk-save">Save</button>
+    <div class="card sk-card">
+      <div class="sk-head"><div class="sk-icon">🔥</div><div><h2 style="margin:0">Streaks and leaderboard</h2>
+        <div class="muted small">Staff always see their own streaks privately. These make them public, with first name and last initial only. Changes save on their own.</div></div></div>
+      <div class="sk-grid">
+        <div class="sk-opts">
+          <div class="sk-opt"><div><div class="sk-t">📣 Shout-outs</div><div class="sk-d">On the home screen the day someone hits a streak or milestone, like "🔥 Maria L is on a 10-in-a-row streak!"</div></div>
+            <label class="sw"><input type="checkbox" id="sk-shout"><span></span></label></div>
+          <div class="sk-opt"><div><div class="sk-t">🏆 Trophy button</div><div class="sk-d">In the top right of the iPad home screen. Tap it to see the leaderboard, even when the leaderboard is off.</div></div>
+            <label class="sw"><input type="checkbox" id="sk-button"><span></span></label></div>
+          <div class="sk-opt col"><div class="sk-t">📊 Show the leaderboard</div>
+            <input type="hidden" id="sk-where"><div class="seg" data-for="sk-where"><button data-v="off">Off</button><button data-v="home">Home screen</button><button data-v="end">After in-service</button><button data-v="both">Both</button></div></div>
+          <div class="sk-opt col"><div class="sk-t">🏅 Who it ranks</div>
+            <input type="hidden" id="sk-board"><div class="seg" data-for="sk-board"><button data-v="facility">Whole facility</button><button data-v="dept">Each department's leader</button><button data-v="both">Both</button></div></div>
+          <div class="sk-opt col"><div class="sk-t">🥇 Facility board shows</div>
+            <input type="hidden" id="sk-top"><div class="seg" data-for="sk-top"><button data-v="3">Top 3</button><button data-v="1">Leader only</button></div></div>
+        </div>
+        <div class="sk-board-prev"><div class="sk-t" style="margin-bottom:8px">Longest streaks right now</div><div id="sk-now"></div>
+          <div class="sk-d" style="margin-top:10px">Counts first-try right answers in a row, 3 or more. A first-try miss starts it over.</div></div>
       </div>
-      <label style="display:flex;gap:8px;align-items:center;margin-top:4px"><input type="checkbox" id="sk-button"> 🏆 button in the top right of the iPad home screen <span class="hint">Tap it to see the leaderboard, ranked as chosen above, even if the leaderboard is off.</span></label>
-      <div class="muted small">The leaderboard ranks current first-try streaks of 3 or more. A first-try miss starts a person's streak over.</div>
-      <div id="sk-now" class="small" style="margin-top:8px"></div>
     </div>
   </section>
 

@@ -1365,7 +1365,7 @@ async function adminRoutes(req, res, p, m, url) {
       responseCountTotal: db.responses.length,
       newHires: newHireList(),
       streakTop: (() => { const st = streakStats(); return db.employees.filter(e => e.active && st[e.id] && st[e.id].streak >= STREAK_LEADER_MIN)
-        .sort((a, b) => st[b.id].streak - st[a.id].streak).slice(0, 5).map(e => ({ name: e.name, department: e.department, streak: st[e.id].streak })); })(),
+        .sort((a, b) => st[b.id].streak - st[a.id].streak).slice(0, 5).map(e => ({ id: e.id, name: e.name, department: e.department, streak: st[e.id].streak })); })(),
       kioskUrls: kioskUrls(), passwordFromEnv, me: req.adminUser, isMainAdmin: req.adminUser === config.adminUser,
       layouts: (db.layouts || {})[req.adminUser] || {}
     });

@@ -2424,23 +2424,45 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       (state.settings[key] || []).forEach(m => addClosingRow(m, $(id), ph));
     }
     const up = state.upcomingCelebrations || [];
+    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const daysAway = d => Math.round((Date.parse(d) - Date.parse(state.todayDate)) / 864e5);
     $('an-upcoming').innerHTML = up.length
-      ? up.map(c => `<div>${fmtDate(c.date)}: ${c.type === 'birthday' ? '🎂' : '🎉'} ${escapeHtml(c.name)}${c.department ? ` <span class="muted">(${escapeHtml(c.department)})</span>` : ''} ${c.type === 'birthday' ? 'birthday' : `${c.years} year${c.years === 1 ? '' : 's'} at work`}</div>`).join('')
+      ? up.map(c => { const n = daysAway(c.date);
+          return `<div class="up-row"><div class="up-date"><span>${MON[Number(c.date.slice(5, 7)) - 1]}</span><b>${Number(c.date.slice(8))}</b></div>
+          <div>${c.type === 'birthday' ? '🎂' : '🎉'} <button class="linkish" data-up-staff="${escapeHtml(c.id)}">${escapeHtml(c.name)}</button>${c.department ? ` <span class="muted">· ${escapeHtml(c.department)}</span>` : ''}
+          <div class="muted small">${c.type === 'birthday' ? 'Birthday' : `${c.years} year${c.years === 1 ? '' : 's'} at work`}</div></div>
+          <div class="up-when${n === 0 ? ' today' : ''}">${n === 0 ? 'Today 🎈' : n === 1 ? 'Tomorrow' : `in ${n} days`}</div></div>`; }).join('')
       : '<span class="muted">None. Add birthdays and hire dates on the Staff tab.</span>';
   }
   function renderStreakSettings() {
     const k = state.settings.streaks || { shoutOuts: false, leaderboard: 'off', top: 3 };
     $('sk-shout').checked = !!k.shoutOuts; $('sk-where').value = k.leaderboard || 'off'; $('sk-top').value = String(k.top === 1 ? 1 : 3); $('sk-board').value = k.board || 'facility'; $('sk-button').checked = !!k.button;
+    syncSegs();
     const top = state.streakTop || [];
-    $('sk-now').innerHTML = top.length ? '<strong>Longest streaks right now:</strong> ' + top.map(l => `${escapeHtml(l.name)} (${escapeHtml(l.department || '')}) ${l.streak}`).join(' · ')
-      : '<span class="muted">No one has a streak of 3 or more yet.</span>';
+    const medal = ['🥇', '🥈', '🥉'];
+    $('sk-now').innerHTML = top.length ? top.map((l, i) => `<div class="sk-row"><div class="sk-rank">${medal[i] || i + 1}</div>
+        <div class="sk-who"><button class="linkish" data-up-staff="${escapeHtml(l.id)}">${escapeHtml(l.name)}</button>${l.department ? ` <small>· ${escapeHtml(l.department)}</small>` : ''}</div>
+        <div class="sk-n">🔥 ${l.streak} in a row</div></div>`).join('')
+      : '<div class="muted small">No one has a streak of 3 or more yet.</div>';
   }
-  $('sk-save').addEventListener('click', async () => {
+  // Segmented buttons write to the hidden input named in data-for, then save.
+  function syncSegs() { document.querySelectorAll('.seg[data-for]').forEach(g => g.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === $(g.dataset.for).value))); }
+  document.querySelectorAll('.seg[data-for]').forEach(g => g.addEventListener('click', e => {
+    const b = e.target.closest('button[data-v]'); if (!b) return;
+    $(g.dataset.for).value = b.dataset.v; syncSegs(); saveStreaks();
+  }));
+  ['sk-shout', 'sk-button'].forEach(id => $(id).addEventListener('change', saveStreaks));
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-up-staff]'); if (!b) return;
+    const emp = state.employees.find(x => x.id === b.dataset.upStaff);
+    if (emp) { goTab('staff'); openStaff(emp); }
+  });
+  async function saveStreaks() {
     try {
       await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ streaks: { shoutOuts: $('sk-shout').checked, leaderboard: $('sk-where').value, top: Number($('sk-top').value), board: $('sk-board').value, button: $('sk-button').checked } }) });
       toast('Saved. The iPad picks it up within a minute.'); await refresh();
     } catch (err) { fail(err); }
-  });
+  }
   $('an-show-past').addEventListener('change', renderAnnouncements);
   $('an-add').addEventListener('click', async () => {
     $('an-error').textContent = '';
