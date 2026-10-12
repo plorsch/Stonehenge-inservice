@@ -226,6 +226,12 @@ table.la tr:hover td { background: transparent; }
 #notice-text { white-space: pre-wrap; user-select: text; font-size: 15px; line-height: 1.5; color: #1d2a33; }
 #notice .dlg-foot { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
 #notice-copied { margin-right: auto; color: #1e7b3c; }
+
+/* Text style buttons */
+.fmt-bar { display: flex; align-items: center; gap: 4px; margin: 4px 0 4px; }
+.fmt-bar button { width: 30px; height: 28px; border: 1px solid #d5dee5; background: #fff; border-radius: 7px; cursor: pointer; font-size: 14px; color: #17485d; padding: 0; }
+.fmt-bar button:hover { background: #e9f3f7; border-color: #8fb3c2; }
+.fmt-tip { font-size: 12px; color: #8a97a3; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -771,9 +777,9 @@ table.la tr:hover td { background: transparent; }
       <datalist id="category-list"></datalist>
       <label class="block">For <span class="hint">none ticked = all staff</span></label>
       <div class="checks" id="f-depts"></div>
-      <label class="block" for="f-lesson">Lesson <span class="hint">keep it short. Blank line = new paragraph, "- " starts a bullet, **word** makes bold</span></label>
+      <label class="block" for="f-lesson">Lesson <span class="hint">keep it short. Blank line = new paragraph, "- " starts a bullet. Use the buttons for bold, italic, underline or strikethrough</span></label>
       <textarea id="f-lesson" rows="8" required></textarea>
-      <details style="margin-top:6px"><summary class="muted small" style="cursor:pointer">Preview lesson</summary><div class="lesson-preview" id="f-preview"></div></details>
+      <details open style="margin-top:6px"><summary class="muted small" style="cursor:pointer">Preview lesson</summary><div class="lesson-preview" id="f-preview"></div></details>
       <label class="block">Picture or GIF <span class="hint">optional, shown above the lesson. Upload one, or paste a link to an image that starts with https://</span></label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="file" id="f-image-file" accept="image/png,image/jpeg,image/gif,image/webp">

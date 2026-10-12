@@ -618,9 +618,9 @@
     el.hidden = !items.length;
     if (!items.length) return;
     const text = items[newsIdx++ % items.length];
-    if (el.textContent === text) return;
+    if (el.dataset.text === text) return;
     el.classList.add('fade');
-    setTimeout(() => { el.textContent = text; el.classList.remove('fade'); }, el.textContent ? 400 : 0);
+    setTimeout(() => { el.innerHTML = formatInline(text); el.dataset.text = text; el.classList.remove('fade'); }, el.dataset.text ? 400 : 0);
   }
   // Restarts whenever the seconds setting changes.
   let newsTimer = null, newsEvery = 0;
@@ -788,7 +788,7 @@
   const isMulti = () => item().question.type === 'multi';
   const picked = i => isMulti() ? s.choice.has(i) : s.choice === i;
   function renderQuestion() {
-    $('question-text').textContent = es() ? item().es.question : item().question.text;
+    $('question-text').innerHTML = formatInline(es() ? item().es.question : item().question.text);
     $('select-all').hidden = !isMulti();
     $('answers').innerHTML = s.answers.map((a, i) =>
       `<button class="answer${picked(i) ? ' on' : ''}${isMulti() ? ' multi' : ''}" data-i="${i}"><span class="letter">${isMulti() ? (picked(i) ? '✓' : '') : 'ABCDEFGH'[i]}</span><span>${escapeHtml(es() && a.es ? a.es : a.en)}</span></button>`).join('');
@@ -956,7 +956,7 @@
     $('result-closing').hidden = more;
     const news = more ? [] : newsFor(s.who);
     const personal = more ? '' : personalLine(s.who);
-    if (!more) $('result-closing').textContent = personal || closingLine();
+    if (!more) $('result-closing').innerHTML = formatInline(personal || closingLine());
     const party = !more && personal ? myCelebrations(s.who) : [];
     $('result-closing').classList.toggle('celebrating', !!party.length);
     $('result-party').hidden = !party.length;
@@ -972,7 +972,7 @@
     $('result-leaders').innerHTML = (board.length ? `<h3>🏅 ${T(board.length === 1 ? 'Streak leader' : 'Top streaks', board.length === 1 ? 'Líder de racha' : 'Mejores rachas')}</h3>` + board.map((l, i) => row(`${i + 1}.`, Object.assign({ tag: true }, l))).join('') : '') +
       (myDept ? `<h3${board.length ? ' style="margin-top:10px"' : ''}>🏅 ${T(`${escapeHtml(myDept.department)} leader`, `Líder de ${escapeHtml(myDept.department)}`)}</h3>` + row('', myDept) : '');
     $('result-leaders').hidden = !board.length && !myDept;
-    $('result-news').innerHTML = news.slice(0, 4).map(t => `<div>${escapeHtml(t)}</div>`).join('');
+    $('result-news').innerHTML = news.slice(0, 4).map(t => `<div>${formatInline(t)}</div>`).join('');
     $('result-news').hidden = !news.length;
     show('result');
     if (more) return;

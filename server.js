@@ -896,6 +896,8 @@ function smtpSend(to, subject, html) {
     });
   });
 }
+// Text without the **bold**, *italic*, __underline__ and ~~strike~~ marks, for emails, CSV and lists.
+const plainText = t => String(t || '').replace(/\*\*(?=\S)(.+?)\*\*/g, '$1').replace(/__(?=\S)(.+?)__/g, '$1').replace(/~~(?=\S)(.+?)~~/g, '$1').replace(/(^|[^*\w])\*(?=\S)([^*]+?)\*(?![*\w])/g, '$1$2');
 const emailsIn = text => [...new Set((String(text || '').match(/[^\s<>,;:"'()]+@[^\s<>,;:"'()]+\.[a-z]{2,}/gi) || []).map(e => e.toLowerCase()))];
 function leaderFor(dept) {
   const key = Object.keys(db.settings.leaders || {}).find(k => sameText(k, dept || ''));
@@ -947,7 +949,7 @@ function followUpMiss(r) {
   if (!r.completed || r.firstTryCorrect || !db.settings.missedFollowup || db.followups.some(f => f.responseId === r.id)) return;
   const leader = leaderFor(r.department);
   const f = { id: newId(), token: crypto.randomBytes(18).toString('hex'), responseId: r.id, employeeId: r.employeeId, name: r.name, department: r.department,
-    topicId: r.topicId, topicTitle: r.topicTitle, question: r.question, firstAnswer: r.attempts[0] || '', correctAnswer: r.correctAnswer,
+    topicId: r.topicId, topicTitle: r.topicTitle, question: plainText(r.question), firstAnswer: r.attempts[0] || '', correctAnswer: r.correctAnswer,
     leader: leaderName(leader), emailedTo: emailsIn(leader), createdAt: nowIso(), attestedAt: null, attestedBy: '' };
   db.followups.push(f);
   saveDb();
@@ -1729,7 +1731,7 @@ async function adminRoutes(req, res, p, m, url) {
     const cols = [
       ['Submitted', r => r.submittedAt], ['Date', r => r.date], ['Name', r => r.name], ['Workday last 4', r => r.last4],
       ['Department', r => r.department], ['On roster', r => r.verified ? 'yes' : 'no'],
-      ['Type', r => r.kind], ['Topic', r => r.topicTitle], ['Question', r => r.question],
+      ['Type', r => r.kind], ['Topic', r => r.topicTitle], ['Question', r => plainText(r.question)],
       ['First answer', r => r.attempts[0]], ['Correct answer', r => r.correctAnswer],
       ['Correct first try', r => r.firstTryCorrect ? 'yes' : 'no'], ['Tries', r => r.attempts.length],
       ['Finished', r => r.completed ? 'yes' : 'no'], ['Finished at', r => r.completedAt],
@@ -1839,7 +1841,7 @@ async function adminRoutes(req, res, p, m, url) {
         depts.set(k, g);
         if (!r.firstTryCorrect) {
           const qk = `${r.topicId}|${r.questionId}`;
-          const q = missedQ.get(qk) || { topicId: r.topicId, topicTitle: r.topicTitle, question: r.question, missed: 0 };
+          const q = missedQ.get(qk) || { topicId: r.topicId, topicTitle: r.topicTitle, question: plainText(r.question), missed: 0 };
           q.missed++; missedQ.set(qk, q);
         }
       }

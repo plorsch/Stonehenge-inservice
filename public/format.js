@@ -1,8 +1,7 @@
 // Turns lesson text into safe HTML.
-// Supports: blank line = new paragraph, lines starting with "- " = bullet list, **bold**.
+// Supports: blank line = new paragraph, lines starting with "- " = bullet list, plus the inline styles below.
 function formatLesson(text) {
-  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  const inline = formatInline;
   const out = [];
   let para = [];
   let list = [];
@@ -16,6 +15,21 @@ function formatLesson(text) {
   }
   flushPara(); flushList();
   return out.join('');
+}
+
+// **bold**, *italic*, __underline__ and ~~strikethrough~~ in one line of text, as safe HTML.
+function formatInline(text) {
+  return escapeHtml(text)
+    .replace(/\*\*(?=\S)(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(?=\S)(.+?)__/g, '<u>$1</u>')
+    .replace(/~~(?=\S)(.+?)~~/g, '<s>$1</s>')
+    .replace(/(^|[^*\w])\*(?=\S)([^*]+?)\*(?![*\w])/g, '$1<em>$2</em>');
+}
+// The same text with the style marks removed, for plain-text places like tables and emails.
+function stripFormat(text) {
+  const d = document.createElement('div');
+  d.innerHTML = formatInline(text);
+  return d.textContent;
 }
 
 function escapeHtml(s) {

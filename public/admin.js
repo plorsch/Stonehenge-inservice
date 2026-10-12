@@ -747,7 +747,7 @@
     $('vw-body').innerHTML = `<div class="muted small" style="margin-top:12px">For: ${whoLabel(t.departments)}</div>
       <div class="lesson-preview" style="margin-top:8px">${formatLesson(t.lesson) || '<span class="muted">No lesson yet.</span>'}</div>
       ${t.questions.map((q, n) => `
-        <h3 style="margin-top:18px">Question ${n + 1}${q.type === 'multi' ? ' <span class="pill brand">Select all that apply</span>' : ''}: ${escapeHtml(q.text)}</h3>
+        <h3 style="margin-top:18px">Question ${n + 1}${q.type === 'multi' ? ' <span class="pill brand">Select all that apply</span>' : ''}: ${formatInline(q.text)}</h3>
         <ul>${q.correctAnswers.map(a => `<li>${escapeHtml(a)} <span class="pill good">Correct</span></li>`).join('')}${q.wrongAnswers.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
         ${q.hint ? `<div class="muted small"><strong>Hint after a wrong answer:</strong> ${escapeHtml(q.hint)}</div>` : ''}
         ${q.explanation ? `<div class="muted small"><strong>Explanation:</strong> ${escapeHtml(q.explanation)}</div>` : ''}`).join('')}
@@ -1498,7 +1498,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <td style="white-space:nowrap">${fmtWhen(r.submittedAt)}</td>
         <td><a href="#" class="row-link">${escapeHtml(r.name)}</a>${r.verified ? '' : ' <span class="pill" title="Typed their name; not on the roster">Not on roster</span>'}<div class="muted small">${escapeHtml(r.last4 || '')}</div></td>
         <td>${escapeHtml(r.department || '')}</td><td>${kindLabel[r.kind] || ''}${r.lang === 'es' ? ' <span class="pill">Español</span>' : ''}${r.offline ? ' <span class="pill" title="Answered while the iPad was offline, uploaded later">Saved offline</span>' : ''}</td>
-        <td><a href="#" class="row-link">${escapeHtml(r.topicTitle)}</a><div class="muted small">${escapeHtml(r.question)}</div></td>
+        <td><a href="#" class="row-link">${escapeHtml(r.topicTitle)}</a><div class="muted small">${escapeHtml(stripFormat(r.question))}</div></td>
         <td>${escapeHtml(r.attempts[0] || '')}</td><td>${result}${r.helpful === true ? ' <span title="Said the lesson was helpful">👍</span>' : r.helpful === false ? ' <span title="Said the lesson was not helpful">👎</span>' : ''}</td></tr>`;
       }).join('');
       $('resp-csv').href = '/api/admin/responses.csv?' + respQuery();
@@ -1549,7 +1549,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
             <div class="rd-actions">${d.topic ? `<button class="btn subtle" data-rd-topic="${d.topic.id}">All responses for this topic</button><button class="btn subtle" data-rd-key="${d.topic.id}">Answer key</button><button class="btn subtle" data-rd-preview="${d.topic.id}">Preview</button>` : '<span class="muted small">This topic has since been deleted.</span>'}</div>
           </section>
         </div>
-        <h3 style="margin:18px 0 6px">${escapeHtml(r.question)}${q && q.type === 'multi' ? ' <span class="pill brand">Select all that apply</span>' : ''}</h3>
+        <h3 style="margin:18px 0 6px">${formatInline(r.question)}${q && q.type === 'multi' ? ' <span class="pill brand">Select all that apply</span>' : ''}</h3>
         ${q ? `<ul class="rd-choices">${q.correctAnswers.map(a => choice(a, true)).join('')}${q.wrongAnswers.map(a => choice(a, false)).join('')}</ul>
             ${q.changed ? '<div class="muted small">This question was edited after they answered it, so the choices above are today\'s version.</div>' : ''}`
           : `<div class="muted small">The question has since been changed or removed. Correct answer: ${escapeHtml(r.correctAnswer || '')}</div>`}
@@ -2081,7 +2081,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('an-rows').innerHTML = rows.map(a => {
       const live = a.startDate <= state.todayDate && (!a.endDate || a.endDate >= state.todayDate);
       const status = live ? ' <span class="pill good">Showing now</span>' : a.startDate > state.todayDate ? ' <span class="pill">Upcoming</span>' : ' <span class="pill">Ended</span>';
-      return `<tr class="${!live && a.startDate < state.todayDate ? 'dim' : ''}"><td>${escapeHtml(a.text)}${status}</td><td>${whoLabel(a.departments)}</td>
+      return `<tr class="${!live && a.startDate < state.todayDate ? 'dim' : ''}"><td>${formatInline(a.text)}${status}</td><td>${whoLabel(a.departments)}</td>
         <td style="white-space:nowrap">${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'}</td>
         <td><button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
     }).join('') || '<tr><td colspan="4" class="muted">No announcements yet.</td></tr>';
@@ -2281,6 +2281,76 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   setInterval(() => document.querySelectorAll('.clearwrap').forEach(w => { const i = w.querySelector('input'), b = w.querySelector('.clearbtn'); if (i && b) b.hidden = !i.value; }), 500);
   addClearButtons(document);
   new MutationObserver(() => addClearButtons(document)).observe(document.body, { childList: true, subtree: true });
+  // Bold, italic, underline and strikethrough buttons for text the iPad shows.
+  // They wrap the selected words in **, *, __ or ~~, which the iPad turns into the style.
+  const FMT_FIELDS = '#f-lesson, #f-es-lesson, .q-text, .q-es-text, #an-text, #an-bday-msgs, #an-anniv-msgs';
+  const FMT_GROUPS = '#set-closing';
+  const FMT_MARKS = { b: '**', i: '*', u: '__', s: '~~' };
+  let lastFmt = null;
+  function applyFmt(field, kind) {
+    if (!field) return;
+    const m = FMT_MARKS[kind];
+    const a = field.selectionStart, z = field.selectionEnd, v = field.value;
+    let sel = v.slice(a, z);
+    // Keep spaces outside the marks, so "**word **" can't happen.
+    const lead = sel.match(/^\s*/)[0], trail = sel.match(/\s*$/)[0];
+    sel = sel.trim();
+    const before = v.slice(0, a) + lead, after = trail + v.slice(z);
+    if (sel && sel.startsWith(m) && sel.endsWith(m) && sel.length > 2 * m.length) {
+      // Already styled: take the style off.
+      const inner = sel.slice(m.length, -m.length);
+      field.value = before + inner + after;
+      field.setSelectionRange(before.length, before.length + inner.length);
+    } else if (before.endsWith(m) && after.startsWith(m) && sel) {
+      field.value = before.slice(0, -m.length) + sel + after.slice(m.length);
+      field.setSelectionRange(before.length - m.length, before.length - m.length + sel.length);
+    } else {
+      const text = sel || 'text';
+      field.value = before + m + text + m + after;
+      field.setSelectionRange(before.length + m.length, before.length + m.length + text.length);
+    }
+    field.focus();
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  function fmtBar(target) {
+    const bar = document.createElement('div');
+    bar.className = 'fmt-bar';
+    bar.innerHTML = '<button type="button" data-fmt="b" title="Bold (Ctrl or ⌘ + B)"><b>B</b></button><button type="button" data-fmt="i" title="Italic (Ctrl or ⌘ + I)"><i>I</i></button>' +
+      '<button type="button" data-fmt="u" title="Underline (Ctrl or ⌘ + U)"><u>U</u></button><button type="button" data-fmt="s" title="Strikethrough (Ctrl or ⌘ + Shift + X)"><s>S</s></button>' +
+      '<span class="fmt-tip">Select words, then pick a style</span>';
+    bar.addEventListener('mousedown', e => e.preventDefault()); // keep the selection in the text box
+    bar.addEventListener('click', e => {
+      const b = e.target.closest('[data-fmt]');
+      if (b) applyFmt(target || lastFmt, b.dataset.fmt);
+    });
+    return bar;
+  }
+  function addFmtBars(root) {
+    root.querySelectorAll(FMT_FIELDS).forEach(f => {
+      if (f.dataset.fmtBar) return;
+      f.dataset.fmtBar = '1';
+      const at = f.closest('.clearwrap') || f;
+      at.parentNode.insertBefore(fmtBar(f), at);
+    });
+    root.querySelectorAll(FMT_GROUPS).forEach(g => {
+      if (g.dataset.fmtBar) return;
+      g.dataset.fmtBar = '1';
+      g.parentNode.insertBefore(fmtBar(null), g);
+    });
+  }
+  const isFmtField = el => el && el.matches && (el.matches(FMT_FIELDS) || !!el.closest(FMT_GROUPS) && el.matches('input, textarea'));
+  document.addEventListener('focusin', e => { if (isFmtField(e.target)) lastFmt = e.target; });
+  document.addEventListener('keydown', e => {
+    if (!(e.ctrlKey || e.metaKey) || !isFmtField(e.target)) return;
+    const k = e.key.toLowerCase();
+    const kind = !e.shiftKey && { b: 'b', i: 'i', u: 'u' }[k] || (e.shiftKey && k === 'x' ? 's' : null);
+    if (!kind) return;
+    e.preventDefault();
+    applyFmt(e.target, kind);
+  });
+  addFmtBars(document);
+  new MutationObserver(() => addFmtBars(document)).observe(document.body, { childList: true, subtree: true });
+
 
   refresh().catch(fail);
 })();
