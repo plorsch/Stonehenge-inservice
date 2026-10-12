@@ -260,7 +260,7 @@
 
   async function refresh() {
     state = await api('/api/admin/state');
-    renderToday(); renderSchedule(); renderRequired(); renderStarter(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters(); renderReportFilters(); setTimeout(() => fitAllText(), 30);
+    renderToday(); renderSchedule(); renderRequired(); renderStarter(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters(); renderReportFilters(); setTimeout(() => fitAllText(), 30); layouts.forEach(l => l.apply());
   }
 
   // ---------- today ----------
@@ -1419,6 +1419,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('st-last4').value = e ? e.last4 : '';
     $('st-dept').value = e ? e.department : '';
     $('st-active').checked = e ? e.active : true;
+    $('st-noreview').checked = !!(e && e.noReview);
     $('st-birthday').value = e && e.birthday ? e.birthday.split('-').map(Number).join('/') : '';
     $('st-hire').value = e && e.hireDate ? e.hireDate : '';
     $('st-error').textContent = '';
@@ -1506,7 +1507,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   }
   $('staff-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const body = { name: $('st-name').value, last4: $('st-last4').value, department: $('st-dept').value, active: $('st-active').checked,
+    const body = { name: $('st-name').value, last4: $('st-last4').value, department: $('st-dept').value, active: $('st-active').checked, noReview: $('st-noreview').checked,
       birthday: $('st-birthday').value, hireDate: $('st-hire').value };
     if (body.birthday.trim() && !/^\d{1,2}\s*\/\s*\d{1,2}(\s*\/\s*\d{2,4})?$/.test(body.birthday.trim())) { $('st-error').textContent = 'Write the birthday as month/day, like 3/7.'; return; }
     body.birthday = body.birthday.replace(/\s/g, '');
@@ -1709,11 +1710,22 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <div class="rd-tries"><div class="rd-label">Their tries</div>${r.attempts.map((a, i) => `<div><b>${ordinal(i)}:</b> ${escapeHtml(a)} ${i === r.attempts.length - 1 && r.completed ? '<span class="pill good">Correct</span>' : '<span class="pill warn">Wrong</span>'}</div>`).join('') || '<span class="muted">No answer yet.</span>'}</div>
         ${q && q.hint && !r.firstTryCorrect ? `<div class="small" style="margin-top:10px"><b>Hint they were shown:</b> ${escapeHtml(q.hint)}</div>` : ''}
         ${q && q.explanation ? `<div class="small" style="margin-top:6px"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
-        ${d.topic && d.topic.lesson ? `<details style="margin-top:14px"><summary>The lesson they read</summary><div class="lesson-preview" style="margin-top:8px">${formatLesson(d.topic.lesson)}</div></details>` : ''}`;
+        ${d.topic && d.topic.lesson ? `<details style="margin-top:14px"><summary>The lesson they read</summary><div class="lesson-preview" style="margin-top:8px">${formatLesson(d.topic.lesson)}</div></details>` : ''}
+        <div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);text-align:right"><button class="btn subtle danger" data-rd-delete="${r.id}" data-rd-who="${escapeHtml(r.name)}" data-rd-when="${escapeHtml(fmtWhen(r.submittedAt))}">🗑 Delete this response</button></div>`;
       if (!$('viewer').open) $('viewer').showModal();
       $('vw-body').scrollTop = 0;
     } catch (err) { fail(err); }
   }
+  $('vw-body').addEventListener('click', async e => {
+    const del = e.target.closest('[data-rd-delete]');
+    if (del) {
+      if (!confirm(`Delete ${del.dataset.rdWho}'s response from ${del.dataset.rdWhen}?\n\nIt will no longer count on their training record, streaks, reports or the Clock-in check.`)) return;
+      if (!confirm('Are you sure? This can\'t be undone from the admin page.')) return;
+      try { await api('/api/admin/responses/' + encodeURIComponent(del.dataset.rdDelete), { method: 'DELETE' }); $('viewer').close(); toast('Response deleted'); loadResponses(); refresh(); }
+      catch (err) { fail(err); }
+      return;
+    }
+  });
   $('vw-body').addEventListener('click', e => {
     const b = e.target.closest('[data-rd-open],[data-rd-person],[data-rd-staff],[data-rd-topic],[data-rd-key],[data-rd-preview]');
     if (!b) return;
@@ -2096,12 +2108,21 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       $('rv-rows').innerHTML = reviews.map(r => `<tr><td>${escapeHtml(r.name)}<div class="muted small">${escapeHtml(r.department || '')}</div></td>
         <td>${escapeHtml(r.title)}<div class="muted small">missed ${fmtDate(r.since)}</div></td>
         <td>${r.stage === 1 ? 'First' : 'Final'}</td>
-        <td style="white-space:nowrap">${fmtDate(r.due)} ${r.due <= today ? '<span class="pill warn">Due now</span>' : ''}</td></tr>`).join('')
-        || '<tr><td colspan="4" class="muted">No one has anything to review right now.</td></tr>';
+        <td style="white-space:nowrap">${fmtDate(r.due)} ${r.due <= today ? '<span class="pill warn">Due now</span>' : ''}</td>
+        <td style="white-space:nowrap"><button class="btn subtle danger" data-rv-skip="${r.employeeId}|${r.topicId}" data-rv-name="${escapeHtml(r.name)}" data-rv-title="${escapeHtml(r.title)}" title="Remove this review. It comes back only if they miss this topic again.">Take off</button></td></tr>`).join('')
+        || '<tr><td colspan="5" class="muted">No one has anything to review right now.</td></tr>';
       $('rv-thin').innerHTML = thin.length ? `<strong>Topics with fewer than 3 questions</strong> <span class="muted">(add more so a review can ask it a different way):</span> ` +
         thin.map(t => `<a href="#" data-thin="${t.id}">${escapeHtml(t.title)}</a> (${t.questions})`).join(', ') : '';
     } catch (err) { fail(err); }
   }
+  $('rv-rows').addEventListener('click', async e => {
+    const b = e.target.closest('[data-rv-skip]');
+    if (!b) return;
+    if (!confirm(`Take ${b.dataset.rvName} off the "${b.dataset.rvTitle}" review? It only comes back if they miss this topic again.`)) return;
+    const [employeeId, topicId] = b.dataset.rvSkip.split('|');
+    try { await post('/api/admin/reviews/skip', { employeeId, topicId }); toast('Taken off review'); loadReviews(); }
+    catch (err) { fail(err); }
+  });
   $('rv-thin').addEventListener('click', e => {
     const a = e.target.closest('[data-thin]');
     if (a) { e.preventDefault(); openEditor(topicById(a.dataset.thin)); }
@@ -2161,169 +2182,207 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   }
 
   // ---------- settings ----------
-  // ---------- Settings tiles: order and width, saved per login ----------
-  const TILE_DEFAULT = [['kiosk', 6], ['email', 6], ['depts', 12], ['closing', 12], ['logins', 6], ['password', 6], ['backup', 6], ['golive', 6], ['decor', 12]];
+  // ---------- Tile layouts: order, width and height of the cards on a tab, saved per login ----------
   const WIDTHS = [[4, '⅓'], [6, '½'], [8, '⅔'], [12, 'Full']];
-  const tiles = () => [...$('set-grid').children].filter(c => c.dataset.tile);
-  function applyLayout() {
-    const saved = (state.layouts && state.layouts.settings) || [];
-    const order = saved.length ? saved.map(t => [t.id, t.span, t.h]) : TILE_DEFAULT;
-    const byId = Object.fromEntries(tiles().map(t => [t.dataset.tile, t]));
-    const placed = new Set();
-    for (const [id, span, h] of order) {
-      const t = byId[id];
-      if (!t) continue;
-      t.style.setProperty('--span', span);
-      setTileHeight(t, h || 0);
-      $('set-grid').appendChild(t);
-      placed.add(id);
+  const LAYOUT_HELP = 'Drag any tile to move it. Drag its right edge to make it wider, or its bottom edge to make it shorter (it scrolls inside). Changes save for your login.';
+  const layouts = [];
+  function makeLayout(page, grid, defaults, bar) {
+    const tiles = () => [...grid.children].filter(c => c.dataset.tile);
+    const spanOf = t => Number(getComputedStyle(t).getPropertyValue('--span')) || 6;
+    function apply() {
+      if (grid.classList.contains('editing')) return;
+      const saved = (state.layouts && state.layouts[page]) || [];
+      const order = saved.length ? saved.map(t => [t.id, t.span, t.h]) : defaults;
+      const byId = Object.fromEntries(tiles().map(t => [t.dataset.tile, t]));
+      const placed = new Set();
+      for (const [id, span, h] of order) {
+        const t = byId[id];
+        if (!t) continue;
+        t.style.setProperty('--span', span); setTileHeight(t, h || 0); grid.appendChild(t); placed.add(id);
+      }
+      // Tiles added after the layout was saved go at the end, at their default width.
+      for (const [id, span] of defaults) if (!placed.has(id) && byId[id]) { byId[id].style.setProperty('--span', span); setTileHeight(byId[id], 0); grid.appendChild(byId[id]); }
+      tiles().forEach(markWidth);
     }
-    // Tiles added after the layout was saved go at the end, at their default width.
-    for (const [id, span] of TILE_DEFAULT) if (!placed.has(id) && byId[id]) { byId[id].style.setProperty('--span', span); setTileHeight(byId[id], 0); $('set-grid').appendChild(byId[id]); }
-    tiles().forEach(markWidth);
-  }
-  const spanOf = t => Number(getComputedStyle(t).getPropertyValue('--span')) || 6;
-  // A chosen height: the tile scrolls inside when its content is taller. 0 = fit the content.
-  function setTileHeight(t, h) {
-    t.dataset.h = h || 0;
-    t.classList.toggle('fixed-h', !!h);
-    t.style.setProperty('--h', h ? h + 'px' : 'none');
-    const lab = t.querySelector('.tile-ctl .hlab');
-    if (lab) lab.innerHTML = h ? `${h}px tall <button type="button" class="hauto" title="Fit the content again">Auto</button>` : 'Auto height';
-  }
-  function markWidth(t) {
-    const span = spanOf(t);
-    t.querySelectorAll('.tile-ctl .w button').forEach(b => b.classList.toggle('on', Number(b.dataset.span) === span));
-  }
-  async function saveLayout() {
-    const list = tiles().map(t => ({ id: t.dataset.tile, span: spanOf(t), h: Number(t.dataset.h) || 0 }));
-    state.layouts = Object.assign({}, state.layouts, { settings: list });
-    try { await api('/api/admin/layout', { method: 'PUT', body: JSON.stringify({ page: 'settings', tiles: list }) }); } catch (err) { fail(err); }
-  }
-  function addTileControls() {
-    for (const t of tiles()) {
-      if (t.querySelector(':scope > .tile-ctl')) continue;
-      const ctl = document.createElement('div');
-      ctl.className = 'tile-ctl';
-      ctl.innerHTML = `<span class="grip">⠿</span><span class="t">${escapeHtml(t.dataset.title || '')}</span><span class="hlab small"></span><span class="w">${WIDTHS.map(([n, l]) => `<button type="button" data-span="${n}" title="${l === 'Full' ? 'Full width' : l + ' width'}">${l}</button>`).join('')}</span>`;
-      t.prepend(ctl);
-      const rz = document.createElement('div');
-      rz.className = 'tile-resize';
-      rz.title = 'Drag to make wider or narrower';
-      t.appendChild(rz);
-      const rh = document.createElement('div');
-      rh.className = 'tile-resize-b';
-      rh.title = 'Drag to make taller or shorter';
-      t.appendChild(rh);
-      setTileHeight(t, Number(t.dataset.h) || 0);
-      ctl.addEventListener('click', e => { if (e.target.closest('.hauto')) { setTileHeight(t, 0); saveLayout(); } });
-      // Drag the bottom edge to set the height; the content scrolls inside if it's taller.
-      rh.addEventListener('pointerdown', e => {
-        e.preventDefault(); e.stopPropagation();
-        rh.setPointerCapture(e.pointerId);
-        const top = t.getBoundingClientRect().top;
-        const move = ev => setTileHeight(t, Math.max(160, Math.round(ev.clientY - top)));
-        const up = () => { rh.removeEventListener('pointermove', move); rh.removeEventListener('pointerup', up); rh.removeEventListener('pointercancel', up); saveLayout(); };
-        rh.addEventListener('pointermove', move); rh.addEventListener('pointerup', up); rh.addEventListener('pointercancel', up);
-      });
-      ctl.querySelector('.w').addEventListener('click', e => {
-        const b = e.target.closest('[data-span]');
-        if (!b) return;
-        t.style.setProperty('--span', b.dataset.span); markWidth(t); saveLayout();
-      });
-      // Drag anywhere on a tile to move it (mouse, trackpad or touch). The tile follows the pointer,
-      // a dashed space shows where it will land, and the other tiles slide out of the way.
-      t.addEventListener('pointerdown', e => {
-        if (!$('set-grid').classList.contains('editing') || e.button > 0 || e.target.closest('.w, .tile-resize, .tile-resize-b, .hauto')) return;
-        e.preventDefault();
-        const grid = $('set-grid');
-        const r0 = t.getBoundingClientRect();
-        const dx = e.clientX - r0.left, dy = e.clientY - r0.top;
-        const ph = document.createElement('div');
-        ph.className = 'tile-ph';
-        ph.style.setProperty('--span', spanOf(t));
-        ph.style.height = r0.height + 'px';
-        t.after(ph);
-        Object.assign(t.style, { position: 'fixed', left: r0.left + 'px', top: r0.top + 'px', width: r0.width + 'px', height: r0.height + 'px', zIndex: 50 });
-        t.classList.add('lifted');
-        let lastX = e.clientX, lastY = e.clientY, scrollTimer = null;
-        // Smoothly slide tiles from where they were to where they are now.
-        const slide = fn => {
-          const others = tiles().filter(x => x !== t);
-          const before = new Map(others.map(x => [x, x.getBoundingClientRect()]));
-          fn();
-          for (const x of others) {
-            const b = before.get(x), n = x.getBoundingClientRect();
-            if (!b || (b.left === n.left && b.top === n.top)) continue;
-            x.animate([{ transform: `translate(${b.left - n.left}px, ${b.top - n.top}px)` }, { transform: 'none' }], { duration: 180, easing: 'ease-out' });
-          }
-        };
-        const place = () => {
-          t.style.left = (lastX - dx) + 'px'; t.style.top = (lastY - dy) + 'px';
-          const over = tiles().filter(x => x !== t).find(x => { const r = x.getBoundingClientRect(); return lastX >= r.left && lastX <= r.right && lastY >= r.top && lastY <= r.bottom; });
-          if (!over) return;
-          const r = over.getBoundingClientRect();
-          // Same row: left or right half decides. Full-width tiles: top or bottom half.
-          const after = r.width > grid.clientWidth * 0.75 ? lastY > r.top + r.height / 2 : lastX > r.left + r.width / 2;
-          const ref = after ? over.nextElementSibling : over;
-          if (ref === ph || (after ? over.nextElementSibling === ph : over.previousElementSibling === ph)) return;
-          slide(() => grid.insertBefore(ph, after ? over.nextSibling : over));
-        };
-        const move = ev => { lastX = ev.clientX; lastY = ev.clientY; place(); };
-        // Scroll the page when dragging near the top or bottom edge.
-        scrollTimer = setInterval(() => {
-          const edge = 90, speed = lastY < edge ? -(edge - lastY) / 3 : lastY > innerHeight - edge ? (lastY - innerHeight + edge) / 3 : 0;
-          if (speed) { scrollBy(0, speed); place(); }
-        }, 16);
-        const up = () => {
-          clearInterval(scrollTimer);
-          removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
-          const rp = ph.getBoundingClientRect();
-          ph.replaceWith(t);
-          Object.assign(t.style, { position: '', left: '', top: '', width: '', height: '', zIndex: '' });
-          t.classList.remove('lifted');
-          const rn = t.getBoundingClientRect();
-          t.animate([{ transform: `translate(${lastX - dx - rn.left}px, ${lastY - dy - rn.top}px)` }, { transform: 'none' }], { duration: 160, easing: 'ease-out' });
-          void rp;
-          saveLayout();
-        };
-        addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
-      });
-      // Drag the right edge to resize; it snaps to the 12-column grid.
-      rz.addEventListener('pointerdown', e => {
-        e.preventDefault();
-        rz.setPointerCapture(e.pointerId);
-        const grid = $('set-grid').getBoundingClientRect();
-        const gap = parseFloat(getComputedStyle($('set-grid')).columnGap) || 18;
-        const colW = (grid.width + gap) / 12;
-        const left = t.getBoundingClientRect().left;
-        const move = ev => {
-          const span = Math.min(12, Math.max(3, Math.round((ev.clientX - left + gap) / colW)));
-          t.style.setProperty('--span', span); markWidth(t);
-        };
-        const up = () => { rz.removeEventListener('pointermove', move); rz.removeEventListener('pointerup', up); rz.removeEventListener('pointercancel', up); saveLayout(); };
-        rz.addEventListener('pointermove', move); rz.addEventListener('pointerup', up); rz.addEventListener('pointercancel', up);
-      });
+    // A chosen height: the tile scrolls inside when its content is taller. 0 = fit the content.
+    function setTileHeight(t, h) {
+      t.dataset.h = h || 0;
+      t.classList.toggle('fixed-h', !!h);
+      t.style.setProperty('--h', h ? h + 'px' : 'none');
+      const lab = t.querySelector('.tile-ctl .hlab');
+      if (lab) lab.innerHTML = h ? `${h}px tall <button type="button" class="hauto" title="Fit the content again">Auto</button>` : 'Auto height';
     }
+    function markWidth(t) {
+      const span = spanOf(t);
+      t.querySelectorAll('.tile-ctl .w button').forEach(b => b.classList.toggle('on', Number(b.dataset.span) === span));
+    }
+    async function save() {
+      const list = tiles().map(t => ({ id: t.dataset.tile, span: spanOf(t), h: Number(t.dataset.h) || 0 }));
+      state.layouts = Object.assign({}, state.layouts, { [page]: list });
+      try { await api('/api/admin/layout', { method: 'PUT', body: JSON.stringify({ page, tiles: list }) }); } catch (err) { fail(err); }
+    }
+    function addTileControls() {
+      for (const t of tiles()) {
+        if (t.querySelector(':scope > .tile-ctl')) continue;
+        const ctl = document.createElement('div');
+        ctl.className = 'tile-ctl';
+        ctl.innerHTML = `<span class="grip">⠿</span><span class="t">${escapeHtml(t.dataset.title || '')}</span><span class="hlab small"></span><span class="w">${WIDTHS.map(([n, l]) => `<button type="button" data-span="${n}" title="${l === 'Full' ? 'Full width' : l + ' width'}">${l}</button>`).join('')}</span>`;
+        t.prepend(ctl);
+        const rz = document.createElement('div');
+        rz.className = 'tile-resize'; rz.title = 'Drag to make wider or narrower';
+        t.appendChild(rz);
+        const rh = document.createElement('div');
+        rh.className = 'tile-resize-b'; rh.title = 'Drag to make taller or shorter';
+        t.appendChild(rh);
+        setTileHeight(t, Number(t.dataset.h) || 0);
+        ctl.addEventListener('click', e => { if (e.target.closest('.hauto')) { setTileHeight(t, 0); save(); } });
+        // Drag the bottom edge to set the height; the content scrolls inside if it's taller.
+        rh.addEventListener('pointerdown', e => {
+          e.preventDefault(); e.stopPropagation();
+          rh.setPointerCapture(e.pointerId);
+          const top = t.getBoundingClientRect().top;
+          const move = ev => setTileHeight(t, Math.max(160, Math.round(ev.clientY - top)));
+          const up = () => { rh.removeEventListener('pointermove', move); rh.removeEventListener('pointerup', up); rh.removeEventListener('pointercancel', up); save(); };
+          rh.addEventListener('pointermove', move); rh.addEventListener('pointerup', up); rh.addEventListener('pointercancel', up);
+        });
+        ctl.querySelector('.w').addEventListener('click', e => {
+          const b = e.target.closest('[data-span]');
+          if (!b) return;
+          t.style.setProperty('--span', b.dataset.span); markWidth(t); save();
+        });
+        // Drag anywhere on a tile to move it (mouse, trackpad or touch). The tile follows the pointer,
+        // a dashed space shows where it will land, and the other tiles slide out of the way.
+        t.addEventListener('pointerdown', e => {
+          if (!grid.classList.contains('editing') || e.button > 0 || e.target.closest('.w, .tile-resize, .tile-resize-b, .hauto')) return;
+          e.preventDefault();
+          const r0 = t.getBoundingClientRect();
+          const dx = e.clientX - r0.left, dy = e.clientY - r0.top;
+          const ph = document.createElement('div');
+          ph.className = 'tile-ph';
+          ph.style.setProperty('--span', spanOf(t));
+          ph.style.height = r0.height + 'px';
+          t.after(ph);
+          Object.assign(t.style, { position: 'fixed', left: r0.left + 'px', top: r0.top + 'px', width: r0.width + 'px', height: r0.height + 'px', zIndex: 50 });
+          t.classList.add('lifted');
+          let lastX = e.clientX, lastY = e.clientY, scrollTimer = null;
+          // Smoothly slide tiles from where they were to where they are now.
+          const slide = fn => {
+            const others = tiles().filter(x => x !== t);
+            const before = new Map(others.map(x => [x, x.getBoundingClientRect()]));
+            fn();
+            for (const x of others) {
+              const b = before.get(x), n = x.getBoundingClientRect();
+              if (!b || (b.left === n.left && b.top === n.top)) continue;
+              x.animate([{ transform: `translate(${b.left - n.left}px, ${b.top - n.top}px)` }, { transform: 'none' }], { duration: 180, easing: 'ease-out' });
+            }
+          };
+          const place = () => {
+            t.style.left = (lastX - dx) + 'px'; t.style.top = (lastY - dy) + 'px';
+            const over = tiles().filter(x => x !== t).find(x => { const r = x.getBoundingClientRect(); return lastX >= r.left && lastX <= r.right && lastY >= r.top && lastY <= r.bottom; });
+            if (!over) return;
+            const r = over.getBoundingClientRect();
+            // Same row: left or right half decides. Full-width tiles: top or bottom half.
+            const after = r.width > grid.clientWidth * 0.75 ? lastY > r.top + r.height / 2 : lastX > r.left + r.width / 2;
+            if (after ? over.nextElementSibling === ph : over.previousElementSibling === ph) return;
+            slide(() => grid.insertBefore(ph, after ? over.nextSibling : over));
+          };
+          const move = ev => { lastX = ev.clientX; lastY = ev.clientY; place(); };
+          // Scroll the page when dragging near the top or bottom edge.
+          scrollTimer = setInterval(() => {
+            const edge = 90, speed = lastY < edge ? -(edge - lastY) / 3 : lastY > innerHeight - edge ? (lastY - innerHeight + edge) / 3 : 0;
+            if (speed) { scrollBy(0, speed); place(); }
+          }, 16);
+          const up = () => {
+            clearInterval(scrollTimer);
+            removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+            ph.replaceWith(t);
+            Object.assign(t.style, { position: '', left: '', top: '', width: '', height: '', zIndex: '' });
+            t.classList.remove('lifted');
+            const rn = t.getBoundingClientRect();
+            t.animate([{ transform: `translate(${lastX - dx - rn.left}px, ${lastY - dy - rn.top}px)` }, { transform: 'none' }], { duration: 160, easing: 'ease-out' });
+            save();
+          };
+          addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+        });
+        // Drag the right edge to resize; it snaps to the 12-column grid.
+        rz.addEventListener('pointerdown', e => {
+          e.preventDefault();
+          rz.setPointerCapture(e.pointerId);
+          const g = grid.getBoundingClientRect();
+          const gap = parseFloat(getComputedStyle(grid).columnGap) || 18;
+          const colW = (g.width + gap) / 12;
+          const left = t.getBoundingClientRect().left;
+          const move = ev => { t.style.setProperty('--span', Math.min(12, Math.max(3, Math.round((ev.clientX - left + gap) / colW)))); markWidth(t); };
+          const up = () => { rz.removeEventListener('pointermove', move); rz.removeEventListener('pointerup', up); rz.removeEventListener('pointercancel', up); save(); };
+          rz.addEventListener('pointermove', move); rz.addEventListener('pointerup', up); rz.addEventListener('pointercancel', up);
+        });
+      }
+    }
+    const [help, reset, edit] = ['.lay-help', '.lay-reset', '.lay-edit'].map(q => bar.querySelector(q));
+    edit.addEventListener('click', () => {
+      const on = !grid.classList.contains('editing');
+      addTileControls();
+      tiles().forEach(markWidth);
+      grid.classList.toggle('editing', on);
+      edit.textContent = on ? '✓ Done' : '✥ Edit layout';
+      edit.classList.toggle('ghost', !on);
+      help.hidden = !on; reset.hidden = !on;
+    });
+    reset.addEventListener('click', async () => {
+      state.layouts = Object.assign({}, state.layouts, { [page]: [] });
+      grid.classList.remove('editing'); apply(); grid.classList.add('editing');
+      try { await api('/api/admin/layout', { method: 'PUT', body: JSON.stringify({ page, reset: true }) }); toast('Back to the default layout'); } catch (err) { fail(err); }
+    });
+    const lay = { apply, page };
+    layouts.push(lay);
+    return lay;
   }
-  $('lay-edit').addEventListener('click', () => {
-    const on = !$('set-grid').classList.contains('editing');
-    addTileControls();
-    tiles().forEach(markWidth);
-    $('set-grid').classList.toggle('editing', on);
-    $('lay-edit').textContent = on ? '✓ Done' : '✥ Edit layout';
-    $('lay-edit').classList.toggle('ghost', !on);
-    $('lay-help').hidden = !on; $('lay-reset').hidden = !on;
-  });
-  $('lay-reset').addEventListener('click', async () => {
-    state.layouts = Object.assign({}, state.layouts, { settings: [] });
-    applyLayout();
-    try { await api('/api/admin/layout', { method: 'PUT', body: JSON.stringify({ page: 'settings', reset: true }) }); toast('Back to the default layout'); } catch (err) { fail(err); }
-  });
+  const layoutBar = () => {
+    const bar = document.createElement('div');
+    bar.className = 'layout-bar';
+    bar.innerHTML = `<span class="lay-help" hidden>${LAYOUT_HELP}</span><button class="btn ghost lay-reset" hidden>Reset to default</button><button class="btn ghost lay-edit">✥ Edit layout</button>`;
+    return bar;
+  };
+  const settingsLayout = makeLayout('settings', $('set-grid'), [['kiosk', 6], ['email', 6], ['depts', 12], ['closing', 12], ['logins', 6], ['password', 6], ['backup', 6], ['golive', 6], ['decor', 12]], $('lay-bar'));
+  // Other tabs: their cards become tiles. Ids come from each card's heading, so they stay the same between visits.
+  function tileTab(page, blocks) {
+    const sec = $('tab-' + page);
+    const grid = document.createElement('div');
+    grid.className = 'tiles-grid';
+    const bar = layoutBar();
+    const els = blocks.map(([el]) => el).filter(Boolean);
+    if (!els.length) return;
+    els[0].before(bar); bar.after(grid);
+    const used = new Set(), defaults = [];
+    blocks.forEach(([el, span, title]) => {
+      if (!el) return;
+      const name = title || ((el.querySelector('h2, h3') || {}).textContent || page).trim();
+      let id = name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 24) || 'tile';
+      while (used.has(id)) id += 'x';
+      used.add(id);
+      Object.assign(el.dataset, { tile: id, title: name });
+      el.style.setProperty('--span', span);
+      grid.appendChild(el);
+      defaults.push([id, span]);
+    });
+    makeLayout(page, grid, defaults, bar);
+  }
+  {
+    const kids = id => [...$('tab-' + id).children].filter(c => c.matches('.card') && !c.matches('.bare') && !c.hidden && c.id !== 'cc-results');
+    const t = $('tab-today'), dashes = [...t.querySelectorAll(':scope > .dash')];
+    const stats = t.querySelector(':scope > .tiles');
+    const statCard = document.createElement('div'); statCard.className = 'card bare'; stats.before(statCard); statCard.appendChild(stats);
+    tileTab('today', [[statCard, 12, 'Today\'s numbers'], ...dashes.flatMap(d => [...d.children].map((c, i) => [c, i ? 5 : 7])), ...kids('today').map(c => [c, 12])]);
+    dashes.forEach(d => d.remove());
+    tileTab('announcements', kids('announcements').map((c, i) => [c, 12]));
+    tileTab('schedule', kids('schedule').map(c => [c, 12]));
+    tileTab('required', kids('required').map(c => [c, 12]));
+    tileTab('reports', kids('reports').map(c => [c, 12]));
+  }
 
   function renderSettings() {
     const s = state.settings;
-    applyLayout();
+    settingsLayout.apply();
     $('set-facility').value = s.facilityName || '';
     $('set-depts').querySelectorAll('.re-row').forEach(r => r.remove());
     depts().forEach(d => addDeptRow(d));
@@ -2628,9 +2687,10 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     syncSegs();
     const top = state.streakTop || [];
     const medal = ['🥇', '🥈', '🥉'];
-    $('sk-now').innerHTML = top.length ? top.map((l, i) => `<div class="sk-row"><div class="sk-rank">${medal[i] || i + 1}</div>
+    const places = [...new Set(top.map(l => l.streak))];
+    $('sk-now').innerHTML = top.length ? top.map(l => { const i = places.indexOf(l.streak); return `<div class="sk-row"><div class="sk-rank">${medal[i] || i + 1}</div>
         <div class="sk-who"><button class="linkish" data-up-staff="${escapeHtml(l.id)}">${escapeHtml(l.name)}</button>${l.department ? ` <small>· ${escapeHtml(l.department)}</small>` : ''}</div>
-        <div class="sk-n">🔥 ${l.streak} in a row</div></div>`).join('')
+        <div class="sk-n">🔥 ${l.streak} in a row</div></div>`; }).join('')
       : '<div class="muted small">No one has a streak of 3 or more yet.</div>';
   }
   // Segmented buttons write to the hidden input named in data-for, then save.

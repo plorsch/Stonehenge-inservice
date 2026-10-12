@@ -603,9 +603,14 @@ function publicStreaks() {
     .sort((a, b) => stats[b.id].streak - stats[a.id].streak || a.name.localeCompare(b.name))
     .map(e => ({ id: e.id, name: shortName(e.name), department: e.department, streak: stats[e.id].streak }));
   const board = set.board || 'facility';
-  const leaders = board === 'dept' ? [] : ranked.slice(0, set.top === 1 ? 1 : 3);
-  // The top streak in each department, in the order departments are listed in Settings.
-  const deptLeaders = board === 'facility' ? [] : db.settings.departments.map(d => ranked.find(l => sameText(l.department || '', d))).filter(Boolean);
+  // Ties share a place: "Top 3" is the top 3 streak lengths, with everyone who has them (the iPad shows a few names per place).
+  const places = [...new Set(ranked.map(l => l.streak))].slice(0, set.top === 1 ? 1 : 3);
+  const leaders = board === 'dept' ? [] : ranked.filter(l => places.includes(l.streak)).map(l => Object.assign(l, { rank: places.indexOf(l.streak) + 1 }));
+  // The top streak in each department (everyone tied for it), in the order departments are listed in Settings.
+  const deptLeaders = board === 'facility' ? [] : db.settings.departments.flatMap(d => {
+    const mine = ranked.filter(l => sameText(l.department || '', d));
+    return mine.filter(l => l.streak === (mine[0] || {}).streak).map(l => Object.assign({}, l, { department: d }));
+  });
   return { shoutOuts, leaders, deptLeaders, leadersOn: set.leaderboard || 'off', button: !!set.button };
 }
 
@@ -673,13 +678,18 @@ function reviewStates(employeeId) {
     const cur = states[k];
     if (!r.firstTryCorrect) {
       states[k] = { employeeId: r.employeeId, topicId: r.topicId, stage: 1, due: addDays(r.date, cfg.firstDays),
-        missed: [...new Set([...(cur ? cur.missed : []), r.questionId])], since: cur ? cur.since : r.date };
+        missed: [...new Set([...(cur ? cur.missed : []), r.questionId])], since: cur ? cur.since : r.date, lastMiss: r.submittedAt };
     } else if (cur && r.date >= cur.due) {
       if (cur.stage === 1) Object.assign(cur, { stage: 2, due: addDays(r.date, cfg.secondDays) });
       else delete states[k];
     }
   }
-  return Object.values(states).filter(x => isLive(findTopic(x.topicId)));
+  // Taken off by an admin: that review is dropped until the person misses the topic again.
+  // People marked "no spaced review" on the Staff tab never get one.
+  const skips = db.reviewSkips || [];
+  return Object.values(states).filter(x => isLive(findTopic(x.topicId))
+    && !skips.some(sk => sk.employeeId === x.employeeId && sk.topicId === x.topicId && sk.at >= x.lastMiss)
+    && !(findEmployee(x.employeeId) || {}).noReview);
 }
 // The one review this person should do now: the most overdue.
 function nextReviewFor(emp) {
@@ -726,6 +736,7 @@ function validateEmployee(input) {
   if ('birthday' in input && (input.birthday || !input.keepBlank)) e.birthday = cleanMonthDay(input.birthday);
   if ('hireDate' in input && (input.hireDate || !input.keepBlank)) e.hireDate = cleanFullDate(input.hireDate);
   if ('jobTitle' in input && (input.jobTitle || !input.keepBlank)) e.jobTitle = cleanText(input.jobTitle, 100);
+  if ('noReview' in input) e.noReview = !!input.noReview;
   const errors = [];
   if (!e.name) errors.push('Name is required.');
   if (!e.last4) errors.push('Enter the last 4 digits of the Workday ID.');
@@ -1776,6 +1787,17 @@ async function adminRoutes(req, res, p, m, url) {
   }
 
   // One response in full: the question with every choice, what they picked on each try, the lesson, and how the person usually does.
+  // Delete one response (asked twice on the admin page). It's kept aside in db.deletedResponses, so a backup can bring it back.
+  const rdel = m === 'DELETE' && p.match(/^\/api\/admin\/responses\/([\w-]+)$/);
+  if (rdel) {
+    const i = db.responses.findIndex(x => x.id === rdel[1]);
+    if (i < 0) return send(res, 404, { error: 'That response is already gone.' });
+    const [r] = db.responses.splice(i, 1);
+    db.deletedResponses = (db.deletedResponses || []).concat(Object.assign({}, r, { deletedAt: nowIso(), deletedBy: req.adminUser })).slice(-500);
+    db.followups = (db.followups || []).filter(f => f.responseId !== r.id || f.attestedAt);
+    saveDb();
+    return send(res, 200, { ok: true });
+  }
   const rd = m === 'GET' && p.match(/^\/api\/admin\/responses\/([\w-]+)$/);
   if (rd) {
     const r = db.responses.find(x => x.id === rd[1]);
@@ -1825,6 +1847,15 @@ async function adminRoutes(req, res, p, m, url) {
       lastResponseAt: db.responses.length ? db.responses[db.responses.length - 1].submittedAt : null });
   }
 
+  if (m === 'POST' && p === '/api/admin/reviews/skip') {
+    const b = await readBody(req);
+    const employeeId = String(b.employeeId || ''), topicId = String(b.topicId || '');
+    if (!findEmployee(employeeId) || !findTopic(topicId)) return send(res, 400, { error: 'That review is no longer there. Refresh the page.' });
+    db.reviewSkips = (db.reviewSkips || []).filter(sk => !(sk.employeeId === employeeId && sk.topicId === topicId));
+    db.reviewSkips.push({ employeeId, topicId, at: nowIso(), by: req.adminUser });
+    saveDb();
+    return send(res, 200, { ok: true });
+  }
   if (m === 'GET' && p === '/api/admin/reviews') {
     const list = reviewStates().map(x => {
       const e = findEmployee(x.employeeId), t = findTopic(x.topicId);

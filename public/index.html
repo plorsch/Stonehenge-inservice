@@ -191,18 +191,20 @@
   .helpful .chip { font-size: 16px; min-height: 36px; min-width: 44px; padding: 0 10px; border-width: 1px; }
   .leaders { margin: 18px auto 0; max-width: 420px; text-align: left; background: #fff8e6; border: 1px solid #f1dfae; border-radius: 14px; padding: 12px 18px; }
   .leaders h3 { margin: 0 0 6px; font-size: 18px; color: #8a5a00; text-align: center; }
-  .leaders div { display: flex; gap: 10px; font-size: 19px; padding: 3px 0; }
-  .leaders div b { width: 26px; } .leaders div span:last-child { margin-left: auto; color: var(--muted); white-space: nowrap; }
+  .leaders div { display: flex; gap: 10px; font-size: 16px; padding: 3px 0; line-height: 1.35; }
+  .leaders div > b { width: 26px; flex: none; } .leaders div > span:last-child { margin-left: auto; color: var(--muted); white-space: nowrap; }
   .board-pop { position: absolute; right: 14px; top: calc(100% + 8px); z-index: 30; width: min(400px, calc(100vw - 28px)); max-height: 70vh; overflow-y: auto;
     background: #fff; border: 2px solid #f1c94e; border-radius: 18px; box-shadow: 0 16px 44px rgba(0,0,0,.22); padding: 16px 16px 14px; text-align: center; animation: pop-in .18s ease-out; }
   .board-pop::before { content: ""; position: absolute; top: -9px; right: 60px; width: 14px; height: 14px; background: #fff; border-left: 2px solid #f1c94e; border-top: 2px solid #f1c94e; transform: rotate(45deg); }
   .board-pop h2 { font-size: 21px; margin: 0; } .board-pop .small-note { font-size: 14px; }
-  .board-pop .leaders { margin-top: 10px; } .board-pop .leaders div { font-size: 17px; }
+  .board-pop .leaders { margin-top: 10px; } .board-pop .leaders div { font-size: 15px; }
   .board-x { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 28px; line-height: 1; color: var(--muted); cursor: pointer; width: 40px; height: 40px; }
   @keyframes pop-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
   body:not(.on-home) .board-pop { display: none; }
   .lb-dept { color: var(--muted); font-size: .85em; }
   .leaders div.me { font-weight: 700; color: var(--brand); }
+  .leaders .lb-more { color: var(--muted); font-size: .85em; white-space: nowrap; }
+  .leaders .nm { white-space: nowrap; } .leaders .lb-tie { display: block; font-size: .78em; color: var(--muted); font-style: normal; }
   /* Birthday / work anniversary celebration on the last screen */
   #confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
   .floaters { position: fixed; inset: 0; pointer-events: none; z-index: 55; overflow: hidden; }
@@ -595,18 +597,32 @@
   let newsIdx = 0;
   // Public streaks (when turned on in admin): shout-outs and the leaderboard.
   const st = cfg => Object.assign({ shoutOuts: [], leaders: [], deptLeaders: [], leadersOn: 'off' }, cfg.streaks);
-  const deptLine = list => '🏅 Department streak leaders: ' + list.map(l => `${l.department}: ${l.name} ${l.streak}`).join(' · ');
+  // Ties share a place. Groups of [streak, people], best first; everyone tied is listed.
+  const tiers = list => { const m = new Map(); list.forEach(l => { const k = l.department && list.byDept ? l.department : l.streak; if (!m.has(k)) m.set(k, []); m.get(k).push(l); }); return [...m.values()]; };
+  const byDept = list => Object.assign(list.slice(), { byDept: true });
+  const MEDALS = ['🥇', '🥈', '🥉'];
+  function tierNames(people, html) {
+    const me = s.who && s.who.employeeId, list = people.slice().sort((a, b) => (b.id === me) - (a.id === me));
+    return list.map(l => html ? `<span class="nm">${escapeHtml(l.name)}${l.id === me ? T(' (you!)', ' (¡usted!)') : ''}</span>` : l.name).join(html ? ' · ' : ', ');
+  }
+  const deptLine = list => '🏅 Department streak leaders: ' + tiers(byDept(list)).map(g => `${g[0].department}: ${tierNames(g)} ${g[0].streak}`).join(' · ');
   function leadersLine(list) {
-    if (list.length === 1) return `🏅 Streak leader: ${list[0].name}, ${list[0].streak} in a row right on the first try!`;
-    return '🏅 Top streaks: ' + list.map(l => `${l.name} ${l.streak}`).join(' · ');
+    const g = tiers(list);
+    if (g.length === 1) return `🏅 Streak leader${g[0].length > 1 ? 's' : ''}: ${tierNames(g[0])}, ${g[0][0].streak} in a row right on the first try!`;
+    return '🏅 Top streaks: ' + g.map(p => `${tierNames(p)} ${p[0].streak}`).join(' · ');
   }
   const deptTag = l => l.department ? ` <i class="lb-dept">(${escapeHtml(l.department)})</i>` : '';
+  // One row per place; a single person keeps their department, a tie says how many.
+  function tierRow(label, g) {
+    const me = s.who && g.some(l => l.id === s.who.employeeId);
+    const who = g.length === 1 ? `${tierNames(g, true)}${deptTag(g[0])}` : `${tierNames(g, true)}<i class="lb-tie">${T(`${g.length}-way tie`, `empate de ${g.length}`)}</i>`;
+    return `<div class="${me ? 'me' : ''}"><b>${label}</b><span>${who}</span><span>🔥 ${g[0].streak}${T(' in a row', ' seguidas')}</span></div>`;
+  }
   // The 🏆 button: the full leaderboard, ranked the way it's set in admin.
   function renderBoard() {
-    const str = st(s.config);
-    const row = (label, l) => `<div><b>${label}</b><span>${escapeHtml(l.name)}${deptTag(l)}</span><span>🔥 ${l.streak}</span></div>`;
-    const html = (str.leaders.length ? `<div class="leaders"><h3>${str.leaders.length === 1 ? 'Facility leader' : 'Top streaks'}</h3>${str.leaders.map((l, i) => row(`${i + 1}.`, l)).join('')}</div>` : '') +
-      (str.deptLeaders.length ? `<div class="leaders"><h3>Department leaders</h3>${str.deptLeaders.map(l => `<div><b style="width:auto;min-width:140px">${escapeHtml(l.department)}</b><span>${escapeHtml(l.name)}</span><span>🔥 ${l.streak}</span></div>`).join('')}</div>` : '');
+    const str = st(s.config), g = tiers(str.leaders);
+    const html = (g.length ? `<div class="leaders"><h3>${g.length === 1 ? 'Facility leader' : 'Top streaks'}</h3>${g.map((p, i) => tierRow(MEDALS[i] || `${i + 1}.`, p)).join('')}</div>` : '') +
+      (str.deptLeaders.length ? `<div class="leaders"><h3>Department leaders</h3>${tiers(byDept(str.deptLeaders)).map(p => `<div><b style="width:auto;min-width:140px">${escapeHtml(p[0].department)}</b><span>${tierNames(p, true)}</span><span>🔥 ${p[0].streak}</span></div>`).join('')}</div>` : '');
     $('board-lists').innerHTML = html || '<p style="margin-top:18px">No one has 3 in a row yet. Be the first!</p>';
   }
   let boardTimer = null;
@@ -987,12 +1003,11 @@
     const showBoard = !more && ['end', 'both'].includes(str.leadersOn);
     const board = showBoard ? str.leaders : [];
     // Department board on this screen: just the person's own department.
-    const myDept = showBoard && s.who && s.who.department ? str.deptLeaders.find(l => l.department.toLowerCase() === s.who.department.toLowerCase()) : null;
-    const isMe = l => s.who && l.id === s.who.employeeId;
-    const row = (label, l) => `<div class="${isMe(l) ? 'me' : ''}"><b>${label}</b><span>${escapeHtml(l.name)}${l.tag ? deptTag(l) : ''}${isMe(l) ? T(' (you!)', ' (¡usted!)') : ''}</span><span>🔥 ${l.streak} ${T('in a row', 'seguidas')}</span></div>`;
-    $('result-leaders').innerHTML = (board.length ? `<h3>🏅 ${T(board.length === 1 ? 'Streak leader' : 'Top streaks', board.length === 1 ? 'Líder de racha' : 'Mejores rachas')}</h3>` + board.map((l, i) => row(`${i + 1}.`, Object.assign({ tag: true }, l))).join('') : '') +
-      (myDept ? `<h3${board.length ? ' style="margin-top:10px"' : ''}>🏅 ${T(`${escapeHtml(myDept.department)} leader`, `Líder de ${escapeHtml(myDept.department)}`)}</h3>` + row('', myDept) : '');
-    $('result-leaders').hidden = !board.length && !myDept;
+    const myDept = showBoard && s.who && s.who.department ? str.deptLeaders.filter(l => l.department.toLowerCase() === s.who.department.toLowerCase()) : [];
+    const g = tiers(board);
+    $('result-leaders').innerHTML = (g.length ? `<h3>🏅 ${T(g.length === 1 ? 'Streak leader' : 'Top streaks', g.length === 1 ? 'Líder de racha' : 'Mejores rachas')}</h3>` + g.map((p, i) => tierRow(MEDALS[i] || `${i + 1}.`, p)).join('') : '') +
+      (myDept.length ? `<h3${g.length ? ' style="margin-top:10px"' : ''}>🏅 ${T(`${escapeHtml(myDept[0].department)} leader`, `Líder de ${escapeHtml(myDept[0].department)}`)}</h3>` + tierRow('', myDept.map(l => Object.assign({}, l, { department: '' }))) : '');
+    $('result-leaders').hidden = !board.length && !myDept.length;
     $('result-news').innerHTML = news.slice(0, 4).map(t => `<div>${formatInline(t)}</div>`).join('');
     $('result-news').hidden = !news.length;
     show('result');
@@ -1054,7 +1069,8 @@
       const k = st(cfg);
       const demo = [{ id: 'p1', name: 'Jasmine R', department: 'Nursing', streak: 14 }, { id: 'preview', name: 'Maria L', department: dept, streak: 9 }, { id: 'p3', name: 'Tom B', department: 'Dietary', streak: 6 }];
       const top = (draft.streaks && draft.streaks.top) || 3;
-      cfg.streaks = Object.assign({}, k, { leadersOn: 'end', leaders: (k.leaders.length ? k.leaders : demo).slice(0, top),
+      const list = k.leaders.length ? k.leaders : demo, keep = [...new Set(list.map(l => l.streak))].slice(0, top);
+      cfg.streaks = Object.assign({}, k, { leadersOn: 'end', leaders: list.filter(l => keep.includes(l.streak)),
         deptLeaders: k.deptLeaders.length ? k.deptLeaders : [{ id: 'preview', name: 'Maria L', department: dept, streak: 9 }] });
       if (draft.streaks && draft.streaks.board === 'dept') cfg.streaks.leaders = [];
       if (draft.streaks && draft.streaks.board === 'facility') cfg.streaks.deptLeaders = [];

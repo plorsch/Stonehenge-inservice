@@ -362,6 +362,10 @@ table.la tr:hover td { background: transparent; }
   .drop-zone.has-file { border-style: solid; border-color: var(--good); background: var(--good-soft); }
   .drop-zone input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
   .dz-icon { font-size: 28px; } .dz-main { font-weight: 650; color: var(--brand); } .dz-sub { font-size: 13px; color: var(--muted); } .dz-name { font-weight: 600; color: var(--good); margin-top: 4px; }
+  .tiles-grid { margin-bottom: 18px; }
+  .card.bare { background: none; box-shadow: none; padding: 0; }
+  .card.bare > .tiles { margin-bottom: 0; }
+  .tiles-grid.editing > .card.bare { background: var(--card); padding: 0 22px 22px; }
   /* ----- Phones ----- */
   @media (max-width: 700px) {
     header { padding: 0 12px; gap: 0; position: sticky; top: 0; z-index: 30; }
@@ -811,7 +815,7 @@ table.la tr:hover td { background: transparent; }
         <button class="btn" id="rv-save">Save</button>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Name</th><th>Topic</th><th>Check-in</th><th>Due</th></tr></thead>
+        <thead><tr><th>Name</th><th>Topic</th><th>Check-in</th><th>Due</th><th></th></tr></thead>
         <tbody id="rv-rows"></tbody>
       </table></div>
       <div id="rv-thin" class="small" style="margin-top:10px"></div>
@@ -842,9 +846,9 @@ table.la tr:hover td { background: transparent; }
   <!-- Settings -->
   <section class="tab" id="tab-settings">
     <div class="layout-bar" id="lay-bar">
-      <span class="lay-help" id="lay-help" hidden>Drag any tile to move it. Drag its right edge to make it wider, or its bottom edge to make it shorter (it scrolls inside). Changes save for your login.</span>
-      <button class="btn ghost" id="lay-reset" hidden>Reset to default</button>
-      <button class="btn ghost" id="lay-edit">✥ Edit layout</button>
+      <span class="lay-help" hidden>Drag any tile to move it. Drag its right edge to make it wider, or its bottom edge to make it shorter (it scrolls inside). Changes save for your login.</span>
+      <button class="btn ghost lay-reset" hidden>Reset to default</button>
+      <button class="btn ghost lay-edit">✥ Edit layout</button>
     </div>
     <div class="tiles-grid" id="set-grid">
       <div class="card" data-tile="kiosk" data-title="Kiosk">
@@ -1003,6 +1007,7 @@ table.la tr:hover td { background: transparent; }
         <div><label class="block" for="st-hire">Hire date <span class="hint">optional</span></label><input type="date" id="st-hire"></div>
       </div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" id="st-active"> Active</label>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="st-noreview"> No spaced review for this person <span class="hint">they won't get missed topics again later</span></label>
       <div class="err" id="st-error" style="margin-top:8px"></div>
     </div>
     <div class="dlg-foot">
