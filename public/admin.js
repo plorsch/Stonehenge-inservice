@@ -178,7 +178,7 @@
     if (topics.length) groups.push(['Topics', topics]);
     const staff = state.employees.filter(e => hit([e.name, e.last4, e.department, e.jobTitle].join(' '))).slice(0, 6)
       .map(e => ({ label: e.name, where: [e.department, e.active ? '' : 'Inactive'].filter(Boolean).join(' · '),
-        go: () => { goTab('staff'); $('staff-filter').value = 'all'; $('staff-missing').value = ''; $('staff-search').value = e.name; renderStaff(); } }));
+        go: () => { goTab('staff'); $('staff-filter').value = 'all'; $('staff-dept').value = ''; $('staff-missing').value = ''; $('staff-search').value = e.name; renderStaff(); } }));
     if (staff.length) groups.push(['Staff', staff]);
     const anns = (state.announcements || []).filter(a => hit(a.text)).slice(0, 4).map(a => ({ label: a.text.slice(0, 60), where: '', go: () => goTab('announcements') }));
     if (anns.length) groups.push(['Announcements', anns]);
@@ -458,10 +458,23 @@
   });
 
   // ---------- topics ----------
+  // Fills a filter dropdown, keeping the current choice if it still exists.
+  const sameDept = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  function fillSelect(sel, first, options) {
+    const cur = sel.value;
+    sel.innerHTML = first.map(([v, l]) => `<option value="${escapeHtml(v)}">${escapeHtml(l)}</option>`).join('') + options.map(o => `<option>${escapeHtml(o)}</option>`).join('');
+    sel.value = [...sel.options].some(o => o.value === cur) ? cur : first[0][0];
+  }
   function renderTopics() {
     const q = $('topic-search').value.trim().toLowerCase();
     const f = $('topic-filter').value;
+    const allDepts = [...new Set([...depts(), ...state.topics.flatMap(t => t.departments || [])])].sort((a, b) => a.localeCompare(b));
+    fillSelect($('topic-for'), [['', 'For: anyone'], ['*', 'For: all staff only']], allDepts);
+    fillSelect($('topic-cat'), [['', 'All categories'], ['-', 'No category']], [...new Set(state.topics.map(t => t.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
+    const fd = $('topic-for').value, fc = $('topic-cat').value;
     const rows = state.topics
+      .filter(t => !fd || (fd === '*' ? !(t.departments || []).length : !(t.departments || []).length || t.departments.some(d => sameDept(d, fd))))
+      .filter(t => !fc || (fc === '-' ? !t.category : t.category === fc))
       .filter(t => f === 'all' || (f === 'retired' ? t.status === 'retired' : f === 'draft' ? t.status === 'draft' : t.status !== 'retired' && (f !== 'rotation' || (t.inRotation && t.status === 'active'))))
       .filter(t => !q || [t.title, t.category, t.lesson, ...t.questions.map(x => x.text)].join(' ').toLowerCase().includes(q))
       .sort((a, b) => (a.status === 'draft') - (b.status === 'draft') || (b.lastUsedDate || '').localeCompare(a.lastUsedDate || '') || a.title.localeCompare(b.title));
@@ -478,6 +491,7 @@
         <td>${t.questions.length}</td>
         <td>${retired || draft ? '<span class="muted">–</span>' : `<input type="checkbox" data-rotation="${t.id}"${t.inRotation ? ' checked' : ''} aria-label="In rotation">`}</td>
         <td style="white-space:nowrap">${fmtDate(t.lastUsedDate)}</td>
+        <td style="white-space:nowrap">${t.createdAt ? fmtDate(t.createdAt.slice(0, 10)) : '<span class="muted">–</span>'}</td>
         <td>${st ? st.responses : 0}</td>
         <td>${pct}${st && st.helpful + st.notHelpful ? `<div class="small" title="See who rated this lesson"><a href="#" data-ratings="${t.id}">👍 ${st.helpful} · 👎 ${st.notHelpful}</a></div>` : ''}</td>
         <td style="white-space:nowrap">
@@ -487,12 +501,14 @@
           ${retired ? `<button class="btn subtle" data-act="restore" data-id="${t.id}">Restore</button>`
                     : `<button class="btn subtle danger" data-act="retire" data-id="${t.id}">Retire</button>`}
         </td></tr>`;
-    }).join('') || '<tr><td colspan="8" class="muted">No topics match.</td></tr>';
+    }).join('') || '<tr><td colspan="9" class="muted">No topics match.</td></tr>';
     const cats = [...new Set(state.topics.map(t => t.category).filter(Boolean))].sort();
     $('category-list').innerHTML = cats.map(c => `<option value="${escapeHtml(c)}">`).join('');
   }
   $('topic-search').addEventListener('input', renderTopics);
   $('topic-filter').addEventListener('change', renderTopics);
+  $('topic-for').addEventListener('change', renderTopics);
+  $('topic-cat').addEventListener('change', renderTopics);
 
   $('topic-rows').addEventListener('change', async e => {
     const id = e.target.dataset.rotation;
@@ -950,7 +966,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   function renderStaff() {
     const q = $('staff-search').value.trim().toLowerCase();
     const f = $('staff-filter').value;
-    const inSet = state.employees.filter(e => f === 'all' || (f === 'active' ? e.active : !e.active));
+    fillSelect($('staff-dept'), [['', 'All departments'], ['-', 'No department']],
+      [...new Set([...depts(), ...state.employees.map(e => e.department).filter(Boolean)])].sort((a, b) => a.localeCompare(b)));
+    const fd = $('staff-dept').value;
+    const inSet = state.employees.filter(e => f === 'all' || (f === 'active' ? e.active : !e.active))
+      .filter(e => !fd || (fd === '-' ? !e.department : sameDept(e.department, fd)));
     const noBday = inSet.filter(e => !e.birthday).length, noHire = inSet.filter(e => !e.hireDate).length;
     const mo = $('staff-missing').options;
     mo[0].textContent = `Everyone (${inSet.length})`; mo[1].textContent = `Missing birthday (${noBday})`; mo[2].textContent = `Missing hire date (${noHire})`;
@@ -1078,6 +1098,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
 
   $('staff-search').addEventListener('input', renderStaff);
   $('staff-filter').addEventListener('change', renderStaff);
+  $('staff-dept').addEventListener('change', renderStaff);
   $('staff-missing').addEventListener('change', renderStaff);
   function openStaff(e) {
     editingStaffId = e ? e.id : null;

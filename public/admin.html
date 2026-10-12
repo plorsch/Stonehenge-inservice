@@ -18,7 +18,9 @@
   nav { display: flex; gap: 2px; flex-wrap: wrap; }
   nav button { background: none; border: 0; font: inherit; color: var(--muted); padding: 16px 11px; cursor: pointer; border-bottom: 3px solid transparent; }
   nav button.on { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
-  .gsearch { position: relative; margin-left: auto; padding: 8px 0; }
+  .gsearch { position: relative; margin-left: auto; padding: 8px 0; order: 1; }
+  header nav { order: 2; flex-basis: 100%; margin-top: -8px; }
+  #topic-search, #staff-search { min-width: 180px; }
   .gsearch input { width: 270px; max-width: 70vw; padding: 8px 12px; border: 1px solid var(--line); border-radius: 20px; font: inherit; background: var(--bg); }
   .gsearch-results { position: absolute; right: 0; top: 100%; z-index: 40; width: 400px; max-width: 92vw; max-height: 70vh; overflow-y: auto; background: #fff;
     border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.18); padding: 6px 0; }
@@ -307,6 +309,8 @@
     <div class="card">
       <div class="toolbar">
         <input type="text" id="topic-search" placeholder="Search topics" class="grow">
+        <select id="topic-for" title="Show topics a department gets"></select>
+        <select id="topic-cat" title="Filter by category"></select>
         <select id="topic-filter">
           <option value="active">Active topics</option>
           <option value="rotation">In rotation only</option>
@@ -319,7 +323,7 @@
         <button class="btn" id="new-topic">+ New topic</button>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Topic</th><th>For</th><th>Questions</th><th>In rotation</th><th>Last used</th><th>Responses</th><th>Right first try</th><th></th></tr></thead>
+        <thead><tr><th>Topic</th><th>For</th><th>Questions</th><th>In rotation</th><th>Last used</th><th>Created</th><th>Responses</th><th>Right first try</th><th></th></tr></thead>
         <tbody id="topic-rows"></tbody>
       </table></div>
       <div class="muted small" style="margin-top:10px">Retiring hides a topic from the iPad but keeps it and its history. You can restore it any time.</div>
@@ -331,6 +335,7 @@
     <div class="card">
       <div class="toolbar">
         <input type="text" id="staff-search" placeholder="Search staff" class="grow">
+        <select id="staff-dept" title="Filter by department"></select>
         <select id="staff-filter"><option value="active">Active staff</option><option value="inactive">Inactive</option><option value="all">All</option></select>
         <select id="staff-missing"><option value="">Everyone</option><option value="birthday">Missing birthday</option><option value="hire">Missing hire date</option></select>
         <button class="btn ghost" id="staff-group-btn">Group job titles into departments</button>
