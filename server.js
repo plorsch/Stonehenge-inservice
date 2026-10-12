@@ -122,6 +122,9 @@ function defaultSettings() {
     // Day of the week (0 = Sunday ... 6 = Saturday) when a Culture-category topic replaces the regular one.
     // null = no culture day; Culture topics then rotate like any other topic.
     cultureDay: 5,
+    // Quiz-only day (0-6, or null for none): no lesson, one question from a topic the person did in the past week.
+    quizDay: null,
+    quizText: { en: 'This checks something you learned this past week. No lesson today, just one question.', es: 'Esto repasa algo que aprendió esta semana. Hoy no hay lección, solo una pregunta.' },
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
     leaders: {},              // { department: leader name and email(s) }, for the Clock-in check lists and follow-up emails
@@ -455,6 +458,31 @@ function weeklyPick(key, pool) {
   return t;
 }
 
+// ---------- Quiz-only day ----------
+const isQuizDay = (date = today()) => Number.isInteger(db.settings.quizDay) && weekday(date) === db.settings.quizDay;
+// One question from a topic this person did in the past 7 days, ones they missed first, then the most recent.
+// A different question than the ones they've already seen from it lately. Someone with nothing recent (new, PRN,
+// back from leave, or not on the roster) gets a topic their department did this week.
+function quizFor(emp, dept) {
+  const from = addDays(today(), -7), now = today();
+  const quizzedToday = new Set(db.responses.filter(r => emp && r.employeeId === emp.id && r.date === now && r.kind === 'quiz').map(r => r.topicId));
+  const mine = emp ? db.responses.filter(r => r.employeeId === emp.id && r.completed && r.date >= from && r.date < now && r.kind !== 'quiz') : [];
+  const byTopic = {};
+  for (const r of mine) {
+    const x = byTopic[r.topicId] || (byTopic[r.topicId] = { missed: false, last: '', seen: [] });
+    x.missed = x.missed || !r.firstTryCorrect; x.last = r.submittedAt > x.last ? r.submittedAt : x.last; x.seen.push(r.questionId);
+  }
+  const ranked = Object.entries(byTopic).filter(([id]) => isLive(findTopic(id)) && !quizzedToday.has(id))
+    .sort(([, a], [, b]) => (b.missed - a.missed) || b.last.localeCompare(a.last));
+  if (ranked.length) { const [id, x] = ranked[0]; return { topic: findTopic(id), avoid: x.seen, from: 'mine' }; }
+  // Nothing of their own: the topic their department did most this week.
+  const count = {};
+  for (const r of db.responses) if (r.date >= from && r.date < now && r.kind !== 'quiz' && sameText(r.department || '', dept || '') && isLive(findTopic(r.topicId)) && !quizzedToday.has(r.topicId)) count[r.topicId] = (count[r.topicId] || 0) + 1;
+  const best = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
+  if (best) return { topic: findTopic(best[0]), avoid: [], from: 'dept' };
+  return null;
+}
+
 // The regular (non-required) topic for one department right now.
 function regularTopicFor(dept, { peek = false } = {}) {
   const sched = activeSchedulesFor(dept)[0];
@@ -536,7 +564,7 @@ function newResponse(b, topic, q, at = new Date()) {
   if (w.employeeId && !emp) return null;
   const name = emp ? emp.name : cleanText(w.name, 100);
   if (!name) return null;
-  const kind = ['required', 'scheduled', 'rotation', 'starter', 'annual', 'review'].includes(b.kind) ? b.kind : 'rotation';
+  const kind = ['required', 'scheduled', 'rotation', 'starter', 'annual', 'review', 'quiz'].includes(b.kind) ? b.kind : 'rotation';
   return {
     id: newId(), submittedAt: at.toISOString(), date: today(at),
     employeeId: emp ? emp.id : null, name, last4: emp ? emp.last4 : cleanLast4(w.last4) || '',
@@ -834,7 +862,8 @@ function filterResponses(q) {
     (!q.get('department') || sameText(r.department, q.get('department'))) &&
     (!q.get('missed') || !r.firstTryCorrect) &&
     (!q.get('helpful') || (q.get('helpful') === 'up' ? r.helpful === true : q.get('helpful') === 'down' ? r.helpful === false : 'helpful' in r)) &&
-    (!q.get('employeeId') || r.employeeId === q.get('employeeId'))
+    (!q.get('employeeId') || r.employeeId === q.get('employeeId')) &&
+    (!q.get('kind') || (q.get('kind') === 'noquiz' ? r.kind !== 'quiz' : r.kind === q.get('kind')))
   );
 }
 
@@ -1082,6 +1111,11 @@ async function kioskRoutes(req, res, p, m) {
       const rv = nextReviewFor(emp);
       if (rv) items.push(kioskItem(findTopic(rv.topicId), emp.id, { kind: 'review', stage: rv.stage, avoid: rv.missed }));
     }
+    // Quiz day: one question from their past week instead of a yearly or regular topic.
+    if (!items.length && isQuizDay()) {
+      const qz = quizFor(emp, who.department);
+      if (qz) items.push(kioskItem(qz.topic, who.employeeId, { kind: 'quiz', avoid: qz.avoid, quizFrom: qz.from, quizText: db.settings.quizText }));
+    }
     if (!items.length && emp) {
       const due = nextAnnualFor(emp);
       if (due) items.push(kioskItem(due.topic, emp.id, { kind: 'annual', due: due.due }));
@@ -1108,7 +1142,7 @@ async function kioskRoutes(req, res, p, m) {
       r = newResponse(b, topic, q);
       if (!r) return send(res, 400, { error: 'Please start again.' });
       db.responses.push(r);
-      recordUsage(topic);
+      if (r.kind !== 'quiz') recordUsage(topic);   // a quiz doesn't make a topic "recently used" for the rotation
     }
     r.attempts.push(chosen.join('; '));
     r.lang = b.lang === 'es' ? 'es' : 'en';
@@ -1172,7 +1206,7 @@ async function kioskRoutes(req, res, p, m) {
         r = newResponse(rec, topic, q, attempts[0].at);
         if (!r) { done.push(offlineId); continue; }
         db.responses.push(r);
-        recordUsage(topic);
+        if (r.kind !== 'quiz') recordUsage(topic);
       }
       if (!r.completed) {
         for (const a of attempts) {
@@ -1265,6 +1299,7 @@ function clockCheck(punches) {
 function todayOverview() {
   const depts = db.settings.departments.length ? db.settings.departments : [''];
   return depts.map(d => {
+    if (isQuizDay()) return { department: d, topicId: null, title: null, source: 'quiz' };
     const r = regularTopicFor(d, { peek: true });
     return { department: d, topicId: r.topic ? r.topic.id : null, title: r.topic ? r.topic.title : null, source: r.source, poolSize: r.poolSize };
   });
@@ -1289,6 +1324,7 @@ function forecast(start, days) {
   for (let i = 0; i < days; i++) {
     const date = addDays(start, i), week = weekStart(date);
     const items = depts.map(dept => {
+      if (isQuizDay(date)) return { department: dept, topicId: null, title: null, source: 'quiz' };
       const sched = activeSchedulesFor(dept, date)[0];
       if (sched) return { department: dept, topicId: sched.topicId, title: findTopic(sched.topicId).title, source: 'schedule', scheduleId: sched.id };
       const key = dept || '(none)';
@@ -1675,6 +1711,8 @@ async function adminRoutes(req, res, p, m, url) {
     const b = await readBody(req);
     const s = db.settings;
     if (['weekly', 'daily', 'random'].includes(b.fallbackMode)) s.fallbackMode = b.fallbackMode;
+    if ('quizDay' in b) s.quizDay = Number.isInteger(b.quizDay) && b.quizDay >= 0 && b.quizDay <= 6 ? b.quizDay : null;
+    if (b.quizText && typeof b.quizText === 'object') s.quizText = { en: cleanText(b.quizText.en, 300) || defaultSettings().quizText.en, es: cleanText(b.quizText.es, 300) || defaultSettings().quizText.es };
     if ('cultureDay' in b) s.cultureDay = Number.isInteger(b.cultureDay) && b.cultureDay >= 0 && b.cultureDay <= 6 ? b.cultureDay : null;
     if ('facilityName' in b) s.facilityName = cleanText(b.facilityName, 100) || 'Stonehenge';
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
@@ -1944,10 +1982,11 @@ async function adminRoutes(req, res, p, m, url) {
     const days = Array.from({ length: 14 }, (_, i) => ({ date: addDays(start14, i), right: 0, missed: 0 }));
     const byDay = Object.fromEntries(days.map(d => [d.date, d]));
     const depts = new Map(), missedQ = new Map();
-    let unlistedToday = 0, unfinishedToday = 0;
+    let unlistedToday = 0, unfinishedToday = 0, quizzesToday = 0;
     for (const r of db.responses) {
       if (r.date < start14) continue;
       if (r.date === t && !r.verified) unlistedToday++;
+      if (r.date === t && r.kind === 'quiz' && r.completed) quizzesToday++;
       if (!r.completed) { if (r.date === t) unfinishedToday++; continue; }
       const d = byDay[r.date];
       if (d) r.firstTryCorrect ? d.right++ : d.missed++;
@@ -1967,7 +2006,7 @@ async function adminRoutes(req, res, p, m, url) {
       today: t, start7, days,
       departments: [...depts.values()].sort((a, b) => (b.right + b.missed) - (a.right + a.missed)),
       topMissed: [...missedQ.values()].sort((a, b) => b.missed - a.missed).slice(0, 5),
-      unlistedToday, unfinishedToday,
+      unlistedToday, unfinishedToday, quizzesToday, quizDay: isQuizDay(),
       followupsOpen: db.followups.filter(f => !f.attestedAt).length,
       celebrationsToday: db.settings.celebrations ? todaysCelebrations() : []
     });

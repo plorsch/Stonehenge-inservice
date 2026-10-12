@@ -106,6 +106,7 @@
   .pill.warn { background: var(--warn-soft); color: var(--warn); }
   .pill.brand { background: var(--brand-soft); color: var(--brand); }
   .pill.req { background: var(--req-soft); color: var(--req); }
+  .pill.quiz { background: #efe6ff; color: #4c2a85; }
   .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
   .checks label { display: inline-flex; gap: 6px; align-items: center; }
   .qcard { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 14px; margin-bottom: 12px; background: #fbfcfd; }
@@ -233,6 +234,7 @@ table.la tr:hover td { background: transparent; }
 .la-cell.sched { background: #1f6f8b; color: #fff; border: 2px solid #1f6f8b; }
 .la-cell.auto { background: #f4f9fb; color: #17485d; border: 2px dashed #8fb3c2; }
 .la-cell.culture { background: #f8f2ff; color: #5b2b94; border: 2px dashed #b48ae6; }
+.la-cell.quiz { background: linear-gradient(120deg, #efe6ff, #e4f0ff); color: #4c2a85; border: 2px solid #d9c8f5; }
 .la-cell.none { background: #fff6f0; color: #a14a17; border: 2px dashed #f0b48c; }
 .la-cell.past { opacity: .45; }
 .la-cell:hover { filter: brightness(.96); box-shadow: 0 2px 8px rgba(23,72,93,.18); }
@@ -589,6 +591,19 @@ table.la tr:hover td { background: transparent; }
           <option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
         </select>
       </div>
+      <div style="margin-top:14px">
+        <label class="block" for="quiz-day"><strong>🧠 Quiz-only day</strong> <span class="muted">No lesson that day. Each person gets one question from a topic they did in the past week, ones they missed first. Someone with nothing recent gets a topic their department did this week. It takes the place of that day's scheduled or rotation topic. Required education and new hire topics still come first. Quizzes count toward streaks.</span></label>
+        <select id="quiz-day">
+          <option value="">No quiz day</option>
+          <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option>
+          <option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
+        </select>
+        <div class="err" id="quiz-clash" hidden>That's also your culture day. Quiz day wins, so there'd be no culture topic that week.</div>
+        <label class="block" for="quiz-text-en" style="margin-top:8px">Message above the question <span class="hint">under "🧠 Pop quiz!"</span></label>
+        <input type="text" id="quiz-text-en" maxlength="300" style="width:100%">
+        <label class="block" for="quiz-text-es">In Spanish</label>
+        <input type="text" id="quiz-text-es" maxlength="300" style="width:100%">
+      </div>
       <div style="margin-top:12px"><button class="btn" id="save-fallback">Save</button></div>
     </div>
   </section>
@@ -707,6 +722,7 @@ table.la tr:hover td { background: transparent; }
         <select id="resp-dept"><option value="">All departments</option></select>
         <select id="resp-topic"><option value="">All topics</option></select>
         <label><input type="checkbox" id="resp-missed"> Missed first try only</label>
+        <select id="resp-kind"><option value="">All types</option><option value="noquiz">In-services only</option><option value="quiz">🧠 Quizzes only</option><option value="review">Spaced reviews only</option><option value="required">Required only</option></select>
         <select id="resp-helpful"><option value="">Any lesson rating</option><option value="any">Rated 👍 or 👎</option><option value="up">👍 Helpful</option><option value="down">👎 Not helpful</option></select>
         <span class="pill" id="resp-person" hidden></span>
         <span class="grow"></span>

@@ -151,6 +151,8 @@
   .lang { display: block; margin: -10px -10px 12px auto; min-height: 48px; padding: 0 16px; border-radius: 24px; border: 2px solid var(--brand); background: #fff; color: var(--brand); font: inherit; font-size: 17px; font-weight: 650; cursor: pointer; }
   .required-banner.starter { background: var(--good-soft); color: var(--good); }
   .required-banner.review { background: var(--brand-soft); color: var(--brand); }
+  .required-banner.quiz { background: linear-gradient(120deg, #efe6ff, #e4f0ff); color: #4c2a85; border: 1px solid #d9c8f5; }
+  .required-banner.quiz strong { font-size: 20px; text-transform: none; letter-spacing: 0; margin-bottom: 2px; }
   .review-note { font-size: 19px; font-weight: 600; color: var(--brand); margin: 8px 0 0; }
   .required-banner { background: var(--req-soft); color: var(--req); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 17px; }
   .required-banner strong { display: block; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; }
@@ -777,7 +779,7 @@
     $('tryagain').hidden = true;
     renderItem();
     // A review starts with the question (recall first); the lesson is one tap away.
-    show(it.kind === 'review' || (previewTopic && s.idx > 0) ? 'question' : 'lesson');
+    show(['review', 'quiz'].includes(it.kind) || (previewTopic && s.idx > 0) ? 'question' : 'lesson');
   }
   // Fills in the lesson and question screens in the chosen language.
   function renderItem() {
@@ -785,15 +787,20 @@
     const multi = s.items.length > 1 ? T(` · ${s.idx + 1} of ${s.items.length}`, ` · ${s.idx + 1} de ${s.items.length}`) : '';
     document.querySelectorAll('[data-action=lang]').forEach(b => { b.hidden = !it.es; b.textContent = es() ? '🌐 English' : '🌐 Español'; });
     const banner = $('lesson-required');
-    banner.className = 'required-banner' + (it.kind === 'starter' ? ' starter' : it.kind === 'review' ? ' review' : '');
-    banner.hidden = !['required', 'starter', 'annual', 'review'].includes(it.kind);
+    banner.className = 'required-banner' + (it.kind === 'starter' ? ' starter' : it.kind === 'review' ? ' review' : it.kind === 'quiz' ? ' quiz' : '');
+    banner.hidden = !['required', 'starter', 'annual', 'review', 'quiz'].includes(it.kind);
     const reviewHtml = `<strong>${T('Quick check-in', 'Repaso rápido')}</strong>${T("This one was tricky last time. Let's see if it stuck.", 'Esta fue difícil la última vez. Veamos si la recuerda.')}`;
-    $('question-review').innerHTML = it.kind === 'review' ? reviewHtml : '';
-    $('question-review').hidden = it.kind !== 'review';
+    // Quiz day: the editable explainer from Settings, above the question.
+    const qt = it.quizText || {};
+    const quizHtml = `<strong>${T('🧠 Pop quiz!', '🧠 ¡Prueba sorpresa!')}</strong>${escapeHtml(T(qt.en || 'This checks something you learned this past week.', qt.es || qt.en || 'Esto repasa algo que aprendió esta semana.'))}<div style="font-size:14px;margin-top:6px;opacity:.8">${T('Topic', 'Tema')}: ${escapeHtml(es() ? it.es.title : it.topic.title)}</div>`;
+    $('question-review').className = 'required-banner ' + (it.kind === 'quiz' ? 'quiz' : 'review');
+    $('question-review').innerHTML = it.kind === 'review' ? reviewHtml : it.kind === 'quiz' ? quizHtml : '';
+    $('question-review').hidden = !['review', 'quiz'].includes(it.kind);
     banner.innerHTML = it.kind === 'required'
       ? `<strong>${T('Required education', 'Educación obligatoria')}${multi}</strong>${escapeHtml(it.reason || T('Please complete this before continuing.', 'Complete esto antes de continuar.'))}`
       : it.kind === 'starter' ? `<strong>${T('Welcome to the team!', '¡Bienvenido al equipo!')}</strong>${T('This is one of your new hire topics.', 'Este es uno de sus temas para empleados nuevos.')}`
       : it.kind === 'review' ? reviewHtml
+      : it.kind === 'quiz' ? quizHtml
       : it.kind === 'annual' ? `<strong>${T('Yearly requirement', 'Requisito anual')}</strong>${it.due ? T(`Due by ${fmtDue(it.due)}.`, `Vence el ${fmtDue(it.due)}.`) : T('Everyone completes this once a year.', 'Todos completan esto una vez al año.')}`
       : '';
     $('lesson-kicker').textContent = (it.kind === 'scheduled' ? T('Topic of the week', 'Tema de la semana') : (es() ? 'Lección' : (it.topic.category || 'Lesson'))) + (it.kind === 'required' ? '' : multi);
@@ -805,7 +812,7 @@
     $('to-question').textContent = T("I've read this", 'Ya lo leí');
     $('question-kicker').textContent = T('Question', 'Pregunta') + multi;
     $('select-all').textContent = T('Select all that apply', 'Seleccione todas las correctas');
-    $('review-lesson').textContent = T('Review lesson', 'Ver la lección');
+    $('review-lesson').textContent = it.kind === 'quiz' ? T('📖 Read the lesson again', '📖 Leer la lección otra vez') : T('Review lesson', 'Ver la lección');
     $('submit').textContent = T('Submit answer', 'Enviar respuesta');
     renderTryAgain();
     renderQuestion();

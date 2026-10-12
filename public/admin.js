@@ -284,11 +284,12 @@
       const why = d.source === 'schedule' ? '<span class="pill brand">📌 Scheduled</span>'
         : d.source === 'weekly' ? '<span class="pill">🔁 Topic of the week</span>'
         : d.source === 'culture' ? '<span class="pill">🌟 Culture day</span>'
+        : d.source === 'quiz' ? '<span class="pill brand">🧠 Quiz day</span>'
         : d.source === 'random' ? `<span class="pill">🎲 Random from ${d.poolSize}</span>`
         : '<span class="pill">🔁 Topic of the day</span>';
       const reqNote = reqs.length ? `<span class="pill req">⚠️ ${reqs.length} required first</span>` : '';
       const swap = ['daily', 'weekly', 'culture'].includes(d.source) && d.topicId ? `<button class="btn subtle" data-swap="${escapeHtml(d.department)}" title="Pick a different rotation topic for today">🔀 Pick another</button>` : '';
-      const title = d.title ? `<a href="#" data-preview="${d.topicId}">${escapeHtml(d.title)}</a>` : (d.source === 'random' ? '<span class="muted">Varies per person</span>' : '<span class="muted">Nothing available</span>');
+      const title = d.title ? `<a href="#" data-preview="${d.topicId}">${escapeHtml(d.title)}</a>` : (d.source === 'random' ? '<span class="muted">Varies per person</span>' : d.source === 'quiz' ? '<span>One question from each person\'s past week</span>' : '<span class="muted">Nothing available</span>');
       const name = d.department || 'Everyone';
       return `<div class="dt-card" style="--dt:${DT_COLORS[i % DT_COLORS.length]}"><div class="dt-top"><div class="dt-av">${escapeHtml(name.slice(0, 1).toUpperCase())}</div><div class="dt-dept">${escapeHtml(name)}</div></div>
         <div class="dt-topic">${title}</div><div class="dt-foot">${why}${reqNote}${swap}</div></div>`;
@@ -311,7 +312,7 @@
   function openResponses(f) {
     respPerson = f.person || null;
     $('resp-from').value = f.from || ''; $('resp-to').value = f.to || ''; $('resp-dept').value = f.department || '';
-    $('resp-topic').value = f.topicId || ''; $('resp-missed').checked = !!f.missed; $('resp-helpful').value = '';
+    $('resp-topic').value = f.topicId || ''; $('resp-missed').checked = !!f.missed; $('resp-helpful').value = ''; $('resp-kind').value = f.kind || '';
     goTab('responses');
     if (document.querySelector('#nav button.on').dataset.tab === 'responses') loadResponses();
   }
@@ -333,6 +334,7 @@
     const line = (icon, html) => `<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)"><span>${icon}</span><span>${html}</span></div>`;
     $('dash-glance').innerHTML =
       line('🎂', cel.length ? cel.map(c => `${escapeHtml(c.name)} <span class="muted">(${c.type === 'birthday' ? 'birthday' : c.years + '-year anniversary'})</span>`).join(', ') : '<span class="muted">No birthdays or work anniversaries today</span>') +
+      (dash.quizDay || dash.quizzesToday ? line('🧠', `It's quiz day. <a href="#" data-go="today-quiz">${dash.quizzesToday} pop quiz${dash.quizzesToday === 1 ? '' : 'zes'} done so far</a>`) : '') +
       line('🙋', dash.unlistedToday ? `<a href="#" data-go="today-all">${dash.unlistedToday} not on the roster today</a>` : '<span class="muted">Everyone today was on the roster</span>') +
       line('⏸️', dash.unfinishedToday ? `<a href="#" data-go="today-all">${dash.unfinishedToday} started but didn't finish</a>` : '<span class="muted">No unfinished in-services today</span>') +
       (leaderGapHtml(true) ? line('⚠️', `<span style="color:var(--warn)">Follow-up emails can't reach some departments.</span><br>${leaderGapHtml(true)}`) : '') +
@@ -433,6 +435,7 @@
     e.preventDefault();
     const go = b.dataset.go, t = state.todayDate;
     if (go === 'today-all') openResponses({ from: t, to: t });
+    if (go === 'today-quiz') openResponses({ from: t, to: t, kind: 'quiz' });
     else if (go === 'today-missed') openResponses({ from: t, to: t, missed: true });
     else if (go === 'followups') { $('fu-filter').value = 'open'; goTab('reports'); setTimeout(() => $('fu-card').scrollIntoView({ behavior: 'smooth' }), 80); }
     else if (go === 'leaders') { goTab('settings'); setTimeout(() => $('dept-card').scrollIntoView({ behavior: 'smooth', block: 'start' }), 80); }
@@ -499,6 +502,11 @@
     loadLookAhead();
     document.querySelectorAll('input[name=fallback]').forEach(r => { r.checked = r.value === state.settings.fallbackMode; });
     $('culture-day').value = Number.isInteger(state.settings.cultureDay) ? String(state.settings.cultureDay) : '';
+    $('quiz-day').value = Number.isInteger(state.settings.quizDay) ? String(state.settings.quizDay) : '';
+    const qt = state.settings.quizText || {};
+    if (document.activeElement !== $('quiz-text-en')) $('quiz-text-en').value = qt.en || '';
+    if (document.activeElement !== $('quiz-text-es')) $('quiz-text-es').value = qt.es || '';
+    quizClash();
     const showPast = $('sc-show-past').checked;
     const rows = state.schedules
       .filter(s => showPast || !s.endDate || s.endDate >= state.todayDate)
@@ -521,7 +529,10 @@
   const addDay = (iso, n) => { const [y, m, d] = iso.split('-').map(Number); return isoDay(new Date(y, m - 1, d + n)); };
   const mondayOf = iso => { const [y, m, d] = iso.split('-').map(Number); const x = new Date(y, m - 1, d); return isoDay(new Date(y, m - 1, d - ((x.getDay() + 6) % 7))); };
   const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const laLabel = { schedule: 'Scheduled', weekly: 'Topic of the week', daily: 'Topic of the day', culture: 'Culture day', random: '' };
+  const laLabel = { schedule: 'Scheduled', weekly: 'Topic of the week', daily: 'Topic of the day', culture: 'Culture day', random: '', quiz: 'Quiz day' };
+  // Quiz day and culture day on the same weekday: say which one wins.
+  function quizClash() { $('quiz-clash').hidden = !($('quiz-day').value !== '' && $('quiz-day').value === $('culture-day').value); }
+  ['quiz-day', 'culture-day'].forEach(id => $(id).addEventListener('change', quizClash));
   async function loadLookAhead() {
     if (!laStart) laStart = mondayOf(state.todayDate);
     try {
@@ -539,8 +550,8 @@
             let j = i + 1;
             while (j < w.length) { const n = w[j].items[r]; if (n.source !== it.source || n.topicId !== it.topicId || n.scheduleId !== it.scheduleId) break; j++; }
             const from = w[i].date, to = w[j - 1].date;
-            const cls = it.source === 'schedule' ? 'sched' : it.source === 'culture' ? 'culture' : it.topicId || it.source === 'random' ? 'auto' : 'none';
-            const title = it.source === 'random' ? 'A random rotation topic each visit' : it.title || 'Nothing in the rotation';
+            const cls = it.source === 'schedule' ? 'sched' : it.source === 'culture' ? 'culture' : it.source === 'quiz' ? 'quiz' : it.topicId || it.source === 'random' ? 'auto' : 'none';
+            const title = it.source === 'random' ? 'A random rotation topic each visit' : it.source === 'quiz' ? '🧠 Pop quiz from their past week' : it.title || 'Nothing in the rotation';
             cells.push(`<td colspan="${j - i}"><button class="la-cell ${cls}${to < f.today ? ' past' : ''}" data-la-dept="${escapeHtml(dept)}" data-la-from="${from}" data-la-to="${to}" data-la-topic="${it.topicId || ''}" data-la-source="${it.source}"
               title="${escapeHtml(title)} · ${escapeHtml(dept || 'All staff')} · ${fmtDate(from)}${to !== from ? ' – ' + fmtDate(to) : ''}">${escapeHtml(title)}<small>${laLabel[it.source] || ''}</small></button></td>`);
             i = j;
@@ -603,8 +614,9 @@
   $('save-fallback').addEventListener('click', async () => {
     const v = document.querySelector('input[name=fallback]:checked');
     if (!v) return;
-    const cd = $('culture-day').value;
-    try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ fallbackMode: v.value, cultureDay: cd === '' ? null : Number(cd) }) }); toast('Saved'); await refresh(); }
+    const cd = $('culture-day').value, qd = $('quiz-day').value;
+    try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ fallbackMode: v.value, cultureDay: cd === '' ? null : Number(cd),
+      quizDay: qd === '' ? null : Number(qd), quizText: { en: $('quiz-text-en').value, es: $('quiz-text-es').value } }) }); toast('Saved'); await refresh(); }
     catch (err) { fail(err); }
   });
 
@@ -1442,11 +1454,13 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const [{ responses }, { topics }] = await Promise.all([api('/api/admin/responses?employeeId=' + encodeURIComponent(emp.id)), api('/api/admin/annual')]);
       const done = responses.filter(r => r.completed);
       const year = state.todayDate.slice(0, 4);
-      const thisYear = done.filter(r => r.date.startsWith(year));
+      // Pop quizzes are counted on their own; in-services are everything else.
+      const thisYear = done.filter(r => r.date.startsWith(year) && r.kind !== 'quiz');
+      const quizYear = done.filter(r => r.date.startsWith(year) && r.kind === 'quiz');
       const first = thisYear.filter(r => r.firstTryCorrect).length;
       const yearly = topics.map(t => ({ title: t.title, p: t.people.find(x => x.id === emp.id) })).filter(x => x.p);
       const words = { current: 'Up to date', soon: 'Due soon', overdue: 'Overdue', never: 'Not done yet' };
-      const kinds = { required: 'Required', scheduled: 'Scheduled', rotation: 'Rotation', starter: 'New hire', annual: 'Yearly', review: 'Review' };
+      const kinds = { required: 'Required', scheduled: 'Scheduled', rotation: 'Rotation', starter: 'New hire', annual: 'Yearly', review: 'Review', quiz: 'Pop quiz' };
       const pct = thisYear.length ? Math.round(100 * first / thisYear.length) : null;
       const behind = yearly.filter(x => ['overdue', 'never'].includes(x.p.status)).length;
       const tone = { current: 'ok', soon: 'soon', overdue: 'bad', never: 'bad' };
@@ -1488,7 +1502,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <div class="stats">
           <div class="stat"><b>${thisYear.length}</b><span>in-services completed in ${year}</span></div>
           <div class="stat"><b>${pct === null ? '—' : pct + '%'}</b><span>correct on the first try in ${year}</span></div>
-          <div class="stat"><b>${done.length}</b><span>completed all time</span></div>
+          <div class="stat"><b>${quizYear.length}</b><span>pop quiz${quizYear.length === 1 ? '' : 'zes'} in ${year}${quizYear.length ? `, ${Math.round(100 * quizYear.filter(r => r.firstTryCorrect).length / quizYear.length)}% first try` : ''}</span></div>
           <div class="stat ${yearly.length ? (behind ? 'bad' : 'ok') : ''}"><b>${yearly.length ? (behind ? behind + ' due' : '✓ All') : '—'}</b><span>${yearly.length ? (behind ? 'yearly requirements outstanding' : 'yearly requirements current') : 'no yearly requirements'}</span></div>
         </div>
         ${yearly.length ? `<h2>Yearly requirements</h2><table><thead><tr><th>Topic</th><th>Status</th><th>Last completed</th><th>Next due</th></tr></thead><tbody>
@@ -1629,11 +1643,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     if ($('resp-topic').value) p.set('topicId', $('resp-topic').value);
     if ($('resp-missed').checked) p.set('missed', '1');
     if ($('resp-helpful').value) p.set('helpful', $('resp-helpful').value);
+    if ($('resp-kind').value) p.set('kind', $('resp-kind').value);
     if (respPerson) p.set('employeeId', respPerson.id);
     return p.toString();
   }
   const kindLabel = { required: '<span class="pill req">Required</span>', scheduled: '<span class="pill brand">Scheduled</span>', rotation: '<span class="pill">Rotation</span>',
-    starter: '<span class="pill good">New hire</span>', annual: '<span class="pill req">Yearly</span>', review: '<span class="pill brand">Review</span>' };
+    starter: '<span class="pill good">New hire</span>', annual: '<span class="pill req">Yearly</span>', review: '<span class="pill brand">Review</span>', quiz: '<span class="pill quiz">🧠 Quiz</span>' };
   async function loadResponses() {
     try {
       const pc = $('resp-person');
@@ -1641,8 +1656,9 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       if (respPerson) pc.innerHTML = `${escapeHtml(respPerson.name)} <a href="#" id="resp-person-x" title="Show everyone" style="text-decoration:none">×</a>`;
       const { responses } = await api('/api/admin/responses?' + respQuery());
       const first = responses.filter(r => r.firstTryCorrect).length;
+      const quizzes = responses.filter(r => r.kind === 'quiz').length;
       $('resp-summary').textContent = responses.length
-        ? `${responses.length} response${responses.length === 1 ? '' : 's'}. ${Math.round(100 * first / responses.length)}% right on the first try.`
+        ? `${responses.length} response${responses.length === 1 ? '' : 's'}${quizzes && quizzes < responses.length ? ` (${responses.length - quizzes} in-services, ${quizzes} quiz${quizzes === 1 ? '' : 'zes'})` : ''}. ${Math.round(100 * first / responses.length)}% right on the first try.`
         : 'No responses for this selection.';
       $('resp-rows').innerHTML = responses.slice(0, 1000).map(r => {
         const result = !r.completed ? '<span class="pill warn">Did not finish</span>'
@@ -1658,7 +1674,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       $('resp-csv').href = '/api/admin/responses.csv?' + respQuery();
     } catch (err) { fail(err); }
   }
-  ['resp-from', 'resp-to', 'resp-dept', 'resp-topic', 'resp-missed', 'resp-helpful'].forEach(id => $(id).addEventListener('change', loadResponses));
+  ['resp-from', 'resp-to', 'resp-dept', 'resp-topic', 'resp-missed', 'resp-helpful', 'resp-kind'].forEach(id => $(id).addEventListener('change', loadResponses));
   $('resp-rows').addEventListener('click', e => {
     const tr = e.target.closest('[data-resp]');
     if (!tr) return;
