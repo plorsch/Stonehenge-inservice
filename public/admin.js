@@ -76,6 +76,163 @@
     if (b.dataset.tab === 'reports') { loadMissed(); loadAnnual(); loadReviews(); }
   });
 
+  // ---------- click a column heading to sort ----------
+  // Works on every table. Dates, numbers and words each sort the natural way; blanks and "Never" go last.
+  // The sort sticks when the table refreshes, until you click a different column.
+  const MON_IDX = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  function sortKey(cell) {
+    if (!cell) return null;
+    if (cell.dataset.sort !== undefined) return cell.dataset.sort === '' ? null : isNaN(cell.dataset.sort) ? cell.dataset.sort.toLowerCase() : Number(cell.dataset.sort);
+    const t = cell.textContent.replace(/\s+/g, ' ').trim();
+    if (!t || /^(never|–|-|none)$/i.test(t)) return null;
+    let m = t.match(/^([A-Z][a-z]{2})[a-z]* (\d{1,2}), (\d{4})(?:,? (?:at )?(\d{1,2}):(\d{2}) ?([AP]M))?/);
+    if (m && m[1].toLowerCase() in MON_IDX) {
+      const h = m[4] ? (Number(m[4]) % 12) + (m[6] === 'PM' ? 12 : 0) : 0;
+      return new Date(Number(m[3]), MON_IDX[m[1].toLowerCase()], Number(m[2]), h, Number(m[5] || 0)).getTime();
+    }
+    if ((m = t.match(/^(\d{4})-(\d{2})-(\d{2})/))) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+    if ((m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/))) return new Date(Number(m[3].length === 2 ? '20' + m[3] : m[3]), Number(m[1]) - 1, Number(m[2])).getTime();
+    if (/^[-+]?[\d,]*\.?\d+\s*%?(\s|$)/.test(t) && !/^\d{4}$/.test(t.split(' ')[0])) return parseFloat(t.replace(/,/g, ''));
+    if ((m = t.match(/^👍\s*(\d+)/))) return Number(m[1]);
+    return t.toLowerCase();
+  }
+  function sortTable(table) {
+    const col = Number(table.dataset.sortCol), dir = table.dataset.sortDir === 'desc' ? -1 : 1;
+    const body = table.tBodies[0];
+    if (!body || isNaN(col)) return;
+    const rows = [...body.rows];
+    if (rows.length < 2 || rows.some(r => r.cells.length === 1 && r.cells[0].colSpan > 1)) return;
+    const keyed = rows.map((r, i) => ({ r, i, k: sortKey(r.cells[col]) }));
+    keyed.sort((a, b) => {
+      if (a.k === null || b.k === null) return a.k === b.k ? a.i - b.i : a.k === null ? 1 : -1;
+      const c = typeof a.k === 'number' && typeof b.k === 'number' ? a.k - b.k : String(a.k).localeCompare(String(b.k), undefined, { numeric: true });
+      return c * dir || a.i - b.i;
+    });
+    if (keyed.every((x, i) => x.r === rows[i])) return;   // already in order: touch nothing
+    for (const x of keyed) body.appendChild(x.r);
+  }
+  function markSortable(root) {
+    for (const th of root.querySelectorAll('table thead th:not(.sortable)')) {
+      if (!th.textContent.trim() || th.querySelector('input, select, button')) continue;
+      th.classList.add('sortable'); th.title = th.title || 'Click to sort';
+    }
+  }
+  document.addEventListener('click', e => {
+    const th = e.target.closest('th.sortable');
+    if (!th) return;
+    const table = th.closest('table'), col = th.cellIndex;
+    const same = Number(table.dataset.sortCol) === col;
+    table.dataset.sortCol = col;
+    table.dataset.sortDir = same && table.dataset.sortDir === 'asc' ? 'desc' : 'asc';
+    table.querySelectorAll('thead th').forEach(x => x.classList.remove('sort-asc', 'sort-desc'));
+    th.classList.add(table.dataset.sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    sortTable(table);
+  });
+  let sortPending = false;
+  new MutationObserver(() => {
+    if (sortPending) return;
+    sortPending = true;
+    requestAnimationFrame(() => {
+      sortPending = false;
+      markSortable(document);
+      document.querySelectorAll('table[data-sort-col]').forEach(sortTable);
+    });
+  }).observe(document.body, { childList: true, subtree: true });
+  markSortable(document);
+
+  // ---------- search the whole admin site ----------
+  // Finds topics, staff, announcements, and any heading, setting or button on any tab.
+  const EXTRA_WORDS = {
+    settings: 'password backup restore decor season month color emoji banner speed seconds test data go live clear facility name messages closing leaderboard streaks',
+    staff: 'employees people roster birthday hire date anniversary department job title import excel workday code last 4 bulk',
+    topics: 'lesson question quiz library import spreadsheet ai copilot chatgpt preview spanish retire copy',
+    announcements: 'birthday anniversary messages news banner celebrations',
+    responses: 'answers results thumbs ratings helpful csv download',
+    clockcheck: 'time clock power bi missed follow up leaders',
+    reports: 'missed yearly annual review trends',
+    schedule: 'topic of the week rotation calendar',
+    required: 'incident education mandatory'
+  };
+  const tabName = tab => (document.querySelector(`#nav button[data-tab="${tab}"]`) || {}).textContent || tab;
+  function pageEntries() {
+    const out = [];
+    for (const b of document.querySelectorAll('#nav button[data-tab]')) out.push({ label: b.textContent, tab: b.dataset.tab, el: null, hay: b.textContent + ' ' + (EXTRA_WORDS[b.dataset.tab] || '') });
+    for (const sec of document.querySelectorAll('section.tab')) {
+      const tab = sec.id.replace(/^tab-/, ''), seen = new Set();
+      for (const el of sec.querySelectorAll('h2, h3, summary, label, button.btn, a.btn')) {
+        if (el.closest('tbody')) continue;
+        const label = el.textContent.replace(/\s+/g, ' ').replace(/^[^\w🎂🎉✨🏆👍👎]+|[\s:]+$/g, '').trim();
+        if (label.length < 3 || label.length > 70 || seen.has(label.toLowerCase())) continue;
+        seen.add(label.toLowerCase());
+        out.push({ label, tab, el, hay: label });
+      }
+    }
+    return out;
+  }
+  function searchAll(q) {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const hit = text => words.every(w => text.toLowerCase().includes(w));
+    const groups = [];
+    const topics = state.topics.filter(t => hit([t.title, t.category, t.lesson].join(' '))).slice(0, 6)
+      .map(t => ({ label: t.title, where: t.status === 'retired' ? 'Retired' : t.status === 'draft' ? 'Needs work' : '', go: () => { goTab('topics'); openEditor(t); } }));
+    if (topics.length) groups.push(['Topics', topics]);
+    const staff = state.employees.filter(e => hit([e.name, e.last4, e.department, e.jobTitle].join(' '))).slice(0, 6)
+      .map(e => ({ label: e.name, where: [e.department, e.active ? '' : 'Inactive'].filter(Boolean).join(' · '),
+        go: () => { goTab('staff'); $('staff-filter').value = 'all'; $('staff-missing').value = ''; $('staff-search').value = e.name; renderStaff(); } }));
+    if (staff.length) groups.push(['Staff', staff]);
+    const anns = (state.announcements || []).filter(a => hit(a.text)).slice(0, 4).map(a => ({ label: a.text.slice(0, 60), where: '', go: () => goTab('announcements') }));
+    if (anns.length) groups.push(['Announcements', anns]);
+    const pages = pageEntries().filter(x => hit(x.hay + ' ' + tabName(x.tab))).sort((a, b) => (hit(a.label) ? 0 : 1) - (hit(b.label) ? 0 : 1) || (a.el ? 0 : 1) - (b.el ? 0 : 1)).slice(0, 8)
+      .map(x => ({ label: x.label, where: x.el ? tabName(x.tab) : 'Tab', go: () => { goTab(x.tab); if (x.el) showFound(x.el); } }));
+    if (pages.length) groups.push(['On the admin site', pages]);
+    return groups;
+  }
+  function goTab(tab) { const b = document.querySelector(`#nav button[data-tab="${tab}"]`); if (b && !b.classList.contains('on')) b.click(); }
+  function showFound(el) {
+    for (let d = el.closest('details'); d; d = d.parentElement.closest('details')) d.open = true;
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('flash-find');
+      setTimeout(() => el.classList.remove('flash-find'), 2500);
+    }, 60);
+  }
+  let gsHits = [], gsSel = 0;
+  function renderSearch() {
+    const q = $('gsearch').value.trim();
+    const box = $('gsearch-results');
+    if (!q) { box.hidden = true; gsHits = []; return; }
+    const groups = searchAll(q);
+    gsHits = groups.flatMap(g => g[1]); gsSel = 0;
+    let i = 0;
+    box.innerHTML = groups.map(([name, list]) => `<div class="grp">${name}</div>` + list.map(h =>
+      `<button type="button" data-gs="${i}"${i++ === 0 ? ' class="sel"' : ''}>${escapeHtml(h.label)}${h.where ? `<span class="where">${escapeHtml(h.where)}</span>` : ''}</button>`).join('')).join('')
+      || '<div class="muted small" style="padding:8px 14px">Nothing found. Try a different word.</div>';
+    box.hidden = false;
+  }
+  function pickSearch(i) {
+    const h = gsHits[i];
+    if (!h) return;
+    $('gsearch-results').hidden = true; $('gsearch').blur();
+    h.go();
+  }
+  $('gsearch').addEventListener('input', renderSearch);
+  $('gsearch').addEventListener('focus', renderSearch);
+  $('gsearch').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); pickSearch(gsSel); }
+    else if (e.key === 'Escape') { $('gsearch-results').hidden = true; $('gsearch').blur(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      gsSel = Math.max(0, Math.min(gsHits.length - 1, gsSel + (e.key === 'ArrowDown' ? 1 : -1)));
+      document.querySelectorAll('#gsearch-results [data-gs]').forEach(b => b.classList.toggle('sel', Number(b.dataset.gs) === gsSel));
+    }
+  });
+  $('gsearch-results').addEventListener('mousedown', e => { const b = e.target.closest('[data-gs]'); if (b) { e.preventDefault(); pickSearch(Number(b.dataset.gs)); } });
+  document.addEventListener('click', e => { if (!e.target.closest('.gsearch')) $('gsearch-results').hidden = true; });
+  // Press / anywhere (outside a text box) to jump to the search bar.
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !e.target.closest('input, textarea, select, [contenteditable]') && !document.querySelector('dialog[open]')) { e.preventDefault(); $('gsearch').focus(); }
+  });
+
   async function refresh() {
     state = await api('/api/admin/state');
     renderToday(); renderSchedule(); renderRequired(); renderStarter(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters(); renderReportFilters();

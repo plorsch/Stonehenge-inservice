@@ -18,6 +18,19 @@
   nav { display: flex; gap: 2px; flex-wrap: wrap; }
   nav button { background: none; border: 0; font: inherit; color: var(--muted); padding: 16px 11px; cursor: pointer; border-bottom: 3px solid transparent; }
   nav button.on { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+  .gsearch { position: relative; margin-left: auto; padding: 8px 0; }
+  .gsearch input { width: 270px; max-width: 70vw; padding: 8px 12px; border: 1px solid var(--line); border-radius: 20px; font: inherit; background: var(--bg); }
+  .gsearch-results { position: absolute; right: 0; top: 100%; z-index: 40; width: 400px; max-width: 92vw; max-height: 70vh; overflow-y: auto; background: #fff;
+    border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.18); padding: 6px 0; }
+  .gsearch-results .grp { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); padding: 8px 14px 2px; }
+  .gsearch-results button { display: block; width: 100%; text-align: left; background: none; border: 0; font: inherit; padding: 7px 14px; cursor: pointer; color: var(--ink); }
+  .gsearch-results button:hover, .gsearch-results button.sel { background: var(--brand-soft); }
+  .gsearch-results button .where { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable:hover { color: var(--brand); }
+  th.sortable::after { content: " ↕"; color: var(--line); font-size: 11px; }
+  th.sort-asc::after { content: " ▲"; color: var(--brand); } th.sort-desc::after { content: " ▼"; color: var(--brand); }
+  .flash-find { outline: 3px solid #ffbf00 !important; outline-offset: 4px; border-radius: 6px; transition: outline-color 1.5s; }
   main { max-width: 1200px; margin: 0 auto; padding: 22px 16px 64px; }
   .tab { display: none; } .tab.on { display: block; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px; }
@@ -98,6 +111,7 @@
     <button data-tab="history">Usage history</button>
     <button data-tab="settings">Settings</button>
   </nav>
+  <div class="gsearch"><input type="search" id="gsearch" placeholder="🔍 Search topics, staff, settings…" autocomplete="off" aria-label="Search the admin site"><div class="gsearch-results" id="gsearch-results" hidden></div></div>
 </header>
 <main>
   <div class="alert" id="kiosk-alert" hidden></div>
