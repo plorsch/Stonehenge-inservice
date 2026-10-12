@@ -2175,9 +2175,9 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   }
   function addDeptRow(v = '') { return reRow($('set-depts'), `<input type="text" data-clear="1" maxlength="60" placeholder="Department" value="${escapeHtml(v)}">`); }
   // End-screen message rows: the text, plus an optional font, color, size and GIF.
-  function addClosingRow(v = '') {
+  function addClosingRow(v = '', box = $('set-closing'), placeholder = 'Thanks for keeping our residents safe!') {
     const m = typeof v === 'string' ? { text: v } : v;
-    const row = reRow($('set-closing'), `<textarea class="cm-text" rows="1" maxlength="300" placeholder="Thanks for keeping our residents safe!">${escapeHtml(m.text || '')}</textarea>
+    const row = reRow(box, `<textarea class="cm-text" rows="1" maxlength="300" placeholder="${escapeHtml(placeholder)}">${escapeHtml(m.text || '')}</textarea>
       <button type="button" class="re-x cm-look" title="See it like the iPad shows it">👁</button>
       <button type="button" class="re-x cm-toggle" title="Font, color, size and GIF">🎨</button>`);
     row.classList.add('cm-row');
@@ -2197,7 +2197,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       row.querySelector('.cm-toggle').classList.toggle('on', styled);
       row.querySelector('.cm-text').setAttribute('style', messageStyle(Object.assign({}, msg, { size: '' })));
       panel.querySelector('.cm-preview').innerHTML = `<div class="muted small">On the iPad:</div>` + (msg && msg.gif ? `<img src="${escapeHtml(msg.gif)}" alt="">` : '') +
-        `<div style="font-size:26px;font-weight:700;color:#1f6f8b;${messageStyle(msg)}">${formatMessage(messageText(msg)) || '<span class="muted">Type a message</span>'}</div>`;
+        `<div style="font-size:26px;font-weight:700;color:#1f6f8b;${messageStyle(msg)}">${formatMessage(sampleText(messageText(msg))) || '<span class="muted">Type a message</span>'}</div>`;
       const ta = row.querySelector('.cm-text'); ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px';
     };
     row.addEventListener('input', e => { if (e.target.classList.contains('cm-gif')) { const g = gifUrl(e.target.value); if (g !== e.target.value.trim()) e.target.value = g; } sync(); });
@@ -2221,12 +2221,14 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     return row;
   }
   // The end screen as the iPad shows it, with this message.
+  // Fill in {name} and {years} with an example so previews read naturally.
+  const sampleText = t => String(t || '').replace(/\{name\}/gi, 'Maria').replace(/\{years\}/gi, '5').replace(/^[^:\n]{1,60}:\s*(?=\S)/, m => depts().some(d => sameDept(d, m.replace(/:\s*$/, ''))) ? '' : m);
   function showMessagePreview(msg) {
     $('vw-title').textContent = 'End-screen preview';
     $('vw-body').innerHTML = `<div class="ipad-mock"><div class="ipad-screen">
       <div class="ipad-check">✓</div><div class="ipad-great">Correct!</div>
       ${msg && msg.gif ? `<img src="${escapeHtml(msg.gif)}" alt="">` : ''}
-      <div class="ipad-msg" style="${messageStyle(msg)}">${formatMessage(messageText(msg))}</div></div></div>`;
+      <div class="ipad-msg" style="${messageStyle(msg)}">${formatMessage(sampleText(messageText(msg)))}</div></div></div>`;
     $('viewer').showModal();
   }
   function closingFromRow(row) {
@@ -2236,7 +2238,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     for (const k of Object.keys(m)) if (!m[k]) delete m[k];
     return Object.keys(m).length === 1 && m.text ? m.text : m;
   }
-  const closingValues = () => [...$('set-closing').querySelectorAll('.cm-row')].map(closingFromRow).filter(m => typeof m === 'string' ? m : (m.text || m.gif));
+  const closingValues = (box = $('set-closing')) => [...box.querySelectorAll('.cm-row')].map(closingFromRow).filter(m => typeof m === 'string' ? m : (m.text || m.gif));
   function addLeaderRow(dept = '', leader = '') {
     const emails = String(leader).match(EMAIL_RE) || [];
     const name = String(leader).replace(EMAIL_RE, '').replace(/[\s,;<>()]+$/, '').replace(/^[\s,;<>()]+/, '').replace(/[\s,;]+(?=[,;])/g, '').trim();
@@ -2249,7 +2251,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   $('add-dept').addEventListener('click', () => focusLast(addDeptRow()));
   $('add-closing').addEventListener('click', () => focusLast(addClosingRow()));
   $('add-leader').addEventListener('click', () => focusLast(addLeaderRow()));
-  ['set-depts', 'set-leaders', 'set-closing'].forEach(id => $(id).addEventListener('click', e => { const x = e.target.closest('.re-x:not(.cm-toggle):not(.cm-look)'); if (x) x.closest('.re-row').remove(); }));
+  ['set-depts', 'set-leaders', 'set-closing', 'an-bday-msgs', 'an-anniv-msgs'].forEach(id => $(id).addEventListener('click', e => { const x = e.target.closest('.re-x:not(.cm-toggle):not(.cm-look)'); if (x) x.closest('.re-row').remove(); }));
   $('set-leaders').addEventListener('input', e => {
     const i = e.target;
     if ((i.placeholder || '').includes('@')) i.classList.toggle('bad', !!i.value.trim() && (i.value.replace(EMAIL_RE, '').replace(/[\s,;]/g, '') !== ''));
@@ -2416,8 +2418,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     }).join('') || '<tr><td colspan="4" class="muted">No announcements yet.</td></tr>';
     $('an-celebrate').checked = state.settings.celebrations !== false;
     renderStreakSettings();
-    if (document.activeElement !== $('an-bday-msgs')) $('an-bday-msgs').value = (state.settings.birthdayMessages || []).join('\n');
-    if (document.activeElement !== $('an-anniv-msgs')) $('an-anniv-msgs').value = (state.settings.anniversaryMessages || []).join('\n');
+    for (const [id, key, ph] of [['an-bday-msgs', 'birthdayMessages', 'Happy birthday, {name}!'], ['an-anniv-msgs', 'anniversaryMessages', 'Happy {years}-year anniversary, {name}!']]) {
+      if ($(id).contains(document.activeElement)) continue;
+      $(id).innerHTML = '';
+      (state.settings[key] || []).forEach(m => addClosingRow(m, $(id), ph));
+    }
     const up = state.upcomingCelebrations || [];
     $('an-upcoming').innerHTML = up.length
       ? up.map(c => `<div>${fmtDate(c.date)}: ${c.type === 'birthday' ? '🎂' : '🎉'} ${escapeHtml(c.name)}${c.department ? ` <span class="muted">(${escapeHtml(c.department)})</span>` : ''} ${c.type === 'birthday' ? 'birthday' : `${c.years} year${c.years === 1 ? '' : 's'} at work`}</div>`).join('')
@@ -2452,9 +2457,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     try { await api('/api/admin/announcements/' + b.dataset.delAnn, { method: 'DELETE' }); toast('Removed'); await refresh(); }
     catch (err) { fail(err); }
   });
+  $('add-bday').addEventListener('click', () => focusLast(addClosingRow('', $('an-bday-msgs'), 'Happy birthday, {name}!')));
+  $('add-anniv').addEventListener('click', () => focusLast(addClosingRow('', $('an-anniv-msgs'), 'Happy {years}-year anniversary, {name}!')));
   $('an-save-msgs').addEventListener('click', async () => {
     try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ birthdayMessages: splitLines($('an-bday-msgs').value), anniversaryMessages: splitLines($('an-anniv-msgs').value) }) });
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ birthdayMessages: closingValues($('an-bday-msgs')), anniversaryMessages: closingValues($('an-anniv-msgs')) }) });
       toast('Messages saved'); await refresh();
     } catch (err) { fail(err); }
   });
@@ -2612,8 +2619,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   new MutationObserver(() => addClearButtons(document)).observe(document.body, { childList: true, subtree: true });
   // Bold, italic, underline and strikethrough buttons for text the iPad shows.
   // They wrap the selected words in **, *, __ or ~~, which the iPad turns into the style.
-  const FMT_FIELDS = '#f-lesson, #f-es-lesson, .q-text, .q-es-text, #an-text, #an-bday-msgs, #an-anniv-msgs';
-  const FMT_GROUPS = '#set-closing';
+  const FMT_FIELDS = '#f-lesson, #f-es-lesson, .q-text, .q-es-text, #an-text';
+  const FMT_GROUPS = '#set-closing, #an-bday-msgs, #an-anniv-msgs';
   const FMT_MARKS = { b: '**', i: '*', u: '__', s: '~~' };
   let lastFmt = null;
   function applyFmt(field, kind) {

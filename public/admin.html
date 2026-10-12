@@ -260,8 +260,8 @@ table.la tr:hover td { background: transparent; }
 .tiles-grid.editing .tile-resize { display: block; }
 
 /* Styled end-screen messages */
-#set-closing .cm-row { grid-template-columns: 1fr 34px 34px 34px; align-items: start; }
-#set-closing .cm-text { resize: none; overflow: hidden; min-height: 38px; line-height: 1.4; width: 100%; }
+.cm-row { grid-template-columns: 1fr 34px 34px 34px !important; align-items: start; }
+.cm-row .cm-text { resize: none; overflow: hidden; min-height: 38px; line-height: 1.4; width: 100%; }
 .ipad-mock { margin: 14px auto 4px; width: min(440px, 100%); background: #1d2a33; border-radius: 28px; padding: 16px; }
 .ipad-screen { background: #fbf7f0; border-radius: 16px; padding: 26px 20px; text-align: center; }
 .ipad-check { width: 54px; height: 54px; border-radius: 50%; background: #e6f4ea; color: #1e7b3c; font-size: 30px; line-height: 54px; margin: 0 auto 8px; font-weight: 800; }
@@ -390,12 +390,12 @@ table.la tr:hover td { background: transparent; }
     <div class="card">
       <h2>Birthdays and work anniversaries</h2>
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="an-celebrate"> Show birthdays and work anniversaries on the iPad (first name and last initial only)</label>
-      <div class="muted small" style="margin-top:6px">Add a birthday (month and day only) and hire date to each person on the Staff tab, or include Birthday and Hire date columns when you import staff. On their day, the person also gets a happy birthday or happy anniversary message after their in-service.</div>
+      <div class="muted small" style="margin-top:6px">Press Enter for a new line, 👁 to preview, 🎨 for font, color, size or a GIF. Add a birthday (month and day only) and hire date to each person on the Staff tab, or include Birthday and Hire date columns when you import staff. On their day, the person also gets a happy birthday or happy anniversary message after their in-service.</div>
       <div class="grid" style="margin-top:10px">
-        <div><label class="block" for="an-bday-msgs">Birthday messages <span class="hint">one per line, picked at random. {name} = first name. Start a line with a department, like "Dietary: ...", to make it only for that department.</span></label>
-          <textarea id="an-bday-msgs" rows="10"></textarea></div>
-        <div><label class="block" for="an-anniv-msgs">Work anniversary messages <span class="hint">one per line. {years} = years worked</span></label>
-          <textarea id="an-anniv-msgs" rows="10"></textarea></div>
+        <div><label class="block">🎂 Birthday messages <span class="hint">one is picked at random. {name} = first name. Start with a department, like "Dietary: ...", to make it only for that department.</span></label>
+          <div class="rows-ed" id="an-bday-msgs"></div><button class="btn subtle" id="add-bday">+ Add a birthday message</button></div>
+        <div><label class="block">🎉 Work anniversary messages <span class="hint">{years} = years worked, {name} = first name</span></label>
+          <div class="rows-ed" id="an-anniv-msgs"></div><button class="btn subtle" id="add-anniv">+ Add an anniversary message</button></div>
       </div>
       <div style="margin-top:10px"><button class="btn" id="an-save-msgs">Save messages</button></div>
       <h3 style="margin-top:14px">Coming up in the next 30 days</h3>

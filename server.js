@@ -1638,8 +1638,8 @@ async function adminRoutes(req, res, p, m, url) {
       s.streaks = { shoutOuts: !!b.streaks.shoutOuts, leaderboard: ['off', 'home', 'end', 'both'].includes(b.streaks.leaderboard) ? b.streaks.leaderboard : 'off',
         top: Number(b.streaks.top) === 1 ? 1 : 3, board: ['facility', 'dept', 'both'].includes(b.streaks.board) ? b.streaks.board : 'facility', button: !!b.streaks.button };
     }
-    if (Array.isArray(b.birthdayMessages)) s.birthdayMessages = cleanList(b.birthdayMessages, 250, 300);
-    if (Array.isArray(b.anniversaryMessages)) s.anniversaryMessages = cleanList(b.anniversaryMessages, 250, 300);
+    if (Array.isArray(b.birthdayMessages)) s.birthdayMessages = b.birthdayMessages.slice(0, 300).map(cleanMessage).filter(Boolean);
+    if (Array.isArray(b.anniversaryMessages)) s.anniversaryMessages = b.anniversaryMessages.slice(0, 300).map(cleanMessage).filter(Boolean);
     if ('kioskQuietMin' in b && [0, 30, 60, 120, 240, 480].includes(Number(b.kioskQuietMin))) s.kioskQuietMin = Number(b.kioskQuietMin);
     if ('newsSeconds' in b) { const n = Number(b.newsSeconds); if (n >= 1 && n <= 60) s.newsSeconds = Math.round(n); }
     if (Array.isArray(b.closingMessages)) s.closingMessages = b.closingMessages.slice(0, 100).map(cleanMessage).filter(Boolean);
