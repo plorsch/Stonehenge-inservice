@@ -1491,6 +1491,32 @@ async function adminRoutes(req, res, p, m, url) {
       { 'Content-Disposition': `attachment; filename="inservice-backup-${today()}.json"` });
   }
 
+  // Go live: remove what was entered while testing. A full copy is saved in the backups folder first.
+  const SAMPLE_STAFF = new Set(loadJson(SEED_STAFF_FILE, []).map(s => `${String(s.name).toLowerCase()}|${s.last4}`));
+  const isSampleStaff = e => SAMPLE_STAFF.has(`${e.name.toLowerCase()}|${e.last4}`);
+  const isSampleSchedule = x => /^sample /i.test(x.note || '');
+  if (m === 'GET' && p === '/api/admin/test-data') {
+    return send(res, 200, {
+      responses: db.responses.length, usage: db.usage.length,
+      sampleStaff: db.employees.filter(isSampleStaff).map(e => e.name),
+      sampleSchedules: db.schedules.filter(isSampleSchedule).length,
+      announcements: db.announcements.length, required: db.required.length
+    });
+  }
+  if (m === 'POST' && p === '/api/admin/test-data/clear') {
+    const b = await readBody(req);
+    const file = `before-go-live-${nowIso().replace(/[:.]/g, '-')}.json`;
+    writeJsonSafely(path.join(BACKUP_DIR, file), db);
+    const out = {};
+    if (b.responses) { out.responses = db.responses.length; db.responses = []; db.usage = []; }
+    if (b.sampleStaff) { const before = db.employees.length; db.employees = db.employees.filter(e => !isSampleStaff(e)); out.sampleStaff = before - db.employees.length; }
+    if (b.sampleSchedules) { const before = db.schedules.length; db.schedules = db.schedules.filter(x => !isSampleSchedule(x)); out.sampleSchedules = before - db.schedules.length; }
+    if (b.announcements) { out.announcements = db.announcements.length; db.announcements = []; }
+    if (b.required) { out.required = db.required.length; db.required = []; }
+    saveDb();
+    return send(res, 200, Object.assign(out, { backup: file }));
+  }
+
   if (m === 'POST' && p === '/api/admin/restore') {
     const b = await readBody(req, 100e6);
     if (!b || !Array.isArray(b.topics) || !Array.isArray(b.responses) || typeof b.settings !== 'object') {

@@ -1288,6 +1288,7 @@
     $('set-news-seconds').value = s.newsSeconds || 3;
     $('pw-env').hidden = !state.passwordFromEnv;
     renderDecor();
+    loadTestData();
     $('pw-form').hidden = !!state.passwordFromEnv;
   }
   $('save-settings').addEventListener('click', async () => {
@@ -1367,6 +1368,31 @@
   $('an-celebrate').addEventListener('change', async () => {
     try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ celebrations: $('an-celebrate').checked }) }); toast('Saved'); await refresh(); }
     catch (err) { fail(err); }
+  });
+
+  // ---------- going live: clear test data ----------
+  async function loadTestData() {
+    try {
+      const t = await api('/api/admin/test-data');
+      const item = (key, label, n, on) => `<label style="display:flex;gap:8px;align-items:flex-start;margin:4px 0"><input type="checkbox" data-td="${key}"${on && n ? ' checked' : ''}${n ? '' : ' disabled'}> <span>${label}</span></label>`;
+      $('td-list').innerHTML =
+        item('responses', `All in-service answers and usage history <span class="muted">(${t.responses} answers). Streaks, training records and the Clock-in check start fresh.</span>`, t.responses, true) +
+        item('sampleStaff', `Sample staff <span class="muted">(${t.sampleStaff.length ? t.sampleStaff.map(escapeHtml).join(', ') : 'none left'})</span>`, t.sampleStaff.length, true) +
+        item('sampleSchedules', `The sample "topic of the week" schedule <span class="muted">(${t.sampleSchedules})</span>`, t.sampleSchedules, true) +
+        item('announcements', `All announcements <span class="muted">(${t.announcements})</span>`, t.announcements, false) +
+        item('required', `All required education <span class="muted">(${t.required})</span>`, t.required, false);
+    } catch { $('td-list').textContent = ''; }
+  }
+  $('td-go').addEventListener('click', async () => {
+    const pick = {};
+    $('td-list').querySelectorAll('[data-td]').forEach(c => { if (c.checked) pick[c.dataset.td] = true; });
+    if (!Object.keys(pick).length) return alert('Tick what you want to clear first.');
+    if (!confirm('Clear the ticked test data? This can only be undone by restoring a backup.')) return;
+    try {
+      const r = await post('/api/admin/test-data/clear', pick);
+      alert(`Cleared. ${r.responses != null ? `${r.responses} answers. ` : ''}${r.sampleStaff != null ? `${r.sampleStaff} sample staff. ` : ''}${r.sampleSchedules != null ? `${r.sampleSchedules} sample schedule. ` : ''}${r.announcements != null ? `${r.announcements} announcements. ` : ''}${r.required != null ? `${r.required} required items. ` : ''}\n\nA copy from before was saved on the server as ${r.backup}.`);
+      await refresh(); renderSettings();
+    } catch (err) { fail(err); }
   });
 
   // ---------- home screen decor ----------

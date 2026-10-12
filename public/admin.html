@@ -498,6 +498,10 @@
           <a class="btn ghost" href="/api/admin/backup">Download full backup</a>
           <a class="btn ghost" href="/api/admin/responses.csv">Download all responses (CSV)</a>
         </div>
+        <h2 style="margin-top:24px">Going live: clear test data</h2>
+        <div class="muted small">Removes what was entered while trying the app out. Topics, your real staff, settings and decor are kept. A full copy is saved on the server first, and you can also download a backup above.</div>
+        <div id="td-list" style="margin-top:8px"></div>
+        <div style="margin-top:10px"><button class="btn" id="td-go" style="background:var(--warn);color:#fff">Clear selected</button></div>
         <h3 style="margin-top:16px">Restore from a backup</h3>
         <div class="muted small">Replaces all current data with the backup file. A copy of the current data is saved first.</div>
         <div style="margin-top:8px"><input type="file" id="restore-file" accept=".json,application/json"></div>
