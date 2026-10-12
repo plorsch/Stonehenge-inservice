@@ -300,6 +300,7 @@
           <option value="retired">Retired topics</option>
           <option value="all">All topics</option>
         </select>
+        <button class="btn ghost" id="ai-help-btn" title="Have Copilot, ChatGPT or Claude draft a topic or questions">✨ Get help from AI</button>
         <button class="btn ghost" id="topic-import-btn">Import from spreadsheet</button>
         <button class="btn" id="new-topic">+ New topic</button>
       </div>
@@ -553,6 +554,7 @@
       <label class="block">Questions <span class="hint">add several so staff get a different one each shift</span></label>
       <div id="f-questions"></div>
       <button type="button" class="btn ghost" id="f-add-q">+ Add question</button>
+      <button type="button" class="btn ghost" id="f-ai">✨ More questions from AI</button>
       <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" id="f-rotation"> Include in the automatic rotation</label>
       <label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="f-annual"> Required every year <span class="hint">each person gets it when it's due; see Reports</span></label>
       <div class="err" id="f-error" style="margin-top:8px"></div>
@@ -631,6 +633,38 @@
   <div class="dlg-foot">
     <button class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button>
     <button class="btn" id="ti-go" disabled>Import</button>
+  </div>
+</dialog>
+
+<!-- Get help from AI: copy instructions to any AI chat, paste its answer back -->
+<dialog id="ai-help" style="width:min(760px,96vw)">
+  <div class="dlg-head"><h2 style="margin:0">✨ Get help from AI</h2></div>
+  <div class="dlg-body">
+    <div class="toolbar" style="margin-top:10px">
+      <label><input type="radio" name="ai-mode" value="new" checked> Write a new topic</label>
+      <label><input type="radio" name="ai-mode" value="more"> Add questions to a topic</label>
+      <select id="ai-topic" hidden></select>
+    </div>
+    <label class="block" for="ai-about" id="ai-about-label">What should it be about?</label>
+    <textarea id="ai-about" rows="4" style="width:100%" placeholder="Example: Hand hygiene before and after resident contact. You can also paste a policy or your notes here."></textarea>
+    <div class="toolbar">
+      <label>Questions <select id="ai-count"><option>3</option><option selected>5</option><option>8</option></select></label>
+      <label><input type="checkbox" id="ai-es"> Include Spanish</label>
+    </div>
+    <p class="small" style="margin:12px 0 6px"><strong>Step 1.</strong> Copy the instructions, then paste them into an AI chat:
+      <a href="https://copilot.microsoft.com" target="_blank" rel="noopener">Copilot</a> ·
+      <a href="https://chatgpt.com" target="_blank" rel="noopener">ChatGPT</a> ·
+      <a href="https://claude.ai/new" target="_blank" rel="noopener">Claude</a></p>
+    <button type="button" class="btn" id="ai-copy">Copy instructions for AI</button> <span class="small muted" id="ai-copied"></span>
+    <details style="margin-top:8px"><summary class="small muted" style="cursor:pointer">Show the instructions</summary><textarea id="ai-prompt" rows="10" readonly style="width:100%;margin-top:6px"></textarea></details>
+    <p class="small" style="margin:16px 0 6px"><strong>Step 2.</strong> Copy the AI's whole answer and paste it here:</p>
+    <textarea id="ai-answer" rows="8" style="width:100%" placeholder="TITLE: ...&#10;LESSON: ...&#10;QUESTION: ..."></textarea>
+    <div class="err" id="ai-error"></div>
+    <div class="muted small" style="margin-top:6px">Nothing is saved yet. The topic opens in the editor so you can check and fix it, then Save. Never put resident names or details into an AI chat.</div>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn" id="ai-fill">Fill in the topic</button>
   </div>
 </dialog>
 

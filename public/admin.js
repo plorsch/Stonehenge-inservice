@@ -479,6 +479,129 @@
   $('f-cancel').addEventListener('click', () => $('editor').close());
   $('new-topic').addEventListener('click', () => openEditor(null));
 
+  // ----- Get help from AI -----
+  // No AI runs on this site: it writes instructions to paste into Copilot, ChatGPT or Claude, then reads the answer back into the topic editor.
+  const aiMode = () => document.querySelector('input[name=ai-mode]:checked').value;
+  let aiFromEditor = false;   // opened from inside the topic editor: answers go into the open topic
+  function aiTopic() {
+    if (aiFromEditor) return { title: $('f-title').value.trim(), lesson: $('f-lesson').value.trim(), questions: readQuestionTexts() };
+    const t = topicById($('ai-topic').value);
+    return t ? { title: t.title, lesson: t.lesson, questions: t.questions.map(q => q.text) } : null;
+  }
+  function readQuestionTexts() { return [...$('f-questions').querySelectorAll('.q-text')].map(x => x.value.trim()).filter(Boolean); }
+  function openAiHelp(fromEditor) {
+    aiFromEditor = !!fromEditor;
+    document.querySelector(`input[name=ai-mode][value=${fromEditor ? 'more' : 'new'}]`).checked = true;
+    document.querySelectorAll('input[name=ai-mode]').forEach(r => { r.disabled = aiFromEditor; });
+    const live = state.topics.filter(t => t.status !== 'retired').sort((a, b) => a.title.localeCompare(b.title));
+    $('ai-topic').innerHTML = live.map(t => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join('');
+    $('ai-about').value = ''; $('ai-answer').value = ''; $('ai-error').textContent = ''; $('ai-copied').textContent = '';
+    syncAi();
+    $('ai-help').showModal();
+  }
+  function syncAi() {
+    const more = aiMode() === 'more';
+    $('ai-topic').hidden = !more || aiFromEditor;
+    $('ai-about-label').textContent = more ? 'Anything the new questions should focus on? (optional)' : 'What should it be about?';
+    $('ai-prompt').value = aiPrompt();
+  }
+  function aiPrompt() {
+    const more = aiMode() === 'more';
+    const n = $('ai-count').value, es = $('ai-es').checked, about = $('ai-about').value.trim();
+    const t = more ? aiTopic() : null;
+    const qFormat = `QUESTION: the question
+TYPE: single   (or: select all)
+CORRECT: a correct answer   (one line per correct answer)
+WRONG: a wrong answer       (one line per wrong answer)
+HINT: one short sentence that nudges without giving the answer away
+EXPLANATION: one short sentence on why the answer is right` + (es ? `
+SPANISH QUESTION: the question in Spanish
+SPANISH CORRECT: (same order as CORRECT)
+SPANISH WRONG: (same order as WRONG)
+SPANISH HINT: ...
+SPANISH EXPLANATION: ...` : '');
+    return [
+      `You're helping write a micro in-service for staff at a skilled nursing facility. Staff read it standing at an iPad and answer one quick multiple-choice question, so everything must be very short and plain.`,
+      more ? `Write ${n} NEW questions for this existing topic.\n\nTopic: ${t ? t.title : ''}\nLesson:\n${t ? t.lesson : ''}` + (t && t.questions.length ? `\n\nQuestions it already has (don't repeat these):\n${t.questions.map(q => '- ' + q).join('\n')}` : '') + (about ? `\n\nFocus on: ${about}` : '')
+           : `Write one topic with a lesson and ${n} questions.\n\nTopic: ${about || '(describe the topic here)'}`,
+      `Rules:
+${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets that start with "- ". 20 to 35 words in all. Use **double asterisks** to bold one key phrase.\n'}- Questions only test what the lesson says.
+- Each answer under 10 words. 1 correct answer and 2 or 3 believable wrong answers.
+- At most one question may be "select all that apply", with 2 or 3 correct answers.
+- Simple, everyday words. No trick questions.
+- Never mention a real resident, staff member, or anyone's personal or health information.`,
+      `Reply with plain text in exactly this format and nothing else:\n\n` + (more ? '' : `TITLE: a short title\nLESSON:\nlead sentence\n- bullet\n- bullet\n` + (es ? `SPANISH TITLE: ...\nSPANISH LESSON:\n...\n` : '') + '\n') + qFormat + `\n\n(repeat the QUESTION block for each question)`
+    ].join('\n\n');
+  }
+  // Reads the AI's answer. Forgiving about markdown, numbering and spacing.
+  function parseAi(text) {
+    const out = { title: '', lesson: [], es: { title: '', lesson: [] }, questions: [] };
+    let q = null, into = null;
+    for (const raw of String(text).replace(/\r/g, '').split('\n')) {
+      const clean = raw.replace(/^[\s>#*_`]*(\d+[.)]\s*)?[*_`]*/, '').replace(/^[-•]\s+(?=[A-Za-z ]+:)/, '');
+      const m = clean.match(/^(spanish\s+)?(title|lesson|question|type|correct(?:\s+answers?)?|wrong(?:\s+answers?)?|hint|explanation)\s*\d*\s*[*_]*\s*:\s*[*_]*\s*(.*)$/i);
+      if (m) {
+        const sp = !!m[1], key = m[2].toLowerCase().split(/\s/)[0], val = m[3].replace(/[*_]+$/, '').trim();
+        if (key === 'question' && !sp) { q = { text: val, type: 'single', correctAnswers: [], wrongAnswers: [], hint: '', explanation: '', es: { text: '', correctAnswers: [], wrongAnswers: [], hint: '', explanation: '' } }; out.questions.push(q); into = null; continue; }
+        if (key === 'title') { (sp ? out.es : out).title = val; into = null; continue; }
+        if (key === 'lesson') { into = sp ? out.es.lesson : out.lesson; if (val) into.push(val); continue; }
+        into = null;
+        if (!q) continue;
+        const tgt = sp ? q.es : q;
+        if (key === 'type') { if (/all/i.test(val)) q.type = 'multi'; }
+        else if (key === 'question') tgt.text = val;
+        else if (key === 'correct') tgt.correctAnswers.push(...val.split(/\s*[|;]\s*/).filter(Boolean));
+        else if (key === 'wrong') tgt.wrongAnswers.push(...val.split(/\s*[|;]\s*/).filter(Boolean));
+        else tgt[key] = val;
+        continue;
+      }
+      if (into) {
+        const line = raw.replace(/^\s*[•*]\s+/, '- ').replace(/^\s+/, '');
+        if (line || into.length) into.push(line);
+      } else if (q && raw.trim() && /^\s*[-•*]\s+/.test(raw) && !q.correctAnswers.length && !q.wrongAnswers.length) { /* stray bullet: ignore */ }
+    }
+    const tidy = a => a.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    out.lesson = tidy(out.lesson); out.es.lesson = tidy(out.es.lesson);
+    out.questions = out.questions.filter(x => x.text && x.correctAnswers.length);
+    for (const x of out.questions) {
+      if (x.correctAnswers.length > 1) x.type = 'multi';
+      if (!x.es.text) delete x.es;
+    }
+    return out;
+  }
+  function fillFromAi() {
+    const r = parseAi($('ai-answer').value);
+    const more = aiMode() === 'more';
+    if (!r.questions.length && !(r.title || r.lesson)) { $('ai-error').textContent = "I couldn't find a topic or questions in that. Paste the AI's whole answer, starting at TITLE: or QUESTION:."; return; }
+    $('ai-help').close();
+    if (!aiFromEditor) {
+      if (more) openEditor(topicById($('ai-topic').value));
+      else openEditor(null);
+    }
+    if (!more || !aiFromEditor) {
+      if (r.title && !more) $('f-title').value = r.title;
+      if (r.lesson && !more) { $('f-lesson').value = r.lesson; updateLessonPreview(); }
+      if (r.es.lesson && !more) { $('f-es-title').value = r.es.title || ''; $('f-es-lesson').value = r.es.lesson; $('f-es-box').open = true; }
+    }
+    // Replace the empty starter card, then add each question.
+    [...$('f-questions').children].forEach(c => { if (!c.querySelector('.q-text').value.trim()) c.remove(); });
+    r.questions.forEach(q => addQuestionCard(q));
+    if (!$('f-questions').children.length) addQuestionCard();
+    $('f-error').textContent = `Filled in by AI: ${r.questions.length} question${r.questions.length === 1 ? '' : 's'}. Check it over, then Save.`;
+  }
+  $('ai-help-btn').addEventListener('click', () => openAiHelp(false));
+  $('f-ai').addEventListener('click', () => openAiHelp(true));
+  ['ai-about', 'ai-count', 'ai-es', 'ai-topic'].forEach(id => $(id).addEventListener('input', syncAi));
+  document.querySelectorAll('input[name=ai-mode]').forEach(r => r.addEventListener('change', syncAi));
+  $('ai-copy').addEventListener('click', async () => {
+    syncAi();
+    if (aiMode() === 'new' && !$('ai-about').value.trim()) { $('ai-error').textContent = 'First say what the topic should be about.'; return; }
+    $('ai-error').textContent = '';
+    try { await navigator.clipboard.writeText($('ai-prompt').value); $('ai-copied').textContent = '✓ Copied. Paste it into the AI chat.'; }
+    catch { $('ai-prompt').closest('details').open = true; $('ai-prompt').select(); $('ai-copied').textContent = 'Press Ctrl+C to copy the highlighted instructions.'; }
+  });
+  $('ai-fill').addEventListener('click', fillFromAi);
+
   const splitLines = v => v.split('\n').map(x => x.trim()).filter(Boolean);
   async function saveTopic(draft) {
     const body = {
