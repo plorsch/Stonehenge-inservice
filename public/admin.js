@@ -269,7 +269,7 @@
   // ----- Today dashboard -----
   // Opens the Responses tab with these filters (blank = no filter).
   function openResponses(f) {
-    respPerson = null;
+    respPerson = f.person || null;
     $('resp-from').value = f.from || ''; $('resp-to').value = f.to || ''; $('resp-dept').value = f.department || '';
     $('resp-topic').value = f.topicId || ''; $('resp-missed').checked = !!f.missed; $('resp-helpful').value = '';
     goTab('responses');
@@ -1407,17 +1407,86 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         const result = !r.completed ? '<span class="pill warn">Did not finish</span>'
           : r.firstTryCorrect ? '<span class="pill good">Right first try</span>'
           : `<span class="pill warn">Missed, right on try ${r.attempts.length}</span>`;
-        return `<tr>
+        return `<tr class="click-row" data-resp="${r.id}" title="Click to see their answers">
         <td style="white-space:nowrap">${fmtWhen(r.submittedAt)}</td>
-        <td>${escapeHtml(r.name)}${r.verified ? '' : ' <span class="pill" title="Typed their name; not on the roster">Not on roster</span>'}<div class="muted small">${escapeHtml(r.last4 || '')}</div></td>
+        <td><a href="#" class="row-link">${escapeHtml(r.name)}</a>${r.verified ? '' : ' <span class="pill" title="Typed their name; not on the roster">Not on roster</span>'}<div class="muted small">${escapeHtml(r.last4 || '')}</div></td>
         <td>${escapeHtml(r.department || '')}</td><td>${kindLabel[r.kind] || ''}${r.lang === 'es' ? ' <span class="pill">Español</span>' : ''}${r.offline ? ' <span class="pill" title="Answered while the iPad was offline, uploaded later">Saved offline</span>' : ''}</td>
-        <td>${escapeHtml(r.topicTitle)}<div class="muted small">${escapeHtml(r.question)}</div></td>
+        <td><a href="#" class="row-link">${escapeHtml(r.topicTitle)}</a><div class="muted small">${escapeHtml(r.question)}</div></td>
         <td>${escapeHtml(r.attempts[0] || '')}</td><td>${result}${r.helpful === true ? ' <span title="Said the lesson was helpful">👍</span>' : r.helpful === false ? ' <span title="Said the lesson was not helpful">👎</span>' : ''}</td></tr>`;
       }).join('');
       $('resp-csv').href = '/api/admin/responses.csv?' + respQuery();
     } catch (err) { fail(err); }
   }
   ['resp-from', 'resp-to', 'resp-dept', 'resp-topic', 'resp-missed', 'resp-helpful'].forEach(id => $(id).addEventListener('change', loadResponses));
+  $('resp-rows').addEventListener('click', e => {
+    const tr = e.target.closest('[data-resp]');
+    if (!tr) return;
+    e.preventDefault();
+    showResponse(tr.dataset.resp);
+  });
+  // Everything about one response: the person, the in-service, every choice and what they picked on each try.
+  async function showResponse(id) {
+    try {
+      const d = await api('/api/admin/responses/' + encodeURIComponent(id));
+      const r = d.response, q = d.question, h = d.history;
+      const triedAt = a => r.attempts.findIndex(x => x.split('; ').map(s => s.toLowerCase()).includes(a.toLowerCase()));
+      const ordinal = n => ['1st', '2nd', '3rd'][n] || `${n + 1}th`;
+      const choice = (a, correct) => {
+        const t = triedAt(a);
+        const picked = t >= 0;
+        const cls = correct ? 'good' : picked ? 'bad' : '';
+        return `<li class="rd-choice ${cls}"><span class="rd-mark">${correct ? '✓' : picked ? '✗' : ''}</span><span>${escapeHtml(a)}</span>
+          ${picked ? `<span class="pill ${correct ? 'good' : 'warn'}">Picked on ${ordinal(t)} try</span>` : ''}${correct && !picked ? '<span class="muted small">Correct answer</span>' : ''}</li>`;
+      };
+      const result = !r.completed ? '<span class="pill warn">Did not finish</span>'
+        : r.firstTryCorrect ? '<span class="pill good">Right first try</span>' : `<span class="pill warn">Missed, right on try ${r.attempts.length}</span>`;
+      const pct = h.total ? Math.round(100 * h.firstTry / h.total) : null;
+      const f = d.followup;
+      $('vw-title').textContent = `${r.name} · ${fmtWhen(r.submittedAt)}`;
+      $('vw-body').innerHTML = `
+        <div class="rd-grid">
+          <section class="rd-box">
+            <div class="rd-label">Person</div>
+            <div class="rd-big">${escapeHtml(r.name)}</div>
+            <div class="muted small">${escapeHtml([r.department, d.person && d.person.jobTitle, r.last4 && 'Workday …' + r.last4].filter(Boolean).join(' · '))}</div>
+            ${r.verified ? '' : '<div style="margin-top:6px"><span class="pill warn">Typed their name. Not on the roster.</span></div>'}
+            ${h.total ? `<div class="rd-stat"><b>${h.total}</b> in-services · <b>${pct}%</b> right first try</div>
+              <ul class="rd-recent">${h.recent.map(x => `<li${x.id === r.id ? ' class="me"' : ''}><a href="#" data-rd-open="${x.id}">${escapeHtml(x.topicTitle)}</a><span class="muted small">${fmtDate(x.date)}</span>${!x.completed ? '<span class="pill warn">Unfinished</span>' : x.firstTryCorrect ? '<span title="Right first try">✅</span>' : '<span title="Missed first try">⚠️</span>'}</li>`).join('')}</ul>` : ''}
+            <div class="rd-actions">${d.person ? `<button class="btn subtle" data-rd-person="${d.person.id}">All their responses</button><button class="btn subtle" data-rd-staff="${d.person.id}">Staff record</button>` : ''}</div>
+          </section>
+          <section class="rd-box">
+            <div class="rd-label">In-service</div>
+            <div class="rd-big">${escapeHtml(r.topicTitle)}</div>
+            <div style="margin-top:4px">${kindLabel[r.kind] || ''} ${r.lang === 'es' ? '<span class="pill">Español</span>' : ''} ${result} ${r.helpful === true ? '<span title="Said the lesson was helpful">👍 Lesson helpful</span>' : r.helpful === false ? '<span title="Said the lesson was not helpful">👎 Lesson not helpful</span>' : ''}</div>
+            ${f ? `<div style="margin-top:8px" class="small">${f.attestedAt ? `<span class="pill good">✓ Educated</span> by ${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}` : `<span class="pill warn">Waiting on leader follow-up</span> ${escapeHtml(f.leader || '')}`}</div>` : ''}
+            <div class="rd-actions">${d.topic ? `<button class="btn subtle" data-rd-topic="${d.topic.id}">All responses for this topic</button><button class="btn subtle" data-rd-key="${d.topic.id}">Answer key</button><button class="btn subtle" data-rd-preview="${d.topic.id}">Preview</button>` : '<span class="muted small">This topic has since been deleted.</span>'}</div>
+          </section>
+        </div>
+        <h3 style="margin:18px 0 6px">${escapeHtml(r.question)}${q && q.type === 'multi' ? ' <span class="pill brand">Select all that apply</span>' : ''}</h3>
+        ${q ? `<ul class="rd-choices">${q.correctAnswers.map(a => choice(a, true)).join('')}${q.wrongAnswers.map(a => choice(a, false)).join('')}</ul>
+            ${q.changed ? '<div class="muted small">This question was edited after they answered it, so the choices above are today\'s version.</div>' : ''}`
+          : `<div class="muted small">The question has since been changed or removed. Correct answer: ${escapeHtml(r.correctAnswer || '')}</div>`}
+        <div class="rd-tries"><div class="rd-label">Their tries</div>${r.attempts.map((a, i) => `<div><b>${ordinal(i)}:</b> ${escapeHtml(a)} ${i === r.attempts.length - 1 && r.completed ? '<span class="pill good">Correct</span>' : '<span class="pill warn">Wrong</span>'}</div>`).join('') || '<span class="muted">No answer yet.</span>'}</div>
+        ${q && q.hint && !r.firstTryCorrect ? `<div class="small" style="margin-top:10px"><b>Hint they were shown:</b> ${escapeHtml(q.hint)}</div>` : ''}
+        ${q && q.explanation ? `<div class="small" style="margin-top:6px"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
+        ${d.topic && d.topic.lesson ? `<details style="margin-top:14px"><summary>The lesson they read</summary><div class="lesson-preview" style="margin-top:8px">${formatLesson(d.topic.lesson)}</div></details>` : ''}`;
+      if (!$('viewer').open) $('viewer').showModal();
+      $('vw-body').scrollTop = 0;
+    } catch (err) { fail(err); }
+  }
+  $('vw-body').addEventListener('click', e => {
+    const b = e.target.closest('[data-rd-open],[data-rd-person],[data-rd-staff],[data-rd-topic],[data-rd-key],[data-rd-preview]');
+    if (!b) return;
+    e.preventDefault();
+    const ds = b.dataset;
+    if (ds.rdOpen) return showResponse(ds.rdOpen);
+    $('viewer').close();
+    if (ds.rdPerson) openResponses({ person: state.employees.find(x => x.id === ds.rdPerson) });
+    if (ds.rdTopic) openResponses({ topicId: ds.rdTopic });
+    if (ds.rdStaff) { goTab('staff'); openStaff(state.employees.find(x => x.id === ds.rdStaff)); }
+    if (ds.rdKey) showDetails(topicById(ds.rdKey));
+    if (ds.rdPreview) showPreview(topicById(ds.rdPreview));
+  });
   $('resp-person').addEventListener('click', e => { if (e.target.id !== 'resp-person-x') return; e.preventDefault(); respPerson = null; loadResponses(); });
 
   // ---------- clock-in check ----------
@@ -1830,8 +1899,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const fv = $('fu-filter').value, fd = $('fu-dept').value;
       const rows = followups.filter(f => (fv === 'all' || (fv === 'open' ? !f.attestedAt : f.attestedAt)) && (!fd || f.department === fd));
       $('fu-rows').innerHTML = rows.slice(0, 300).map(f => `<tr>
-        <td style="white-space:nowrap">${fmtWhen(f.createdAt)}</td><td><strong>${escapeHtml(f.name)}</strong></td><td>${escapeHtml(f.department || '')}</td>
-        <td>${escapeHtml(f.question)}<div class="muted small">${escapeHtml(f.topicTitle)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>
+        <td style="white-space:nowrap">${fmtWhen(f.createdAt)}</td><td><a href="#" data-fu-open="${f.responseId}"><strong>${escapeHtml(f.name)}</strong></a></td><td>${escapeHtml(f.department || '')}</td>
+        <td><a href="#" data-fu-open="${f.responseId}">${escapeHtml(f.question)}</a><div class="muted small">${escapeHtml(f.topicTitle)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>
         <td>${escapeHtml(f.firstAnswer)}</td>
         <td class="small">${escapeHtml(f.leader || '')}${f.emailedTo.length ? `<div class="muted">✉ ${escapeHtml(f.emailedTo.join(', '))}</div>` : '<div class="muted">No leader email</div>'}</td>
         <td style="white-space:nowrap">${f.attestedAt ? `<span class="pill good">✓ Educated</span><div class="muted small">${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}</div><a href="#" class="small" data-fu-undo="${f.id}">Undo</a>`
@@ -1840,6 +1909,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     } catch (err) { fail(err); }
   }
   ['fu-filter', 'fu-dept'].forEach(id => $(id).addEventListener('change', loadFollowups));
+  $('fu-rows').addEventListener('click', e => { const a = e.target.closest('[data-fu-open]'); if (a) { e.preventDefault(); showResponse(a.dataset.fuOpen); } });
   $('fu-remind-all').addEventListener('click', async () => {
     if (!confirm('Email each department leader one reminder listing everyone still waiting on them?')) return;
     try {

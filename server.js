@@ -1655,6 +1655,29 @@ async function adminRoutes(req, res, p, m, url) {
     return send(res, 200, { responses: filterResponses(url.searchParams).slice().reverse() });
   }
 
+  // One response in full: the question with every choice, what they picked on each try, the lesson, and how the person usually does.
+  const rd = m === 'GET' && p.match(/^\/api\/admin\/responses\/([\w-]+)$/);
+  if (rd) {
+    const r = db.responses.find(x => x.id === rd[1]);
+    if (!r) return send(res, 404, { error: 'That response is gone.' });
+    const topic = findTopic(r.topicId);
+    const q = topic && (topic.questions.find(x => x.id === r.questionId) || topic.questions.find(x => x.text === r.question));
+    const mine = r.employeeId ? db.responses.filter(x => x.employeeId === r.employeeId && x.attempts.length).sort((a, b) => a.submittedAt.localeCompare(b.submittedAt)) : [];
+    const done = mine.filter(x => x.completed);
+    const emp = r.employeeId ? findEmployee(r.employeeId) : null;
+    return send(res, 200, {
+      response: r,
+      topic: topic ? { id: topic.id, title: topic.title, category: topic.category, lesson: topic.lesson } : null,
+      question: q ? { text: q.text, type: q.type, correctAnswers: q.correctAnswers, wrongAnswers: q.wrongAnswers, hint: q.hint, explanation: q.explanation, changed: q.text !== r.question } : null,
+      person: emp ? { id: emp.id, name: emp.name, department: emp.department, jobTitle: emp.jobTitle || '', hireDate: emp.hireDate || '' } : null,
+      history: {
+        total: done.length, firstTry: done.filter(x => x.firstTryCorrect).length,
+        recent: mine.slice(-8).reverse().map(x => ({ id: x.id, date: x.date, topicTitle: x.topicTitle, firstTryCorrect: x.firstTryCorrect, completed: x.completed }))
+      },
+      followup: (db.followups || []).find(f => f.responseId === r.id) || null
+    });
+  }
+
   if (m === 'GET' && p === '/api/admin/responses.csv') {
     const cols = [
       ['Submitted', r => r.submittedAt], ['Date', r => r.date], ['Name', r => r.name], ['Workday last 4', r => r.last4],
