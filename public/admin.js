@@ -278,19 +278,34 @@
       ? state.kioskUrls.map(u => `<div><code>${escapeHtml(u)}</code></div>`).join('')
       : '<span class="muted">Use this site\'s web address.</span>';
     const openReq = state.required.filter(q => q.active);
-    $('today-rows').innerHTML = state.today.map(d => {
+    const DT_COLORS = ['#1f6f8b', '#c2410c', '#7c3aed', '#15803d', '#be185d', '#0e7490', '#a16207', '#4338ca'];
+    $('today-rows').innerHTML = state.today.map((d, i) => {
       const reqs = openReq.filter(q => !q.departments.length || q.departments.includes(d.department));
-      const why = d.source === 'schedule' ? '<span class="pill brand">Scheduled</span>'
-        : d.source === 'weekly' ? '<span class="pill">Topic of the week (rotation)</span>'
-        : d.source === 'culture' ? '<span class="pill">Culture day</span>'
-        : d.source === 'random' ? `<span class="pill">Random from ${d.poolSize} rotation topics</span>`
-        : '<span class="pill">Topic of the day (rotation)</span>';
-      const reqNote = reqs.length ? `<div class="small" style="margin-top:4px"><span class="pill req">+ ${reqs.length} required first</span></div>` : '';
-      const swap = ['daily', 'weekly', 'culture'].includes(d.source) && d.topicId ? `<button class="btn subtle" data-swap="${escapeHtml(d.department)}">Pick another</button>` : '';
+      const why = d.source === 'schedule' ? '<span class="pill brand">📌 Scheduled</span>'
+        : d.source === 'weekly' ? '<span class="pill">🔁 Topic of the week</span>'
+        : d.source === 'culture' ? '<span class="pill">🌟 Culture day</span>'
+        : d.source === 'random' ? `<span class="pill">🎲 Random from ${d.poolSize}</span>`
+        : '<span class="pill">🔁 Topic of the day</span>';
+      const reqNote = reqs.length ? `<span class="pill req">⚠️ ${reqs.length} required first</span>` : '';
+      const swap = ['daily', 'weekly', 'culture'].includes(d.source) && d.topicId ? `<button class="btn subtle" data-swap="${escapeHtml(d.department)}" title="Pick a different rotation topic for today">🔀 Pick another</button>` : '';
       const title = d.title ? `<a href="#" data-preview="${d.topicId}">${escapeHtml(d.title)}</a>` : (d.source === 'random' ? '<span class="muted">Varies per person</span>' : '<span class="muted">Nothing available</span>');
-      return `<tr><td><strong>${escapeHtml(d.department || 'Everyone')}</strong></td><td>${title}${reqNote}</td><td>${why}</td><td>${swap}</td></tr>`;
-    }).join('');
+      const name = d.department || 'Everyone';
+      return `<div class="dt-card" style="--dt:${DT_COLORS[i % DT_COLORS.length]}"><div class="dt-top"><div class="dt-av">${escapeHtml(name.slice(0, 1).toUpperCase())}</div><div class="dt-dept">${escapeHtml(name)}</div></div>
+        <div class="dt-topic">${title}</div><div class="dt-foot">${why}${reqNote}${swap}</div></div>`;
+    }).join('') || '<div class="muted">No departments yet. Add them in Settings.</div>';
   }
+  // On phones, tables show as stacked cards; each cell needs its column name as a label.
+  function labelTables() {
+    document.querySelectorAll('.table-wrap > table:not(.la)').forEach(t => {
+      const heads = [...t.querySelectorAll('thead th')].map(th => th.textContent.replace(/[↕▲▼]/g, '').trim());
+      if (!heads.length) return;
+      t.classList.add('stack');
+      t.querySelectorAll('tbody tr').forEach(tr => [...tr.children].forEach((td, i) => { if (!td.hasAttribute('data-label')) td.setAttribute('data-label', td.colSpan > 1 ? '' : heads[i] || ''); }));
+    });
+  }
+  new MutationObserver(() => { clearTimeout(labelTables.t); labelTables.t = setTimeout(labelTables, 50); }).observe(document.body, { childList: true, subtree: true });
+  // Keep the chosen tab in view in the swipeable tab row on phones.
+  document.getElementById('nav').addEventListener('click', e => { const b = e.target.closest('button'); if (b && matchMedia('(max-width: 700px)').matches) b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); });
   // ----- Today dashboard -----
   // Opens the Responses tab with these filters (blank = no filter).
   function openResponses(f) {

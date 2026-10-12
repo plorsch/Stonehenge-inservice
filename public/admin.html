@@ -321,6 +321,49 @@ table.la tr:hover td { background: transparent; }
 .tiles-grid.editing .tile-resize-b { display: block; }
 .tile-ctl .hlab { color: #6b7a86; white-space: nowrap; }
 .tile-ctl .hauto { border: 1px solid #c9d9e1; background: #fff; border-radius: 6px; font-size: 11px; padding: 1px 6px; cursor: pointer; color: #17485d; }
+
+  /* ----- What each department gets today ----- */
+  .dt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+  .dt-card { position: relative; border: 1px solid var(--line); border-radius: 14px; padding: 14px 14px 12px; background: #fff; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+  .dt-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--dt, var(--brand)); }
+  .dt-top { display: flex; align-items: center; gap: 10px; }
+  .dt-av { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--dt, var(--brand)); flex: none; }
+  .dt-dept { font-weight: 700; }
+  .dt-topic { font-size: 16px; font-weight: 600; line-height: 1.3; }
+  .dt-topic a { color: var(--ink); text-decoration: none; } .dt-topic a:hover { color: var(--brand); text-decoration: underline; }
+  .dt-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+  .dt-foot .btn { margin-left: auto; padding: 4px 10px; font-size: 13px; }
+
+  /* ----- Phones ----- */
+  @media (max-width: 700px) {
+    header { padding: 0 12px; gap: 0; position: sticky; top: 0; z-index: 30; }
+    header .brand { font-size: 16px; padding: 10px 0 6px; } header .brand img { height: 24px; }
+    .gsearch { order: 1; flex-basis: 100%; width: 100%; margin: 0; padding: 0 0 6px; } .gsearch input { width: 100%; max-width: none; box-sizing: border-box; padding: 7px 12px; } .gsearch .clearwrap { display: block; }
+    header nav { order: 2; flex-wrap: nowrap; overflow-x: auto; margin: 0 -12px; padding: 0 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+    header nav::-webkit-scrollbar { display: none; }
+    nav button { flex: none; white-space: nowrap; margin: 2px 0 8px; padding: 7px 12px; scroll-snap-align: center; }
+    main { padding: 14px 10px 64px; }
+    .card { padding: 16px 14px; border-radius: 14px; }
+    .grid { grid-template-columns: 1fr; }
+    .toolbar > select, .toolbar > input[type=text], .toolbar > input[type=search], .toolbar > input[type=date], .toolbar > label { flex: 1 1 140px; min-width: 0; }
+    .toolbar > .btn { flex: 1 1 auto; }
+    #topic-search, #staff-search { min-width: 0; width: 100%; box-sizing: border-box; }
+    .toolbar > .clearwrap:has(#topic-search), .toolbar > .clearwrap:has(#staff-search), .toolbar > #topic-search, .toolbar > #staff-search { flex: 1 1 100%; }
+    dialog { width: calc(100vw - 16px); max-height: 94vh; }
+    .dlg-head, .dlg-foot { padding: 12px 14px; } .dlg-body { padding: 4px 14px 14px; }
+    /* Tables become stacked cards: each row a card, each cell "Label: value". */
+    .table-wrap table.stack thead { display: none; }
+    .table-wrap table.stack, .table-wrap table.stack tbody, .table-wrap table.stack tr, .table-wrap table.stack td { display: block; width: auto; }
+    .table-wrap table.stack tr { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin-bottom: 10px; background: #fff; }
+    .table-wrap table.stack td { border: 0; padding: 4px 0; display: block; text-align: right; overflow-wrap: anywhere; }
+    .table-wrap table.stack td::after { content: ""; display: block; clear: both; }
+    .table-wrap table.stack td::before { content: attr(data-label); float: left; margin-right: 12px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; text-align: left; max-width: 42%; padding-top: 2px; }
+    .table-wrap table.stack td:first-child { font-size: 16px; text-align: left; }
+    .table-wrap table.stack td:first-child::before, .table-wrap table.stack td[data-label=""]::before { display: none; }
+    .table-wrap table.stack td:empty { display: none; }
+    .table-wrap table.stack td .btn, .table-wrap table.stack td button { margin: 2px 0 2px 6px; }
+    .table-wrap table.stack td[colspan] { text-align: center; }
+  }
 </style>
 </head>
 <body>
@@ -379,10 +422,7 @@ table.la tr:hover td { background: transparent; }
     <div class="card">
       <div class="toolbar"><h2 style="margin:0" class="grow">What each department gets today</h2><a href="#" data-go="look-ahead" class="small">📅 See the weeks ahead →</a></div>
       <div class="muted small" style="margin-bottom:8px">Required education always comes first, then a new hire's starter topics, then one yearly topic if it's due. Otherwise staff get their department's scheduled topic, or a topic from the rotation, with a different question from that topic each shift.</div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Department</th><th>Topic</th><th>Why</th><th></th></tr></thead>
-        <tbody id="today-rows"></tbody>
-      </table></div>
+      <div id="today-rows" class="dt-grid"></div>
     </div>
     <div class="card">
       <h3>iPad status</h3>
