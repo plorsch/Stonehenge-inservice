@@ -124,7 +124,7 @@ function defaultSettings() {
     cultureDay: 5,
     // Quiz-only day (0-6, or null for none): no lesson, one question from a topic the person did in the past week.
     quizDay: null,
-    quizText: { en: 'This checks something you learned this past week. No lesson today, just one question.', es: 'Esto repasa algo que aprendió esta semana. Hoy no hay lección, solo una pregunta.' },
+    quizText: { en: 'This checks something you learned this past week.', es: 'Esto repasa algo que aprendió esta semana.' },
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
     leaders: {},              // { department: leader name and email(s) }, for the Clock-in check lists and follow-up emails

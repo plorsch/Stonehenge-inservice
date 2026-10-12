@@ -153,6 +153,9 @@
   .required-banner.review { background: var(--brand-soft); color: var(--brand); }
   .required-banner.quiz { background: linear-gradient(120deg, #efe6ff, #e4f0ff); color: #4c2a85; border: 1px solid #d9c8f5; }
   .required-banner.quiz { text-align: center; }
+  .required-banner.quiz .quiz-big { font-size: 21px; font-weight: 800; margin-top: 6px; }
+  .required-banner.quiz .brain { display: inline-block; animation: brain-pulse 1.6s ease-in-out infinite; }
+  @keyframes brain-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.3); } }
   #s-question.quiz-mode #question-kicker, #s-question.quiz-mode #question-text, #s-question.quiz-mode #select-all { text-align: center; }
   .required-banner.quiz strong { font-size: 20px; text-transform: none; letter-spacing: 0; margin-bottom: 2px; }
   .review-note { font-size: 19px; font-weight: 600; color: var(--brand); margin: 8px 0 0; }
@@ -794,7 +797,10 @@
     const reviewHtml = `<strong>${T('Quick check-in', 'Repaso rápido')}</strong>${T("This one was tricky last time. Let's see if it stuck.", 'Esta fue difícil la última vez. Veamos si la recuerda.')}`;
     // Quiz day: the editable explainer from Settings, above the question.
     const qt = it.quizText || {};
-    const quizHtml = `<strong>${T('🧠 Pop quiz!', '🧠 ¡Prueba sorpresa!')}</strong>${escapeHtml(T(qt.en || 'This checks something you learned this past week.', qt.es || qt.en || 'Esto repasa algo que aprendió esta semana.'))}<div style="margin-top:4px"><em>${T('(This counts toward your streak 🔥)', '(Esto cuenta para su racha 🔥)')}</em></div><div style="font-size:14px;margin-top:6px;opacity:.8">${T('Topic', 'Tema')}: ${escapeHtml(es() ? it.es.title : it.topic.title)}</div>`;
+    // The "No lesson today" line is added below in bold, so drop it from older saved messages.
+    const quizMsg = T(qt.en || 'This checks something you learned this past week.', qt.es || qt.en || 'Esto repasa algo que aprendió esta semana.')
+      .replace(/\s*(No lesson today, just one question|Hoy no hay lección, solo una pregunta)\.?\s*$/i, '');
+    const quizHtml = `<strong><span class="brain">🧠</span> ${T('Pop quiz!', '¡Prueba sorpresa!')}</strong>${escapeHtml(quizMsg)}<div class="quiz-big">${T('No lesson today, just one question', 'Hoy no hay lección, solo una pregunta')}</div><div style="margin-top:4px"><em>${T('(This counts toward your streak 🔥)', '(Esto cuenta para su racha 🔥)')}</em></div><div style="font-size:14px;margin-top:6px;opacity:.8">${T('Topic', 'Tema')}: ${escapeHtml(es() ? it.es.title : it.topic.title)}</div>`;
     $('question-review').className = 'required-banner ' + (it.kind === 'quiz' ? 'quiz' : 'review');
     $('s-question').classList.toggle('quiz-mode', it.kind === 'quiz');
     $('question-review').innerHTML = it.kind === 'review' ? reviewHtml : it.kind === 'quiz' ? quizHtml : '';
