@@ -1729,6 +1729,94 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   });
   $('resp-person').addEventListener('click', e => { if (e.target.id !== 'resp-person-x') return; e.preventDefault(); respPerson = null; loadResponses(); });
 
+  // ----- Drag and drop for file uploads -----
+  // Each upload box becomes a big drop area; clicking it still opens the file picker.
+  function makeDrop(id, what) {
+    const input = $(id);
+    const zone = document.createElement('label');
+    zone.className = 'drop-zone';
+    zone.innerHTML = `<span class="dz-icon">📄</span><span class="dz-main">Drag ${what} here</span><span class="dz-sub">or click to choose a file</span><span class="dz-name"></span>`;
+    input.before(zone); zone.appendChild(input);
+    const show = () => { const f = input.files && input.files[0]; zone.querySelector('.dz-name').textContent = f ? '✓ ' + f.name : ''; zone.classList.toggle('has-file', !!f); };
+    input.addEventListener('change', show);
+    ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('over'); }));
+    ['dragleave', 'dragend'].forEach(ev => zone.addEventListener(ev, e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('over'); }));
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.classList.remove('over');
+      if (!e.dataTransfer.files.length) return;
+      const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]);
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const dlg = zone.closest('dialog');
+    if (dlg) new MutationObserver(() => { if (dlg.open) show(); }).observe(dlg, { attributes: true, attributeFilter: ['open'] });
+  }
+  [['cc-file', 'your time clock export'], ['imp-file', 'your staff spreadsheet'], ['ti-file', 'your topics spreadsheet'], ['es-file', 'the translated file'],
+    ['lb-file', 'your leaders spreadsheet'], ['restore-file', 'a backup file']].forEach(([id, w]) => { if ($(id)) makeDrop(id, w); });
+  // A file dropped anywhere else would make the browser open it and leave the admin page.
+  ['dragover', 'drop'].forEach(ev => window.addEventListener(ev, e => { if (!e.target.closest || !e.target.closest('.drop-zone')) e.preventDefault(); }));
+
+  // ----- Quick date ranges and "Clear filters" -----
+  // A "When" picker sits before each From/To pair; picking Today, This week... fills both dates.
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  function rangeFor(k) {
+    const t = new Date(state.todayDate + 'T12:00:00'), y = t.getFullYear(), m = t.getMonth();
+    const add = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+    const wk = add(t, -t.getDay());   // weeks start on Sunday
+    return { today: [t, t], yesterday: [add(t, -1), add(t, -1)], week: [wk, t], lastweek: [add(wk, -7), add(wk, -1)],
+      month: [new Date(y, m, 1), t], lastmonth: [new Date(y, m - 1, 1), new Date(y, m, 0)], d30: [add(t, -29), t], d90: [add(t, -89), t],
+      year: [new Date(y, 0, 1), t], any: null }[k];
+  }
+  const RANGES = [['any', 'Any time'], ['today', 'Today'], ['yesterday', 'Yesterday'], ['week', 'This week'], ['lastweek', 'Last week'], ['month', 'This month'],
+    ['lastmonth', 'Last month'], ['d30', 'Last 30 days'], ['d90', 'Last 90 days'], ['year', 'This year'], ['custom', 'Custom dates']];
+  [['resp-from', 'resp-to'], ['rp-from', 'rp-to'], ['mm-from', 'mm-to']].forEach(([f, t]) => {
+    const sel = document.createElement('select');
+    sel.className = 'range-pick'; sel.title = 'Quick dates';
+    sel.innerHTML = RANGES.map(([v, l]) => `<option value="${v}">📅 ${l}</option>`).join('');
+    $(f).closest('label').before(sel);
+    sel.addEventListener('change', () => {
+      if (sel.value === 'custom') return $(f).focus();
+      const r = rangeFor(sel.value);
+      $(f).value = r ? iso(r[0]) : ''; $(t).value = r ? iso(r[1]) : '';
+      $(f).dispatchEvent(new Event('input', { bubbles: true }));
+      $(t).dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    // Typing dates by hand shows which quick range they match, or "Custom dates".
+    const match = () => {
+      if (!$(f).value && !$(t).value) return void (sel.value = 'any');
+      const hit = RANGES.find(([k]) => { const r = rangeFor(k); return r && iso(r[0]) === $(f).value && iso(r[1]) === $(t).value; });
+      sel.value = hit ? hit[0] : 'custom';
+    };
+    [f, t].forEach(id => $(id).addEventListener('change', match));
+    match.sel = sel; $(f)._rangeMatch = match;
+  });
+  // Clear filters: puts every box in the toolbar back to its starting value. Shows only when something is filtered.
+  const filterBars = ['topic-search', 'staff-search', 'resp-from', 'rp-from', 'mm-from'].map(id => $(id).closest('.toolbar'));
+  const ctlDefault = el => el.type === 'checkbox' ? el.defaultChecked : el.tagName === 'SELECT' ? (([...el.options].find(o => o.defaultSelected) || el.options[0] || {}).value || '') : '';
+  const ctlValue = el => el.type === 'checkbox' ? el.checked : el.value;
+  const filterCtls = bar => [...bar.querySelectorAll('input:not([type=file]), select')].filter(el => !el.dataset.keep && !el.closest('.clear-filters'));
+  function syncClear() {
+    filterBars.forEach(bar => {
+      const dirty = filterCtls(bar).some(el => ctlValue(el) !== ctlDefault(el)) || (bar.contains($('resp-from')) && respPerson);
+      bar.querySelector('.clear-filters').hidden = !dirty;
+    });
+  }
+  filterBars.forEach(bar => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn subtle clear-filters'; b.textContent = '✕ Clear filters'; b.hidden = true;
+    bar.appendChild(b);
+    b.addEventListener('click', () => {
+      filterCtls(bar).forEach(el => { if (el.type === 'checkbox') el.checked = el.defaultChecked; else el.value = ctlDefault(el); });
+      if (bar.contains($('resp-from'))) respPerson = null;
+      filterCtls(bar).forEach(el => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+      syncClear();
+    });
+    bar.addEventListener('input', () => setTimeout(syncClear));
+    bar.addEventListener('change', () => setTimeout(syncClear));
+  });
+  document.getElementById('nav').addEventListener('click', () => setTimeout(() => { syncClear(); document.querySelectorAll('.range-pick').forEach(s => { const f = s.nextElementSibling && s.nextElementSibling.querySelector('input'); if (f && f._rangeMatch) f._rangeMatch(); }); }, 50));
+
+
   // ---------- clock-in check ----------
   let ccRows = null, ccHeader = null, ccResult = null;
   const pad2 = n => String(n).padStart(2, '0');

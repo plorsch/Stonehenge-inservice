@@ -354,6 +354,14 @@ table.la tr:hover td { background: transparent; }
   .tl-act:hover { background: var(--brand-soft); border-color: #b9d6e2; }
   .tl-act.danger { color: var(--warn); } .tl-act.danger:hover { background: var(--warn-soft); border-color: #f0cfb4; }
 
+  .range-pick { font-weight: 600; color: var(--brand); }
+  .clear-filters { color: var(--warn) !important; }
+  .drop-zone { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; box-sizing: border-box; padding: 20px 16px; border: 2px dashed #b9d0db; border-radius: 14px; background: #f7fbfd; cursor: pointer; text-align: center; transition: background .15s, border-color .15s; }
+  .drop-zone:hover { background: var(--brand-soft); border-color: var(--brand); }
+  .drop-zone.over { background: #dcefe4; border-color: var(--good); transform: scale(1.01); }
+  .drop-zone.has-file { border-style: solid; border-color: var(--good); background: var(--good-soft); }
+  .drop-zone input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .dz-icon { font-size: 28px; } .dz-main { font-weight: 650; color: var(--brand); } .dz-sub { font-size: 13px; color: var(--muted); } .dz-name { font-weight: 600; color: var(--good); margin-top: 4px; }
   /* ----- Phones ----- */
   @media (max-width: 700px) {
     header { padding: 0 12px; gap: 0; position: sticky; top: 0; z-index: 30; }
@@ -774,7 +782,7 @@ table.la tr:hover td { background: transparent; }
       <h2>Survey sign-in sheet</h2>
       <div class="muted small">A printable page for one topic: the lesson and questions, then everyone who completed it, when, and whether they got it right the first try. Use your browser's print window to print it or save it as a PDF.</div>
       <div class="toolbar" style="margin-top:12px">
-        <select id="rp-topic" style="min-width:260px"></select>
+        <select id="rp-topic" style="min-width:260px" data-keep="1"></select>
         <label>From <input type="date" id="rp-from"></label>
         <label>To <input type="date" id="rp-to"></label>
         <select id="rp-dept"><option value="">All departments</option></select>
@@ -1103,7 +1111,7 @@ table.la tr:hover td { background: transparent; }
   <div class="dlg-body">
     <div class="muted small" style="margin-top:10px">Copy three columns from Excel (Department, Leader name, Email) and paste them below, or upload the spreadsheet. A header row is fine. Several emails in one cell are fine too.</div>
     <textarea id="lb-text" rows="8" style="width:100%;margin-top:8px" placeholder="Dietary&#9;Andi Smith&#9;andi@stonehenge.com&#10;Nursing&#9;Bo Lee&#9;bo@stonehenge.com"></textarea>
-    <div style="margin-top:8px"><label class="small">Or upload Excel or CSV: <input type="file" id="lb-file" accept=".xlsx,.xls,.csv,text/csv"></label></div>
+    <div style="margin-top:8px"><div class="small" style="margin-bottom:4px">Or upload Excel or CSV:</div><input type="file" id="lb-file" accept=".xlsx,.xls,.csv,text/csv"></div>
     <div id="lb-preview" class="small" style="margin-top:10px"></div>
   </div>
   <div class="dlg-foot"><button class="btn ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn" type="button" id="lb-go" disabled>Add to the list</button></div>
