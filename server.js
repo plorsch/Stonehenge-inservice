@@ -7,6 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const net = require('net');
+const tls = require('tls');
 
 const ROOT = __dirname;
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
@@ -122,7 +124,9 @@ function defaultSettings() {
     cultureDay: 5,
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
-    leaders: {},              // { department: leader name }, for the Clock-in check follow-up lists
+    leaders: {},              // { department: leader name and email(s) }, for the Clock-in check lists and follow-up emails
+    alertEmails: [],          // emailed when someone not on the roster does an in-service
+    missedFollowup: true,     // a first-try miss asks the department leader to re-educate and attest
     jobDepartments: {},       // { job title: department }, so titles like "Registered Nurse (RN)" land in Nursing
     // New hire starter set: topics given one per visit, in this order, for this many days after the hire date.
     starter: { topicIds: [], days: 60 },
@@ -180,6 +184,8 @@ function upgradeDb(d) {
   d.schedules = Array.isArray(d.schedules) ? d.schedules : [];
   d.required = Array.isArray(d.required) ? d.required : [];
   d.announcements = Array.isArray(d.announcements) ? d.announcements : [];
+  d.followups = Array.isArray(d.followups) ? d.followups : [];
+  d.emailLog = Array.isArray(d.emailLog) ? d.emailLog : [];
   const old = d.settings || {};
   d.settings = Object.assign(defaultSettings(), old);
   d.settings.review = Object.assign({ on: true, firstDays: 2, secondDays: 7 }, d.settings.review);
@@ -830,6 +836,128 @@ const todaysCelebrations = () => celebrationsOn(today());
 let kioskSeen = null;
 const serverStartedAt = nowIso();
 
+// ---------- Email alerts and leader follow-ups ----------
+// Email goes out through a Gmail account (GMAIL_USER + GMAIL_APP_PASSWORD), any SMTP server (SMTP_HOST, SMTP_USER, SMTP_PASS),
+// or Brevo's email API (BREVO_API_KEY + MAIL_FROM), set on the server (Render: Environment).
+// Until one is set nothing is emailed, but follow-ups still show on the admin Reports tab.
+const SMTP = {
+  host: process.env.SMTP_HOST || (process.env.GMAIL_USER ? 'smtp.gmail.com' : ''),
+  port: Number(process.env.SMTP_PORT) || 465,
+  secure: process.env.SMTP_SECURE !== 'false',   // TLS from the start (port 465)
+  user: process.env.SMTP_USER || process.env.GMAIL_USER || '',
+  pass: (process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '')   // Google shows app passwords with spaces
+};
+const MAIL = { key: process.env.BREVO_API_KEY || '', from: process.env.MAIL_FROM || SMTP.user, fromName: process.env.MAIL_FROM_NAME || 'Stonehenge In-Service' };
+const useSmtp = () => !!(SMTP.host && SMTP.user && SMTP.pass);
+const emailReady = () => useSmtp() || !!(MAIL.key && MAIL.from);
+// A small SMTP client (no packages needed): one connection per email.
+function smtpSend(to, subject, html) {
+  return new Promise((resolve, reject) => {
+    const sock = SMTP.secure ? tls.connect({ host: SMTP.host, port: SMTP.port, servername: SMTP.host }) : net.connect({ host: SMTP.host, port: SMTP.port });
+    sock.setTimeout(20000, () => { sock.destroy(); reject(new Error('The mail server did not answer.')); });
+    sock.on('error', reject);
+    const b64 = v => Buffer.from(v, 'utf8').toString('base64');
+    const word = v => /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${b64(v)}?=`;
+    const msg = [`From: ${word(MAIL.fromName)} <${MAIL.from}>`, `To: ${to.join(', ')}`, `Subject: ${word(subject)}`, `Date: ${new Date().toUTCString()}`,
+      `Message-ID: <${crypto.randomBytes(12).toString('hex')}@${MAIL.from.split('@')[1] || 'localhost'}>`, 'MIME-Version: 1.0',
+      'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', b64(html).replace(/.{76}/g, '$&\r\n')].join('\r\n');
+    const steps = [[220, null], [250, `EHLO stonehenge-inservice`], [334, 'AUTH LOGIN'], [334, b64(SMTP.user)], [235, b64(SMTP.pass)], [250, `MAIL FROM:<${MAIL.from}>`],
+      ...to.map(t => [250, `RCPT TO:<${t}>`]), [354, 'DATA'], [250, msg + '\r\n.'], [221, 'QUIT']];
+    let i = 0, buf = '';
+    sock.on('data', d => {
+      buf += d.toString('utf8');
+      // Wait for the last line of a reply ("250 ok", not "250-...").
+      const lines = buf.split('\r\n').filter(Boolean);
+      const last = lines[lines.length - 1];
+      if (!buf.endsWith('\r\n') || !/^\d{3} /.test(last)) return;
+      buf = '';
+      const code = Number(last.slice(0, 3));
+      if (code !== steps[i][0]) { sock.destroy(); return reject(new Error(code === 535 ? 'The mail server rejected the username or app password.' : last.slice(0, 200))); }
+      i++;
+      if (i >= steps.length) { sock.end(); return resolve(); }
+      sock.write(steps[i][1] + '\r\n');
+    });
+  });
+}
+const emailsIn = text => [...new Set((String(text || '').match(/[^\s<>,;:"'()]+@[^\s<>,;:"'()]+\.[a-z]{2,}/gi) || []).map(e => e.toLowerCase()))];
+function leaderFor(dept) {
+  const key = Object.keys(db.settings.leaders || {}).find(k => sameText(k, dept || ''));
+  return key ? db.settings.leaders[key] : '';
+}
+// "Andi, andi@x.com" -> "Andi"
+const leaderName = l => String(l || '').replace(/[^\s,;<>()]+@[^\s,;<>()]+/g, '').replace(/[\s,;<>()]+$/, '').replace(/[\s,;<>()]+(?=[\s,;<>()])/g, '').trim();
+const siteUrl = () => (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${config.port}`).replace(/\/$/, '');
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function emailHtml(title, rows, button) {
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1d2b36;max-width:560px">
+    <h2 style="color:#1f5f7a;margin:0 0 12px">${esc(title)}</h2>
+    <table style="border-collapse:collapse">${rows.filter(r => r[1]).map(([k, v]) => `<tr><td style="padding:4px 14px 4px 0;color:#5b6b78;vertical-align:top">${esc(k)}</td><td style="padding:4px 0">${esc(v)}</td></tr>`).join('')}</table>
+    ${button ? `<p style="margin:22px 0"><a href="${esc(button.url)}" style="background:#1f5f7a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">${esc(button.label)}</a></p>` : ''}
+    <p style="color:#5b6b78;font-size:12px;margin-top:24px">Sent by the ${esc(db.settings.facilityName || 'Stonehenge')} in-service kiosk.</p></div>`;
+}
+async function sendEmail(to, subject, html, kind) {
+  const log = { id: newId(), at: nowIso(), to, subject, kind, status: 'sent', error: '' };
+  db.emailLog = [log].concat(db.emailLog || []).slice(0, 200);
+  if (!to.length) log.status = 'no email address';
+  else if (!emailReady()) log.status = 'email not set up';
+  else if (useSmtp()) {
+    try { await smtpSend(to, subject, html); } catch (err) { log.status = 'failed'; log.error = String(err.message || err).slice(0, 300); }
+  } else {
+    try {
+      const r = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST', headers: { 'api-key': MAIL.key, 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ sender: { email: MAIL.from, name: MAIL.fromName }, to: to.map(email => ({ email })), subject, htmlContent: html })
+      });
+      if (!r.ok) { log.status = 'failed'; log.error = (await r.text()).slice(0, 300); }
+    } catch (err) { log.status = 'failed'; log.error = String(err.message || err).slice(0, 300); }
+  }
+  saveDb();
+  return log;
+}
+const when = iso => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+// Someone typed their name because they aren't on the roster: one email per name per day.
+function alertUnlisted(r) {
+  if (r.verified || r.alerted || !(db.settings.alertEmails || []).length) return;
+  r.alerted = true;
+  if (db.responses.some(x => x !== r && !x.verified && x.date === r.date && sameText(x.name, r.name))) return;
+  sendEmail(db.settings.alertEmails, `Not on the roster: ${r.name} did an in-service`, emailHtml(`${r.name} isn't on the staff roster`, [
+    ['Name typed', r.name], ['Last 4 typed', r.last4], ['Department', r.department], ['Topic', r.topicTitle], ['When', when(r.submittedAt)],
+    ['What to do', 'Add them on the Staff tab of the admin page so their in-services count toward their record.']
+  ], { url: siteUrl() + '/admin', label: 'Open the admin page' }), 'not on roster').catch(() => {});
+}
+// A first-try miss: the department leader re-educates the person and attests to it.
+function followUpMiss(r) {
+  if (!r.completed || r.firstTryCorrect || !db.settings.missedFollowup || db.followups.some(f => f.responseId === r.id)) return;
+  const leader = leaderFor(r.department);
+  const f = { id: newId(), token: crypto.randomBytes(18).toString('hex'), responseId: r.id, employeeId: r.employeeId, name: r.name, department: r.department,
+    topicId: r.topicId, topicTitle: r.topicTitle, question: r.question, firstAnswer: r.attempts[0] || '', correctAnswer: r.correctAnswer,
+    leader: leaderName(leader), emailedTo: emailsIn(leader), createdAt: nowIso(), attestedAt: null, attestedBy: '' };
+  db.followups.push(f);
+  saveDb();
+  if (!f.emailedTo.length) return;
+  sendEmail(f.emailedTo, `Please follow up: ${r.name} missed an in-service question`, emailHtml(`${r.name} missed a question`, [
+    ['Staff', `${r.name}${r.department ? ' (' + r.department + ')' : ''}`], ['Topic', r.topicTitle], ['Question', r.question],
+    ['They first answered', f.firstAnswer], ['Correct answer', r.correctAnswer], ['When', when(r.completedAt || r.submittedAt)],
+    ['What to do', 'Take a minute to go over this with them, then tap the button to confirm.']
+  ], { url: `${siteUrl()}/attest/${f.token}`, label: "I've educated them" }), 'follow-up').catch(() => {});
+}
+function attestPage(f) {
+  const done = f.attestedAt;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Follow-up</title>
+  <style>body{font:16px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f3f6f8;color:#1d2b36;margin:0;padding:24px 16px}
+  .card{max-width:520px;margin:0 auto;background:#fff;border:1px solid #dbe3e9;border-radius:14px;padding:22px}h1{font-size:21px;color:#1f5f7a;margin:0 0 12px}
+  dt{color:#5b6b78;font-size:13px;margin-top:8px}dd{margin:0}input{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #dbe3e9;border-radius:8px;margin-top:4px}
+  button{margin-top:14px;width:100%;font:inherit;font-weight:700;background:#1f5f7a;color:#fff;border:0;border-radius:10px;padding:14px;cursor:pointer}.ok{background:#e3f4ea;color:#1e7a4c;border-radius:10px;padding:12px;font-weight:700}</style></head>
+  <body><div class="card"><h1>${esc(f.name)} missed a question</h1><dl>
+  <dt>Department</dt><dd>${esc(f.department || '–')}</dd><dt>Topic</dt><dd>${esc(f.topicTitle)}</dd><dt>Question</dt><dd>${esc(f.question)}</dd>
+  <dt>They first answered</dt><dd>${esc(f.firstAnswer)}</dd><dt>Correct answer</dt><dd>${esc(f.correctAnswer)}</dd></dl>
+  <div id="box">${done ? `<p class="ok">✓ Educated. Confirmed by ${esc(f.attestedBy)} on ${esc(when(f.attestedAt))}.</p>`
+    : `<label style="display:block;margin-top:16px">Your name<input id="by" autocomplete="name" value="${esc(f.leader)}"></label><button id="go">✓ I've educated them</button>`}</div></div>
+  <script>var b=document.getElementById('go');if(b)b.onclick=function(){var n=document.getElementById('by').value.trim();if(!n){alert('Please type your name.');return}b.disabled=true;
+  fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({by:n})}).then(function(r){return r.json()}).then(function(d){
+  document.getElementById('box').innerHTML='<p class="ok">✓ Thank you! Recorded for '+${JSON.stringify(esc(f.name))}+'.</p>'}).catch(function(){b.disabled=false;alert('Could not save. Please try again.')})}</script></body></html>`;
+}
+
 async function kioskRoutes(req, res, p, m) {
   if (m === 'GET' && p === '/api/kiosk/config') {
     const s = db.settings;
@@ -931,6 +1059,8 @@ async function kioskRoutes(req, res, p, m) {
     if (r.attempts.length === 1) r.firstTryCorrect = correct;
     if (correct) { r.completed = true; r.completedAt = nowIso(); }
     saveDb();
+    if (r.attempts.length === 1) alertUnlisted(r);
+    if (correct) followUpMiss(r);
 
     // Single choice: drop the wrong picks. Select-all: keep every choice (a partly right pick isn't "wrong").
     const all = choicesFor(q);
@@ -999,6 +1129,8 @@ async function kioskRoutes(req, res, p, m) {
       r.offline = true;
       r.offlineIds = (r.offlineIds || []).concat(offlineId);
       done.push(offlineId);
+      alertUnlisted(r);
+      followUpMiss(r);
     }
     if (done.length) saveDb();
     return send(res, 200, { done });
@@ -1061,7 +1193,7 @@ function clockCheck(punches) {
     else status = 'missed';
     results.push({
       date: sh.date, time: sh.time, last4: sh.last4,
-      name: emp ? emp.name : sh.name, department, leader: (emp && db.settings.leaders && db.settings.leaders[department]) || '',
+      name: emp ? emp.name : sh.name, department, leader: leaderName((emp && db.settings.leaders && db.settings.leaders[department]) || ''),
       onRoster: !!emp, ambiguous: candidates.length > 1,
       status, completedAt: done ? done.completedAt : null, topic: done ? done.topicTitle : (rs[0] ? rs[0].topicTitle : '')
     });
@@ -1412,8 +1544,10 @@ async function adminRoutes(req, res, p, m, url) {
     }
     if (b.leaders && typeof b.leaders === 'object') {
       s.leaders = {};
-      for (const [d, l] of Object.entries(b.leaders).slice(0, 50)) if (cleanText(d, 60) && cleanText(l, 60)) s.leaders[cleanText(d, 60)] = cleanText(l, 60);
+      for (const [d, l] of Object.entries(b.leaders).slice(0, 50)) if (cleanText(d, 60) && cleanText(l, 300)) s.leaders[cleanText(d, 60)] = cleanText(l, 300);
     }
+    if ('alertEmails' in b) s.alertEmails = emailsIn([].concat(b.alertEmails || []).join(' ')).slice(0, 20);
+    if ('missedFollowup' in b) s.missedFollowup = !!b.missedFollowup;
     saveDb();
     return send(res, 200, { settings: s });
   }
@@ -1532,6 +1666,26 @@ async function adminRoutes(req, res, p, m, url) {
     });
   }
 
+  if (m === 'GET' && p === '/api/admin/followups') {
+    return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, ...f }) => f), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30) });
+  }
+  const fa = m === 'POST' && p.match(/^\/api\/admin\/followups\/([\w-]+)\/attest$/);
+  if (fa) {
+    const f = db.followups.find(x => x.id === fa[1]);
+    if (!f) return send(res, 404, { error: 'Not found.' });
+    const b = await readBody(req);
+    if (b.undo) { f.attestedAt = null; f.attestedBy = ''; } else if (!f.attestedAt) { f.attestedAt = nowIso(); f.attestedBy = cleanText(b.by, 80) || 'Admin'; }
+    saveDb();
+    return send(res, 200, { ok: true });
+  }
+  if (m === 'POST' && p === '/api/admin/email/test') {
+    const b = await readBody(req);
+    const to = emailsIn(b.to).length ? emailsIn(b.to) : db.settings.alertEmails || [];
+    if (!to.length) return send(res, 400, { error: 'Add an email address first.' });
+    const log = await sendEmail(to, 'Test email from the in-service kiosk', emailHtml('It works! ✓', [['Sent to', to.join(', ')], ['When', when(nowIso())]]), 'test');
+    return send(res, log.status === 'sent' ? 200 : 400, log.status === 'sent' ? { ok: true } : { error: log.status === 'email not set up' ? 'Email is not connected yet. Add GMAIL_USER and GMAIL_APP_PASSWORD in Render → Environment.' : 'Sending failed: ' + (log.error || log.status) });
+  }
+
   if (m === 'GET' && p === '/api/admin/test-data') {
     return send(res, 200, {
       responses: (db.responses || []).length, usage: (db.usage || []).length,
@@ -1545,7 +1699,7 @@ async function adminRoutes(req, res, p, m, url) {
     const file = `before-go-live-${nowIso().replace(/[:.]/g, '-')}.json`;
     writeJsonSafely(path.join(BACKUP_DIR, file), db);
     const out = {};
-    if (b.responses) { out.responses = db.responses.length; db.responses = []; db.usage = []; }
+    if (b.responses) { out.responses = db.responses.length; db.responses = []; db.usage = []; db.followups = []; db.emailLog = []; }
     if (b.sampleStaff) { const before = db.employees.length; db.employees = db.employees.filter(e => !isSampleStaff(e)); out.sampleStaff = before - db.employees.length; }
     if (b.sampleSchedules) { const before = db.schedules.length; db.schedules = db.schedules.filter(x => !isSampleSchedule(x)); out.sampleSchedules = before - db.schedules.length; }
     if (b.announcements) { out.announcements = db.announcements.length; db.announcements = []; }
@@ -1577,6 +1731,18 @@ async function handle(req, res) {
   const m = req.method;
 
   if (m === 'GET' && (p === '/' || p === '/index.html')) return serveStatic(res, 'index.html');
+  // The leader's "I've educated them" link from the follow-up email. The long random token is the key; no sign-in needed.
+  const at = p.match(/^\/attest\/([a-f0-9]{36})$/);
+  if (at) {
+    const f = db.followups.find(x => x.token === at[1]);
+    if (!f) return send(res, 404, '<p style="font-family:sans-serif">This follow-up link is no longer valid.</p>', 'text/html; charset=utf-8');
+    if (m === 'POST') {
+      const b = await readBody(req);
+      if (!f.attestedAt) { f.attestedAt = nowIso(); f.attestedBy = cleanText(b.by, 80) || 'Leader'; saveDb(); }
+      return send(res, 200, { ok: true });
+    }
+    return send(res, 200, attestPage(f), 'text/html; charset=utf-8');
+  }
   if (p.startsWith('/api/kiosk/')) {
     if ((await kioskRoutes(req, res, p, m)) !== false) return;
     return send(res, 404, { error: 'Not found' });

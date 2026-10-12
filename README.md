@@ -161,6 +161,12 @@ Add a birthday (month and day only) and hire date on the Staff tab, or as Birthd
 - **Settings → Home screen decor** sets decorations, a message and a background color for each month. The color and the first decoration stay on every screen (the color as the background, the decoration in the header). The iPad switches on the 1st. Use **Preview** to see any month.
 - **Forgot your code?** under the keypad lets staff type their first and last name to see their last 4, then tap their name to start. It needs both names and shows at most 3 people.
 
+### Email alerts and follow-ups
+
+- **Not on the roster:** Settings → Email alerts → list one or more addresses. They get an email (once per name per day) when someone types their name instead of using a roster code.
+- **Missed questions:** when someone misses a question on the first try, it's listed on Reports → Needs follow-up, and their department leader is emailed with an "I've educated them" button. Put the leader's email in Settings → Department leaders, like `Dietary: Andi, andi@stonehenge.com`. Admins can also mark it educated on the Reports tab.
+- **Turning email on (Gmail):** on the Google account, turn on 2-Step Verification, then create an app password at https://myaccount.google.com/apppasswords. In Render → Environment add `GMAIL_USER` (the Gmail address) and `GMAIL_APP_PASSWORD` (the 16-letter app password), then save. Use "Send a test email" in Settings to check. Other options: `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`, or Brevo with `BREVO_API_KEY` + `MAIL_FROM`.
+
 ## 4. Data and backups
 
 Everything is in `data/db.json` (or in `DATA_DIR` on a hosting service). A copy is saved automatically once a day in `backups/`, and the last 60 days are kept. On the Settings tab you can:

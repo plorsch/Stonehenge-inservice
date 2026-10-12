@@ -73,7 +73,7 @@
     if (b.dataset.tab === 'responses') loadResponses();
     if (b.dataset.tab === 'history') loadUsage();
     if (b.dataset.tab === 'settings') renderSettings();
-    if (b.dataset.tab === 'reports') { loadMissed(); loadAnnual(); loadReviews(); }
+    if (b.dataset.tab === 'reports') { loadFollowups(); loadMissed(); loadAnnual(); loadReviews(); }
   });
 
   // ---------- click a column heading to sort ----------
@@ -1643,6 +1643,9 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('pw-env').hidden = !state.passwordFromEnv;
     renderDecor();
     loadTestData();
+    $('set-alert-emails').value = (s.alertEmails || []).join('\n');
+    $('set-missed-followup').checked = s.missedFollowup !== false;
+    loadEmailStatus();
     $('pw-form').hidden = !!state.passwordFromEnv;
   }
   $('save-settings').addEventListener('click', async () => {
@@ -1660,6 +1663,57 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       await refresh();
     } catch (err) { fail(err); }
   });
+  // ---------- email alerts and follow-ups ----------
+  async function loadEmailStatus() {
+    try {
+      const r = await api('/api/admin/followups');
+      $('em-status').innerHTML = r.emailReady ? `<span class="pill good">Email connected</span> <span class="muted">Sends from ${escapeHtml(r.mailFrom)}</span>`
+        : '<span class="pill warn">Email not connected yet</span> <span class="muted">Alerts still show on the Reports tab. To send email, add GMAIL_USER and GMAIL_APP_PASSWORD in Render → Environment.</span>';
+      $('em-log').innerHTML = r.emailLog.length ? '<table style="margin-top:6px"><tbody>' + r.emailLog.map(l => `<tr><td style="white-space:nowrap">${fmtWhen(l.at)}</td><td>${escapeHtml(l.subject)}<div class="muted">${escapeHtml(l.to.join(', ') || '–')}</div></td><td>${l.status === 'sent' ? '<span class="pill good">Sent</span>' : `<span class="pill warn" title="${escapeHtml(l.error || '')}">${escapeHtml(l.status)}</span>`}</td></tr>`).join('') + '</tbody></table>'
+        : '<div class="muted" style="margin-top:6px">None yet.</div>';
+    } catch { /* leave as is */ }
+  }
+  $('save-email').addEventListener('click', async () => {
+    try {
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ alertEmails: splitLines($('set-alert-emails').value), missedFollowup: $('set-missed-followup').checked }) });
+      toast('Email settings saved'); await refresh();
+    } catch (err) { fail(err); }
+  });
+  $('test-email').addEventListener('click', async () => {
+    try { await post('/api/admin/email/test', { to: $('set-alert-emails').value }); toast('Test email sent. Check the inbox.'); }
+    catch (err) { alert(err.message); }
+    loadEmailStatus();
+  });
+  async function loadFollowups() {
+    try {
+      const { followups, emailReady } = await api('/api/admin/followups');
+      const open = followups.filter(f => !f.attestedAt).length;
+      $('fu-count').hidden = !open; $('fu-count').textContent = `${open} open`;
+      fillSelect($('fu-dept'), [['', 'All departments']], [...new Set(followups.map(f => f.department).filter(Boolean))].sort());
+      $('fu-email-note').textContent = emailReady ? '' : 'Email isn\'t connected yet, so leaders aren\'t emailed. See Settings → Email alerts.';
+      const fv = $('fu-filter').value, fd = $('fu-dept').value;
+      const rows = followups.filter(f => (fv === 'all' || (fv === 'open' ? !f.attestedAt : f.attestedAt)) && (!fd || f.department === fd));
+      $('fu-rows').innerHTML = rows.slice(0, 300).map(f => `<tr>
+        <td style="white-space:nowrap">${fmtWhen(f.createdAt)}</td><td><strong>${escapeHtml(f.name)}</strong></td><td>${escapeHtml(f.department || '')}</td>
+        <td>${escapeHtml(f.question)}<div class="muted small">${escapeHtml(f.topicTitle)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>
+        <td>${escapeHtml(f.firstAnswer)}</td>
+        <td class="small">${escapeHtml(f.leader || '')}${f.emailedTo.length ? `<div class="muted">✉ ${escapeHtml(f.emailedTo.join(', '))}</div>` : '<div class="muted">No leader email</div>'}</td>
+        <td style="white-space:nowrap">${f.attestedAt ? `<span class="pill good">✓ Educated</span><div class="muted small">${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}</div><a href="#" class="small" data-fu-undo="${f.id}">Undo</a>`
+          : `<button class="btn subtle" data-fu-attest="${f.id}">Mark educated</button>`}</td></tr>`).join('')
+        || `<tr><td colspan="7" class="muted">${fv === 'open' ? 'Nothing waiting. Everyone is caught up. 🎉' : 'None yet.'}</td></tr>`;
+    } catch (err) { fail(err); }
+  }
+  ['fu-filter', 'fu-dept'].forEach(id => $(id).addEventListener('change', loadFollowups));
+  $('fu-rows').addEventListener('click', async e => {
+    const a = e.target.closest('[data-fu-attest]'), u = e.target.closest('[data-fu-undo]');
+    if (!a && !u) return;
+    e.preventDefault();
+    let by = '';
+    if (a) { by = prompt('Who educated them? (your name)', localStorage.getItem('fu-by') || ''); if (!by) return; try { localStorage.setItem('fu-by', by); } catch { /* ignore */ } }
+    try { await post(`/api/admin/followups/${(a || u).dataset[a ? 'fuAttest' : 'fuUndo']}/attest`, a ? { by } : { undo: true }); toast(a ? 'Marked educated' : 'Undone'); loadFollowups(); }
+    catch (err) { fail(err); }
+  });
+
   // ---------- announcements ----------
   function renderAnnouncements() {
     if (!$('an-depts').dataset.init) { renderChecks($('an-depts'), []); $('an-depts').dataset.init = 1; }

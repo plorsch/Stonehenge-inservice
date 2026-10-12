@@ -426,6 +426,19 @@
 
   <!-- Reports -->
   <section class="tab" id="tab-reports">
+    <div class="card" id="fu-card">
+      <h2>Needs follow-up <span class="pill warn" id="fu-count" hidden></span></h2>
+      <div class="muted small">Everyone who missed a question on the first try. Their department leader goes over it with them and confirms with "Educated", from the email or right here.</div>
+      <div class="toolbar" style="margin-top:10px">
+        <select id="fu-filter"><option value="open">Not yet educated</option><option value="done">Educated</option><option value="all">All</option></select>
+        <select id="fu-dept"></select>
+        <span class="small muted" id="fu-email-note"></span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>Name</th><th>Dept</th><th>Question</th><th>First answer</th><th>Leader</th><th>Status</th></tr></thead>
+        <tbody id="fu-rows"></tbody>
+      </table></div>
+    </div>
     <div class="card">
       <h2>Survey sign-in sheet</h2>
       <div class="muted small">A printable page for one topic: the lesson and questions, then everyone who completed it, when, and whether they got it right the first try. Use your browser's print window to print it or save it as a PDF.</div>
@@ -496,7 +509,7 @@
         <input type="text" id="set-facility" style="width:100%">
         <label class="block" for="set-depts">Departments <span class="hint">one per line</span></label>
         <textarea id="set-depts" rows="8"></textarea>
-        <label class="block" for="set-leaders">Department leaders <span class="hint">one per line, like "Dietary: Andi". Used to group the Clock-in check follow-up list.</span></label>
+        <label class="block" for="set-leaders">Department leaders <span class="hint">one per line, like "Dietary: Andi, andi@stonehenge.com". Groups the Clock-in check list; the email gets follow-ups when someone in that department misses a question. Several emails are fine.</span></label>
         <textarea id="set-leaders" rows="6"></textarea>
         <label class="block" for="set-closing">End-screen messages <span class="hint">one per line; the iPad shows one at random after each in-service</span></label>
         <textarea id="set-closing" rows="10"></textarea>
@@ -514,6 +527,13 @@
           <input type="password" id="set-pw" style="width:100%" autocomplete="new-password">
           <div style="margin-top:10px"><button class="btn" id="save-pw">Change password</button></div>
         </div>
+        <h2 style="margin-top:24px">Email alerts</h2>
+        <div class="small" id="em-status"></div>
+        <label class="block" for="set-alert-emails">Email when someone not on the roster does an in-service <span class="hint">one or more addresses, one per line</span></label>
+        <textarea id="set-alert-emails" rows="3" placeholder="name@stonehenge.com"></textarea>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" id="set-missed-followup" style="margin-top:4px"> <span>When someone misses a question on the first try, email their department leader (from Department leaders above) with an "I've educated them" button. Listed on Reports → Needs follow-up either way.</span></label>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="save-email">Save email settings</button><button class="btn ghost" id="test-email">Send a test email</button></div>
+        <details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Recent emails</summary><div id="em-log" class="small"></div></details>
         <h2 style="margin-top:24px">Backup</h2>
         <div class="muted small">Download a copy at least weekly and keep it somewhere safe.</div>
         <div class="toolbar" style="margin-top:10px">
