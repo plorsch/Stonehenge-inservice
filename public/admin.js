@@ -320,6 +320,7 @@
       line('🎂', cel.length ? cel.map(c => `${escapeHtml(c.name)} <span class="muted">(${c.type === 'birthday' ? 'birthday' : c.years + '-year anniversary'})</span>`).join(', ') : '<span class="muted">No birthdays or work anniversaries today</span>') +
       line('🙋', dash.unlistedToday ? `<a href="#" data-go="today-all">${dash.unlistedToday} not on the roster today</a>` : '<span class="muted">Everyone today was on the roster</span>') +
       line('⏸️', dash.unfinishedToday ? `<a href="#" data-go="today-all">${dash.unfinishedToday} started but didn't finish</a>` : '<span class="muted">No unfinished in-services today</span>') +
+      (leaderGapHtml(true) ? line('⚠️', `<span style="color:var(--warn)">Follow-up emails can't reach some departments.</span><br>${leaderGapHtml(true)}`) : '') +
       line('📌', `${state.required.filter(q => q.active).length} required education item${state.required.filter(q => q.active).length === 1 ? '' : 's'} open`);
   }
   const tip = document.createElement('div');
@@ -388,6 +389,7 @@
     if (go === 'today-all') openResponses({ from: t, to: t });
     else if (go === 'today-missed') openResponses({ from: t, to: t, missed: true });
     else if (go === 'followups') { $('fu-filter').value = 'open'; goTab('reports'); setTimeout(() => $('fu-card').scrollIntoView({ behavior: 'smooth' }), 80); }
+    else if (go === 'leaders') { goTab('settings'); setTimeout(() => $('dept-card').scrollIntoView({ behavior: 'smooth', block: 'start' }), 80); }
     else if (go === 'look-ahead') { goTab('schedule'); setTimeout(() => $('la-card').scrollIntoView({ behavior: 'smooth' }), 80); }
     else if (go === 'missed-report') { goTab('reports'); setTimeout(() => $('mm-rows').closest('.card').scrollIntoView({ behavior: 'smooth' }), 80); }
     else goTab(go);
@@ -1263,6 +1265,28 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     if (/driver|transport/.test(t)) return 'Transport';
     return 'Administration';
   }
+  // Departments with staff (or on the iPad list) that have no leader, or a leader with no email.
+  function leaderGaps() {
+    const L = (state.settings && state.settings.leaders) || {};
+    const leaderOf = d => { const k = Object.keys(L).find(x => sameDept(x, d)); return k ? L[k] : ''; };
+    const staffDepts = state.employees.filter(e => e.active && e.department).map(e => e.department);
+    const all = [];
+    for (const d of [...depts(), ...staffDepts]) if (!all.some(x => sameDept(x, d))) all.push(d);
+    const noLeader = [], noEmail = [];
+    for (const d of all) {
+      const l = leaderOf(d);
+      if (!l) noLeader.push(d);
+      else if (!/[^\s<>,;:"'()]+@[^\s<>,;:"'()]+\.[a-z]{2,}/i.test(l)) noEmail.push(d);
+    }
+    return { noLeader, noEmail };
+  }
+  function leaderGapHtml(link) {
+    const g = leaderGaps();
+    if (!g.noLeader.length && !g.noEmail.length) return '';
+    const go = link ? ' <a href="#" data-go="leaders">Fix it →</a>' : '';
+    return [g.noLeader.length ? `<b>No leader:</b> ${g.noLeader.map(escapeHtml).join(', ')}` : '',
+      g.noEmail.length ? `<b>Leader has no email:</b> ${g.noEmail.map(escapeHtml).join(', ')}` : ''].filter(Boolean).join('<br>') + go;
+  }
   const mainDepts = () => [...new Set(MAIN_DEPTS.concat(Object.keys(state.settings.leaders || {})))];
   $('staff-group-btn').addEventListener('click', () => {
     const main = mainDepts().map(d => d.toLowerCase());
@@ -2031,6 +2055,9 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     depts().forEach(d => addDeptRow(d));
     $('set-leaders').querySelectorAll('.re-row').forEach(r => r.remove());
     Object.entries(s.leaders || {}).forEach(([d, l]) => addLeaderRow(d, l));
+    const gap = leaderGapHtml(false);
+    $('leader-gaps').hidden = !gap;
+    $('leader-gaps').innerHTML = gap ? '⚠️ Follow-up emails can\'t reach these departments yet.<br>' + gap : '';
     $('set-unlisted').checked = !!s.allowUnlisted;
     $('set-closing').innerHTML = '';
     (s.closingMessages || []).forEach(m => addClosingRow(m));
