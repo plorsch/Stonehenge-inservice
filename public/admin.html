@@ -585,6 +585,7 @@ table.la tr:hover td { background: transparent; }
         </select>
         <button class="btn ghost" id="ai-help-btn" title="Have Copilot, ChatGPT or Claude draft a topic or questions">✨ Get help from AI</button>
         <button class="btn ghost" id="topic-import-btn">Import from spreadsheet</button>
+        <button class="btn ghost" id="spanish-btn">🇪🇸 Spanish</button>
         <button class="btn" id="new-topic">+ New topic</button>
       </div>
       <div class="table-wrap"><table>
@@ -973,6 +974,21 @@ table.la tr:hover td { background: transparent; }
 </dialog>
 
 <!-- Topic import -->
+<dialog id="spanish-dlg" style="width:min(620px,96vw)">
+  <div class="dlg-head"><h2 style="margin:0">🇪🇸 Spanish versions</h2></div>
+  <div class="dlg-body">
+    <div id="es-status" style="margin-bottom:14px"></div>
+    <div class="sk-opt col" style="margin-bottom:10px"><div class="sk-t">1. Download your topics</div>
+      <div class="sk-d">One file with every topic and question. Send it to Claude, or anyone who speaks Spanish, to translate.</div>
+      <div><a class="btn ghost" href="/api/admin/topics/spanish.json" download>⬇ Download topics for translation</a></div></div>
+    <div class="sk-opt col"><div class="sk-t">2. Upload the translated file</div>
+      <div class="sk-d">Only the Spanish is filled in. Your English lessons and questions stay exactly as they are.</div>
+      <div><input type="file" id="es-file" accept=".json,application/json"></div>
+      <div id="es-result" class="small"></div><div class="err" id="es-error"></div></div>
+  </div>
+  <div class="dlg-foot"><button class="btn ghost" onclick="this.closest('dialog').close()">Close</button></div>
+</dialog>
+
 <dialog id="topic-import">
   <div class="dlg-head"><h2 style="margin:0">Import topics from a spreadsheet</h2></div>
   <div class="dlg-body">

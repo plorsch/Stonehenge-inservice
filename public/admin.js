@@ -1099,6 +1099,32 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   }
   const findCol = (header, patterns) => header.findIndex(h => patterns.some(p => p.test(String(h).trim())));
 
+  // ---------- Spanish versions ----------
+  function spanishStatus() {
+    const ts = state.topics.filter(t => t.status !== 'retired');
+    const full = ts.filter(t => t.es && t.es.lesson && t.questions.every(q => q.es)).length;
+    const some = ts.filter(t => t.es && t.es.lesson).length - full;
+    const pct = ts.length ? Math.round(full / ts.length * 100) : 0;
+    $('es-status').innerHTML = `<div style="display:flex;justify-content:space-between;font-weight:650"><span>${full} of ${ts.length} topics fully in Spanish</span><span>${pct}%</span></div>
+      <div style="height:8px;background:var(--bg);border-radius:8px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--good);border-radius:8px"></div></div>
+      ${some ? `<div class="muted small" style="margin-top:6px">${some} more have a Spanish lesson but some questions are still English only.</div>` : ''}`;
+  }
+  $('spanish-btn').addEventListener('click', () => {
+    $('es-file').value = ''; $('es-result').innerHTML = ''; $('es-error').textContent = '';
+    spanishStatus(); $('spanish-dlg').showModal();
+  });
+  $('es-file').addEventListener('change', async e => {
+    const file = e.target.files[0]; $('es-result').innerHTML = ''; $('es-error').textContent = '';
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const r = await post('/api/admin/topics/spanish', { topics: data.topics || data });
+      await refresh(); spanishStatus();
+      $('es-result').innerHTML = `<div class="pill good" style="margin-top:6px">✓ Spanish added to ${r.topics} topic${r.topics === 1 ? '' : 's'} and ${r.questions} question${r.questions === 1 ? '' : 's'}</div>`
+        + (r.problems.length ? `<div class="muted" style="margin-top:8px">Skipped:</div><ul style="margin:4px 0 0 18px">${r.problems.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : '');
+    } catch (err) { $('es-error').textContent = err instanceof SyntaxError ? "That file isn't the translation file. Use the .json file you downloaded here." : err.message; }
+  });
+
   // ---------- topic import ----------
   let topicImport = null;
   $('topic-import-btn').addEventListener('click', () => {

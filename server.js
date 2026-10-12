@@ -1372,6 +1372,43 @@ async function adminRoutes(req, res, p, m, url) {
   }
 
   // Topics
+  // Spanish: download every topic for translation, then upload the file back to fill in only the Spanish.
+  if (m === 'GET' && p === '/api/admin/topics/spanish.json') {
+    const out = { about: 'Stonehenge in-service topics for Spanish translation. Fill in each "es" part and keep answers in the same order and count as English.',
+      exported: nowIso(), topics: db.topics.filter(t => t.status !== 'retired').map(t => ({ id: t.id, title: t.title, lesson: t.lesson,
+        es: { title: (t.es && t.es.title) || '', lesson: (t.es && t.es.lesson) || '' },
+        questions: t.questions.map((q, i) => ({ n: i + 1, text: q.text, correctAnswers: q.correctAnswers, wrongAnswers: q.wrongAnswers, hint: q.hint || '', explanation: q.explanation || '',
+          es: q.es || { text: '', correctAnswers: [], wrongAnswers: [], hint: '', explanation: '' } })) })) };
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="inservice-topics-for-spanish.json"' });
+    return res.end(JSON.stringify(out, null, 2));
+  }
+  if (m === 'POST' && p === '/api/admin/topics/spanish') {
+    const list = (await readBody(req, 20e6)).topics || [];
+    let topics = 0, questions = 0; const problems = [];
+    for (const input of list.slice(0, 500)) {
+      if (!input || typeof input !== 'object') continue;
+      const t = db.topics.find(x => x.id === input.id) || db.topics.find(x => sameText(x.title, input.title));
+      if (!t) { problems.push(`Not found: ${cleanText(input.title, 100) || 'a topic'}`); continue; }
+      let touched = false;
+      const es = input.es || {};
+      const title = cleanText(es.title, 200), lesson = cleanText(es.lesson, 5000);
+      if (title || lesson) { t.es = { title: title || (t.es && t.es.title) || '', lesson: lesson || (t.es && t.es.lesson) || '' }; touched = true; }
+      (Array.isArray(input.questions) ? input.questions : []).forEach((qi, i) => {
+        if (!qi || !qi.es || !cleanText(qi.es.text, 1000)) return;
+        // Match by position, but only when the English question is still the same; otherwise look it up by its English text.
+        const at = t.questions[(Number(qi.n) || i + 1) - 1];
+        const q = at && (!qi.text || sameText(at.text, qi.text)) ? at : t.questions.find(x => sameText(x.text, qi.text));
+        if (!q) { problems.push(`${t.title}: a question changed since the download, so its Spanish was skipped`); return; }
+        const r = validateQuestion(Object.assign({}, q, { es: qi.es }), 1);
+        const bad = r.errors.filter(e => e.includes('(Spanish)'));
+        if (bad.length || !r.question.es) { problems.push(`${t.title}: ${bad[0] ? bad[0].replace('Question 1 (Spanish): ', '') : 'Spanish skipped'}`); return; }
+        q.es = r.question.es; questions++; touched = true;
+      });
+      if (touched) { t.updatedAt = nowIso(); topics++; }
+    }
+    saveDb();
+    return send(res, 200, { topics, questions, problems: problems.slice(0, 30) });
+  }
   if (m === 'POST' && p === '/api/admin/topics/import') {
     // Rows from a spreadsheet, already grouped into topics by the admin page.
     const list = (await readBody(req, 20e6)).topics || [];
