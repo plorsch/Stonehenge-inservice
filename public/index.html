@@ -203,6 +203,20 @@
   body:not(.on-home) .board-pop { display: none; }
   .lb-dept { color: var(--muted); font-size: .85em; }
   .leaders div.me { font-weight: 700; color: var(--brand); }
+  /* Birthday / work anniversary celebration on the last screen */
+  #confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
+  .floaters { position: fixed; inset: 0; pointer-events: none; z-index: 55; overflow: hidden; }
+  .floaters span { position: absolute; bottom: -90px; font-size: 56px; animation: float-up linear forwards; }
+  @keyframes float-up { 0% { transform: translateY(0) rotate(-6deg); opacity: 1; } 50% { transform: translateY(-60vh) rotate(6deg); } 100% { transform: translateY(-125vh) rotate(-4deg); opacity: .9; } }
+  .party { margin: 0 auto 14px; padding: 18px 14px 16px; border-radius: 20px; color: #fff;
+    background: linear-gradient(120deg, #ff6b9a, #ffb347, #ffd84d, #6fd6a5, #5fb8ff, #b48cff); background-size: 300% 300%; animation: party-bg 4s ease infinite; box-shadow: 0 10px 30px rgba(255, 107, 154, .35); }
+  .party-emoji { font-size: 84px; line-height: 1; animation: party-bounce 1s ease-in-out infinite; display: inline-block; }
+  .party-title { font-size: 34px; font-weight: 900; line-height: 1.15; margin-top: 8px; text-shadow: 0 2px 6px rgba(0,0,0,.25); }
+  .party-sub { font-size: 18px; font-weight: 700; opacity: .95; margin-top: 4px; text-shadow: 0 1px 4px rgba(0,0,0,.25); }
+  @keyframes party-bg { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+  @keyframes party-bounce { 0%, 100% { transform: translateY(0) scale(1) rotate(-4deg); } 50% { transform: translateY(-12px) scale(1.12) rotate(4deg); } }
+  .closing.celebrating { background: #fff4f8; border: 2px dashed #ff9fbf; border-radius: 16px; padding: 14px 16px; color: #b0245b; }
+  @media (prefers-reduced-motion: reduce) { .party, .party-emoji, .floaters span { animation: none; } }
   .badge { width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 16px; font-size: 50px; font-weight: 700; background: var(--good-soft); color: var(--good); }
   .explain { text-align: center; background: var(--bg); border-radius: 14px; padding: 16px 20px; margin: 20px 0 0; font-size: 19px; }
   .error { color: var(--warn); font-weight: 600; min-height: 28px; margin-top: 10px; text-align: center; }
@@ -224,6 +238,8 @@
 </head>
 <body class="on-home">
 <div id="decor" aria-hidden="true"></div>
+<canvas id="confetti" aria-hidden="true" hidden></canvas>
+<div class="floaters" id="floaters" aria-hidden="true"></div>
 <div class="preview-bar" id="preview-bar" hidden><strong>PREVIEW</strong><span>Practice run. Nothing is saved.</span><button id="preview-again">↻ Start over</button><button id="preview-close">Close</button></div>
 <div class="app">
   <header>
@@ -358,8 +374,9 @@
 
     <section class="screen" id="s-result">
       <div class="card center">
+        <div class="party" id="result-party" hidden><div class="party-emoji" id="party-emoji"></div><div class="party-title" id="party-title"></div><div class="party-sub" id="party-sub"></div></div>
         <img src="logo.png" alt="Stonehenge of Springville" class="end-logo" id="end-logo" hidden>
-        <div class="badge">✓</div>
+        <div class="badge" id="result-badge">✓</div>
         <h1 id="result-title"></h1>
         <div class="cheer" id="result-cheer" hidden></div>
         <p class="muted" id="result-sub"></p>
@@ -408,6 +425,7 @@
     document.querySelectorAll('.screen').forEach(el => el.classList.toggle('active', el.id === 's-' + name));
     document.body.classList.toggle('on-home', name === 'home');
     if (name !== 'home') $('board-pop').hidden = true;
+    if (name !== 'result' && typeof stopParty === 'function') stopParty();
     document.querySelector('main').scrollTop = 0;
     clearInterval(countdownTimer);
     bumpIdle();
@@ -844,6 +862,75 @@
     return line;
   }
 
+  // ----- birthday / work anniversary party on the last screen -----
+  function myCelebrations(who) {
+    return who && who.employeeId ? (s.config.celebrations || []).filter(c => c.id === who.employeeId) : [];
+  }
+  let confettiRun = 0;
+  function celebrate(list) {
+    const first = (s.who.name || '').split(' ')[0];
+    const bdayToday = list.some(c => c.type === 'birthday'), anniv = list.find(c => c.type === 'anniversary');
+    $('party-emoji').textContent = bdayToday ? '🎂' : '🏅';
+    $('party-title').textContent = bdayToday ? T(`Happy Birthday, ${first}!`, `¡Feliz cumpleaños, ${first}!`)
+      : T(`Happy ${anniv.years}-Year Anniversary, ${first}!`, `¡Feliz aniversario de ${anniv.years} año${anniv.years == 1 ? '' : 's'}, ${first}!`);
+    $('party-sub').textContent = bdayToday && anniv ? T(`And happy ${anniv.years}-year work anniversary too! 🎉`, `¡Y feliz aniversario de trabajo! 🎉`)
+      : bdayToday ? T('The whole team is celebrating you today 🎉', 'Todo el equipo lo celebra hoy 🎉') : T('Thank you for everything you do 💛', 'Gracias por todo lo que hace 💛');
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    floatUp(bdayToday ? ['🎈', '🎈', '🎈', '🎁', '🎈', '🥳', '🎈', '🎂', '🎈', '🎈', '🎈', '🎉'] : ['🎉', '⭐', '🏅', '🎊', '⭐', '💛', '🎉', '⭐', '🏆', '🎊']);
+    confetti();
+  }
+  function floatUp(emojis) {
+    const box = $('floaters');
+    box.innerHTML = '';
+    emojis.forEach((e, i) => {
+      const el = document.createElement('span');
+      el.textContent = e;
+      el.style.left = (4 + Math.random() * 88) + '%';
+      el.style.fontSize = (44 + Math.random() * 30) + 'px';
+      el.style.animationDuration = (5 + Math.random() * 3) + 's';
+      el.style.animationDelay = (i * 0.35 + Math.random() * 0.4) + 's';
+      box.appendChild(el);
+    });
+    setTimeout(() => { box.innerHTML = ''; }, 14000);
+  }
+  // Confetti cannons from both bottom corners plus a burst from the top, on a canvas over the page.
+  function confetti() {
+    const cv = $('confetti'), ctx = cv.getContext('2d'), run = ++confettiRun;
+    const W = cv.width = innerWidth * devicePixelRatio, H = cv.height = innerHeight * devicePixelRatio, k = devicePixelRatio;
+    cv.hidden = false;
+    const colors = ['#ff4d7d', '#ffb020', '#ffe14d', '#3ddc97', '#3aa0ff', '#a66bff', '#ff7ac2'];
+    const bits = [];
+    const burst = (x, y, angle, spread, n, speed) => {
+      for (let i = 0; i < n; i++) {
+        const a = angle + (Math.random() - .5) * spread, v = speed * (.55 + Math.random() * .6);
+        bits.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, w: (6 + Math.random() * 7) * k, h: (9 + Math.random() * 9) * k,
+          rot: Math.random() * 6, vr: (Math.random() - .5) * .35, c: colors[i % colors.length], round: Math.random() < .25, t: 0 });
+      }
+    };
+    const fire = () => {
+      burst(0, H, -Math.PI / 3, .7, 110, 24 * k);
+      burst(W, H, -Math.PI * 2 / 3, .7, 110, 24 * k);
+    };
+    fire();
+    setTimeout(() => run === confettiRun && burst(W / 2, H * .3, -Math.PI / 2, Math.PI * 2, 140, 16 * k), 700);
+    setTimeout(() => run === confettiRun && fire(), 1600);
+    const start = performance.now();
+    (function frame(now) {
+      if (run !== confettiRun) return;
+      ctx.clearRect(0, 0, W, H);
+      for (const b of bits) {
+        b.t++; b.vy += .45 * k; b.vx *= .985; b.vy *= .985; b.x += b.vx; b.y += b.vy; b.rot += b.vr;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rot); ctx.fillStyle = b.c;
+        if (b.round) { ctx.beginPath(); ctx.arc(0, 0, b.w / 2, 0, 7); ctx.fill(); }
+        else { ctx.scale(1, Math.cos(b.t * .15)); ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); }
+        ctx.restore();
+      }
+      if (now - start < 6500) requestAnimationFrame(frame);
+      else { ctx.clearRect(0, 0, W, H); cv.hidden = true; }
+    })(start);
+  }
+  function stopParty() { confettiRun++; $('confetti').hidden = true; $('floaters').innerHTML = ''; }
+
   function showResult(r) {
     const more = s.idx < s.items.length - 1;
     $('result-title').textContent = r.firstTryCorrect ? T('Correct!', '¡Correcto!') : T(`That's right.`, 'Así es.');
@@ -868,7 +955,13 @@
     $('end-logo').hidden = more;
     $('result-closing').hidden = more;
     const news = more ? [] : newsFor(s.who);
-    if (!more) $('result-closing').textContent = personalLine(s.who) || closingLine();
+    const personal = more ? '' : personalLine(s.who);
+    if (!more) $('result-closing').textContent = personal || closingLine();
+    const party = !more && personal ? myCelebrations(s.who) : [];
+    $('result-closing').classList.toggle('celebrating', !!party.length);
+    $('result-party').hidden = !party.length;
+    $('end-logo').hidden = more || !!party.length;
+    $('result-badge').hidden = !!party.length;
     const str = st(r.streaks ? { streaks: r.streaks } : s.config);
     const showBoard = !more && ['end', 'both'].includes(str.leadersOn);
     const board = showBoard ? str.leaders : [];
@@ -883,7 +976,8 @@
     $('result-news').hidden = !news.length;
     show('result');
     if (more) return;
-    let left = RESULT_RESET_S + (news.length ? 5 : 0);
+    if (party.length) celebrate(party);
+    let left = RESULT_RESET_S + (news.length ? 5 : 0) + (party.length ? 10 : 0);
     const spanish = es();
     const tick = () => { $('countdown').textContent = spanish ? `Volviendo al inicio en ${left} segundos` : `Returning to start in ${left} seconds`; };
     tick();
