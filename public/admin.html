@@ -593,7 +593,7 @@
 <dialog id="staff-import">
   <div class="dlg-head"><h2 style="margin:0">Import staff from a spreadsheet</h2></div>
   <div class="dlg-body">
-    <p class="muted small">Choose an Excel or CSV file, or copy the columns from Excel and paste them below. You need: <strong>name</strong>, <strong>Workday ID</strong> (full ID or last 4), and <strong>department</strong> or <strong>job title</strong>. Optional: Birthday or DOB, Hire date, Leader. People already on Staff (same last 4 and same first and last name) are updated, not duplicated. A file with only names and birthdays, or a birthday tab in the same workbook, fills in birthdays for people already on Staff.</p>
+    <p class="muted small">Choose an Excel or CSV file, or copy the columns from Excel and paste them below. You need: <strong>name</strong>, <strong>Workday ID</strong> (full ID or last 4), and <strong>department</strong> or <strong>job title</strong>. Optional: Birthday or DOB, Continuous service date (used for work anniversaries; Hire date only if there isn't one), Leader. People already on Staff (same last 4 and same first and last name) are updated, not duplicated. A file with only names and birthdays, or a birthday tab in the same workbook, fills in birthdays for people already on Staff.</p>
     <input type="file" id="imp-file" accept=".xlsx,.xls,.csv,text/csv,text/plain">
     <label class="block" for="imp-text">Or paste here</label>
     <textarea id="imp-text" rows="6" placeholder="Name, Workday ID, Department"></textarea>

@@ -850,7 +850,8 @@
     let jobC = findCol(header, [/job/i, /title/i, /position/i, /role/i]);
     if (jobC === nameC) jobC = -1;
     let leaderC = findCol(header, [/^(leader|supervisor|manager)$/i]);
-    let bdayC = findCol(header, [/birth/i, /^dob$/i, /\bdob\b/i]), hireC = findCol(header, [/hire/i, /anniversary/i, /^start date$/i]);
+    let bdayC = findCol(header, [/birth/i, /^dob$/i, /\bdob\b/i]), hireC = findCol(header, [/continuous/i, /service date/i, /seniority/i]);
+    if (hireC < 0) hireC = findCol(header, [/hire/i, /anniversary/i, /^start date$/i]); // continuous service date wins: hire date is 11/1 for everyone since the acquisition
     let body = rows.slice(hi + 1);
     const nameOnly = nameC >= 0 && idC < 0 && (bdayC >= 0 || hireC >= 0); // e.g. a birthday list: fills in people already on Staff
     if (!nameOnly && (nameC < 0 || idC < 0)) { nameC = 0; idC = 1; jobC = header.length > 2 ? 2 : -1; leaderC = bdayC = hireC = -1; body = rows; } // no header row
