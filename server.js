@@ -188,6 +188,7 @@ function upgradeDb(d) {
   d.schedules = Array.isArray(d.schedules) ? d.schedules : [];
   d.required = Array.isArray(d.required) ? d.required : [];
   d.announcements = Array.isArray(d.announcements) ? d.announcements : [];
+  d.popupSeen = Array.isArray(d.popupSeen) ? d.popupSeen : [];   // [{ id, employeeId, at }] who tapped "Got it" on a pop-up announcement
   d.followups = Array.isArray(d.followups) ? d.followups : [];
   d.emailLog = Array.isArray(d.emailLog) ? d.emailLog : [];
   d.admins = Array.isArray(d.admins) ? d.admins : [];
@@ -872,8 +873,17 @@ function filterResponses(q) {
 
 function todaysAnnouncements() {
   const d = today();
-  return db.announcements.filter(a => a.startDate <= d && (!a.endDate || a.endDate >= d))
+  return db.announcements.filter(a => !a.popup && a.startDate <= d && (!a.endDate || a.endDate >= d))
     .sort((a, b) => b.startDate.localeCompare(a.startDate)).map(a => ({ text: a.text, departments: a.departments }));
+}
+// Pop-up announcements (an RSVP QR code, say) for this person after they pick their name.
+// Shown once each, unless set to show every time; people not on the roster see them every time.
+function popupsFor(who) {
+  const d = today();
+  return db.announcements.filter(a => a.popup && a.startDate <= d && (!a.endDate || a.endDate >= d))
+    .filter(a => !a.departments.length || a.departments.includes(who.department))
+    .filter(a => a.everyTime || !who.employeeId || !db.popupSeen.some(x => x.id === a.id && x.employeeId === who.employeeId))
+    .map(a => ({ id: a.id, title: a.title, text: a.text, image: a.image }));
 }
 // Birthdays and work anniversaries for a day ("MM-DD"). Feb 29 birthdays show on Feb 28 in other years.
 function celebrationsOn(date) {
@@ -1127,7 +1137,16 @@ async function kioskRoutes(req, res, p, m) {
       const r = regularTopicFor(who.department);
       if (r.topic) items.push(kioskItem(r.topic, who.employeeId, { kind: r.source === 'schedule' ? 'scheduled' : 'rotation', scheduleId: r.scheduleId || null }));
     }
-    return send(res, 200, { who: Object.assign(who, { firstName: who.name.split(' ')[0] }), items });
+    return send(res, 200, { who: Object.assign(who, { firstName: who.name.split(' ')[0] }), items, popups: popupsFor(who) });
+  }
+
+  // "Got it" on a pop-up announcement.
+  if (m === 'POST' && p === '/api/kiosk/popup-seen') {
+    const b = await readBody(req);
+    const a = db.announcements.find(x => x.id === String(b.id || '') && x.popup);
+    const e = b.employeeId && findEmployee(String(b.employeeId));
+    if (a && e && !db.popupSeen.some(x => x.id === a.id && x.employeeId === e.id)) { db.popupSeen.push({ id: a.id, employeeId: e.id, at: nowIso() }); saveDb(); }
+    return send(res, 200, { ok: true });
   }
 
   // Step 3: each answer attempt. The first attempt creates the record; retries add to it.
@@ -1408,7 +1427,8 @@ async function adminRoutes(req, res, p, m, url) {
     }
     return send(res, 200, {
       topics: db.topics.map(t => t.status === 'draft' ? Object.assign({}, t, { problems: topicProblems(t) }) : t),
-      employees: db.employees, schedules: db.schedules, settings: db.settings, announcements: db.announcements,
+      employees: db.employees, schedules: db.schedules, settings: db.settings,
+      announcements: db.announcements.map(a => a.popup ? Object.assign({}, a, { seen: db.popupSeen.filter(x => x.id === a.id).length }) : a),
       upcomingCelebrations: Array.from({ length: 31 }, (_, i) => addDays(today(), i)).flatMap(d => celebrationsOn(d).map(c => Object.assign(c, { date: d }))),
       required: db.required.map(q => { const pr = requiredProgress(q); return Object.assign({}, q, { doneCount: pr.done.length, pendingCount: pr.pending.length }); }),
       today: todayOverview(), todayDate: today(), topicStats,
@@ -1631,11 +1651,16 @@ async function adminRoutes(req, res, p, m, url) {
   // Announcements (no question; shown on the kiosk's home and end screens)
   if (m === 'POST' && p === '/api/admin/announcements') {
     const b = await readBody(req);
+    const img = cleanText(b.image, 500);
     const a = {
-      id: newId(), text: cleanText(b.text, 200).replace(/\s+/g, ' '), departments: cleanList(b.departments),
+      id: newId(), text: cleanText(b.text, b.popup ? 400 : 200).replace(/\s+/g, ' '), departments: cleanList(b.departments),
       startDate: cleanDate(b.startDate), endDate: cleanDate(b.endDate), createdAt: nowIso()
     };
-    if (!a.text) return send(res, 400, { error: 'Write the announcement.' });
+    // A pop-up: a big screen after they pick their name, with a title and a picture (like an RSVP QR code).
+    if (b.popup) Object.assign(a, { popup: true, title: cleanText(b.title, 80), everyTime: !!b.everyTime,
+      image: /^\/media\/[\w-]+\.(png|jpe?g|gif|webp)$/i.test(img) ? img : '' });
+    if (a.popup && !a.title && !a.image) return send(res, 400, { error: 'Give the pop-up a title or a picture.' });
+    if (!a.text && !a.popup) return send(res, 400, { error: 'Write the announcement.' });
     if (!a.startDate) return send(res, 400, { error: 'Choose a start date.' });
     if (a.endDate && a.endDate < a.startDate) return send(res, 400, { error: 'The end date is before the start date.' });
     db.announcements.push(a);
@@ -1647,6 +1672,7 @@ async function adminRoutes(req, res, p, m, url) {
     const i = db.announcements.findIndex(a => a.id === mt[1]);
     if (i < 0) return send(res, 404, { error: 'Not found.' });
     db.announcements.splice(i, 1);
+    db.popupSeen = db.popupSeen.filter(x => x.id !== mt[1]);
     saveDb();
     return send(res, 200, { ok: true });
   }

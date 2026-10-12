@@ -2675,7 +2675,9 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('an-rows').innerHTML = rows.map(a => {
       const live = a.startDate <= state.todayDate && (!a.endDate || a.endDate >= state.todayDate);
       const status = live ? ' <span class="pill good">Showing now</span>' : a.startDate > state.todayDate ? ' <span class="pill">Upcoming</span>' : ' <span class="pill">Ended</span>';
-      return `<tr class="${!live && a.startDate < state.todayDate ? 'dim' : ''}"><td>${formatInline(a.text)}${status}</td><td>${whoLabel(a.departments)}</td>
+      const what = a.popup ? `${a.image ? `<img class="an-thumb" src="${escapeHtml(a.image)}" alt="">` : ''}<span class="pill">📲 Pop-up</span> <b>${escapeHtml(a.title || '')}</b>${a.text ? `<div class="small">${formatInline(a.text)}</div>` : ''}
+        <div class="small muted">${a.everyTime ? 'Every clock-in' : 'Once per person'} · seen by ${a.seen || 0}</div>` : formatInline(a.text);
+      return `<tr class="${!live && a.startDate < state.todayDate ? 'dim' : ''}"><td>${what}${status}</td><td>${whoLabel(a.departments)}</td>
         <td style="white-space:nowrap">${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'}</td>
         <td><button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
     }).join('') || '<tr><td colspan="4" class="muted">No announcements yet.</td></tr>';
@@ -2728,11 +2730,45 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     } catch (err) { fail(err); }
   }
   $('an-show-past').addEventListener('change', renderAnnouncements);
+  // Pop-up announcements: title, picture (uploaded like topic pictures), once or every time.
+  function popupForm() {
+    const on = $('an-popup').checked;
+    $('an-popup-fields').hidden = !on; $('an-popup-preview').hidden = !on;
+    $('an-text-label').textContent = on ? 'Message under the picture (optional)' : 'Announcement';
+    $('an-text').maxLength = on ? 400 : 200;
+    $('an-text').placeholder = on ? 'Scan the code with your phone camera to RSVP by Dec 1.' : '📅 All-staff meeting Thursday at 2 pm in the dining room';
+  }
+  function popupImage(url) {
+    $('an-image').value = url || '';
+    $('an-image-preview').hidden = !url;
+    if (url) $('an-image-preview').querySelector('img').src = url;
+  }
+  $('an-popup').addEventListener('change', popupForm);
+  makeDrop('an-image-file', 'your picture or QR code');
+  $('an-image-file').addEventListener('change', async () => {
+    const f = $('an-image-file').files[0];
+    if (!f) return;
+    if (f.size > 10e6) { $('an-image-status').textContent = 'That picture is over 10 MB. Please use a smaller one.'; return; }
+    $('an-image-status').textContent = 'Uploading...';
+    try {
+      const dataUrl = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = bad; r.readAsDataURL(f); });
+      const r = await post('/api/admin/media', { dataUrl });
+      popupImage(r.url);
+      $('an-image-status').textContent = '';
+    } catch (err) { $('an-image-status').textContent = err.message; }
+  });
+  $('an-image-clear').addEventListener('click', () => { popupImage(''); $('an-image-file').value = ''; $('an-image-file').dispatchEvent(new Event('change')); });
+  $('an-popup-preview').addEventListener('click', () => {
+    try { localStorage.setItem('previewDraft', JSON.stringify({ popup: { title: $('an-title').value, text: $('an-text').value, image: $('an-image').value } })); } catch { /* private window */ }
+    window.open('/admin/preview?show=popup', 'kiosk-preview', 'width=760,height=1000');
+  });
   $('an-add').addEventListener('click', async () => {
     $('an-error').textContent = '';
     try {
-      await post('/api/admin/announcements', { text: $('an-text').value, departments: checked($('an-depts')), startDate: $('an-start').value, endDate: $('an-end').value });
+      await post('/api/admin/announcements', { text: $('an-text').value, departments: checked($('an-depts')), startDate: $('an-start').value, endDate: $('an-end').value,
+        popup: $('an-popup').checked, title: $('an-title').value, image: $('an-image').value, everyTime: $('an-everytime').checked });
       $('an-text').value = ''; $('an-end').value = ''; $('an-depts').dataset.init = '';
+      $('an-popup').checked = false; $('an-title').value = ''; $('an-everytime').checked = false; popupImage(''); $('an-image-file').value = ''; popupForm();
       toast('Announcement added. The iPad shows it within a minute.');
       await refresh();
     } catch (err) { $('an-error').textContent = err.message; }

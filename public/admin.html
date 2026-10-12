@@ -359,6 +359,8 @@ table.la tr:hover td { background: transparent; }
   .range-pick { font-weight: 600; color: var(--brand); }
   .clear-filters { color: var(--warn) !important; }
   .drop-zone { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; box-sizing: border-box; padding: 20px 16px; border: 2px dashed #b9d0db; border-radius: 14px; background: #f7fbfd; cursor: pointer; text-align: center; transition: background .15s, border-color .15s; }
+  .an-img-prev { display: flex; align-items: center; gap: 12px; margin-top: 8px; } .an-img-prev img { max-width: 120px; max-height: 120px; border-radius: 8px; border: 1px solid var(--line); }
+  .an-thumb { width: 44px; height: 44px; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); vertical-align: middle; margin-right: 8px; }
   .drop-zone:hover { background: var(--brand-soft); border-color: var(--brand); }
   .drop-zone.over { background: #dcefe4; border-color: var(--good); transform: scale(1.01); }
   .drop-zone.has-file { border-style: solid; border-color: var(--good); background: var(--good-soft); }
@@ -476,7 +478,18 @@ table.la tr:hover td { background: transparent; }
       <div class="muted small">No question, nothing to tap. Announcements show above the keypad on the iPad and on the last screen after someone finishes their in-service. Keep them to one short line.</div>
       <div class="grid" style="margin-top:6px">
         <div>
-          <label class="block" for="an-text">Announcement</label>
+          <label style="display:block;margin:4px 0 6px"><input type="checkbox" id="an-popup"> <b>📲 Make it a pop-up</b> <span class="hint">a big screen right after they pick their name, with a picture like an RSVP QR code</span></label>
+          <div id="an-popup-fields" hidden>
+            <label class="block" for="an-title">Pop-up title</label>
+            <input type="text" id="an-title" maxlength="80" style="width:100%" placeholder="🎄 RSVP for the holiday party!">
+            <label class="block">Picture or QR code <span class="hint">PNG or JPG, up to 10 MB</span></label>
+            <input type="file" id="an-image-file" accept="image/png,image/jpeg,image/gif,image/webp">
+            <input type="hidden" id="an-image">
+            <div id="an-image-preview" class="an-img-prev" hidden><img alt=""><button class="btn subtle danger" id="an-image-clear" type="button">Remove picture</button></div>
+            <div class="small muted" id="an-image-status"></div>
+            <label style="display:block;margin-top:8px"><input type="checkbox" id="an-everytime"> Show it every time they clock in <span class="hint">otherwise once per person, after they tap "Got it"</span></label>
+          </div>
+          <label class="block" for="an-text" id="an-text-label">Announcement</label>
           <input type="text" id="an-text" maxlength="200" style="width:100%" placeholder="📅 All-staff meeting Thursday at 2 pm in the dining room">
           <label class="block">Dates</label>
           <div class="toolbar"><input type="date" id="an-start"> to <input type="date" id="an-end"> <span class="hint">leave the end empty to run until you remove it</span></div>
@@ -486,7 +499,7 @@ table.la tr:hover td { background: transparent; }
           <div class="checks" id="an-depts"></div>
         </div>
       </div>
-      <div style="margin-top:14px"><button class="btn" id="an-add">Add announcement</button> <span class="err" id="an-error"></span></div>
+      <div style="margin-top:14px"><button class="btn" id="an-add">Add announcement</button> <button class="btn ghost" id="an-popup-preview" hidden>👁 See it on the iPad</button> <span class="err" id="an-error"></span></div>
     </div>
     <div class="card">
       <div class="toolbar"><h2 style="margin:0" class="grow">Announcements</h2>
