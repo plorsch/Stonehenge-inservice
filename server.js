@@ -1245,6 +1245,53 @@ function todayOverview() {
   });
 }
 
+// What each department is likely to get on the days ahead. Scheduled topics are firm; the rest is a forecast of the
+// automatic rotation (the topic that has gone longest without use, as the kiosk would pick it), so it can change.
+function forecast(start, days) {
+  const depts = db.settings.departments.length ? db.settings.departments : [''];
+  const cultureOn = Number.isInteger(db.settings.cultureDay);
+  const mode = db.settings.fallbackMode;
+  const lastUsed = {};
+  for (const t of db.topics) lastUsed[t.id] = t.lastUsedDate || '';
+  const stalest = (pool, avoidId) => {
+    let c = pool.filter(t => t.id !== avoidId);
+    if (!c.length) c = pool;
+    return c.slice().sort((a, b) => lastUsed[a.id].localeCompare(lastUsed[b.id]) || a.title.localeCompare(b.title))[0] || null;
+  };
+  const held = {}; // key -> { period, topic }
+  const now = today(), thisWeek = weekStart();
+  const out = [];
+  for (let i = 0; i < days; i++) {
+    const date = addDays(start, i), week = weekStart(date);
+    const items = depts.map(dept => {
+      const sched = activeSchedulesFor(dept, date)[0];
+      if (sched) return { department: dept, topicId: sched.topicId, title: findTopic(sched.topicId).title, source: 'schedule', scheduleId: sched.id };
+      const key = dept || '(none)';
+      const rotation = db.topics.filter(t => isLive(t) && t.inRotation && forDepartment(t.departments, dept));
+      let source, pool, hk, period;
+      if (cultureOn && weekday(date) === db.settings.cultureDay && rotation.some(isCulture)) {
+        source = 'culture'; pool = rotation.filter(isCulture); hk = 'culture|' + key; period = week;
+      } else {
+        pool = cultureOn ? rotation.filter(t => !isCulture(t)) : rotation;
+        if (mode === 'random') return { department: dept, topicId: null, title: null, source: 'random', poolSize: pool.length };
+        source = mode === 'weekly' ? 'weekly' : 'daily'; hk = key; period = mode === 'weekly' ? week : date;
+      }
+      let t = held[hk] && held[hk].period === period ? held[hk].topic : null;
+      if (!t) {
+        // Use the kiosk's real pick for the current day or week when it has made one.
+        const real = source === 'daily' ? db.settings.dailyPicks[hk] : db.settings.weeklyPicks[hk];
+        const realT = real && (source === 'daily' ? real.date === now && date === now : real.week === thisWeek && week === thisWeek) ? findTopic(real.topicId) : null;
+        t = isLive(realT) && pool.includes(realT) ? realT : stalest(pool, held[hk] && held[hk].topic && held[hk].topic.id);
+        if (t) lastUsed[t.id] = source === 'daily' ? date : addDays(week, 6);
+        held[hk] = { period, topic: t };
+      }
+      return { department: dept, topicId: t ? t.id : null, title: t ? t.title : null, source };
+    });
+    out.push({ date, items });
+  }
+  return out;
+}
+
 function requiredProgress(q) {
   const targets = db.employees.filter(e => e.active && forDepartment(q.departments, e.department));
   const done = [], pending = [];
@@ -1762,6 +1809,17 @@ async function adminRoutes(req, res, p, m, url) {
   }
 
   // Today tab dashboard: the last 14 days, this week by department, and the most-missed questions.
+  if (m === 'GET' && p === '/api/admin/forecast') {
+    const start = weekStart(cleanDate(url.searchParams.get('start')) || today());
+    const weeks = Math.min(Math.max(Number(url.searchParams.get('weeks')) || 1, 1), 8);
+    // Simulate from today so later weeks account for the topics used before them.
+    const from = start < weekStart() ? start : weekStart();
+    const all = forecast(from, Math.round((Date.parse(addDays(start, 7 * weeks)) - Date.parse(from)) / 86400000));
+    return send(res, 200, { today: today(), start, mode: db.settings.fallbackMode, cultureDay: db.settings.cultureDay,
+      days: all.filter(d => d.date >= start),
+      required: db.required.filter(q => q.active && (!q.endDate || q.endDate >= start)).map(q => ({ id: q.id, title: (findTopic(q.topicId) || {}).title || '', departments: q.departments, endDate: q.endDate || null })) });
+  }
+
   if (m === 'GET' && p === '/api/admin/dashboard') {
     const t = today(), start14 = addDays(t, -13), start7 = addDays(t, -6);
     const days = Array.from({ length: 14 }, (_, i) => ({ date: addDays(start14, i), right: 0, missed: 0 }));

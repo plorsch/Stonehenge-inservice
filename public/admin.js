@@ -112,7 +112,7 @@
     for (const x of keyed) body.appendChild(x.r);
   }
   function markSortable(root) {
-    for (const th of root.querySelectorAll('table thead th:not(.sortable)')) {
+    for (const th of root.querySelectorAll('table:not(.la) thead th:not(.sortable)')) {
       if (!th.textContent.trim() || th.querySelector('input, select, button')) continue;
       th.classList.add('sortable'); th.title = th.title || 'Click to sort';
     }
@@ -363,6 +363,7 @@
     if (go === 'today-all') openResponses({ from: t, to: t });
     else if (go === 'today-missed') openResponses({ from: t, to: t, missed: true });
     else if (go === 'followups') { $('fu-filter').value = 'open'; goTab('reports'); setTimeout(() => $('fu-card').scrollIntoView({ behavior: 'smooth' }), 80); }
+    else if (go === 'look-ahead') { goTab('schedule'); setTimeout(() => $('la-card').scrollIntoView({ behavior: 'smooth' }), 80); }
     else if (go === 'missed-report') { goTab('reports'); setTimeout(() => $('mm-rows').closest('.card').scrollIntoView({ behavior: 'smooth' }), 80); }
     else goTab(go);
   });
@@ -411,6 +412,7 @@
     topicOptions($('sc-topic'));
     if (!$('sc-depts').dataset.init) { renderChecks($('sc-depts'), []); $('sc-depts').dataset.init = 1; }
     if (!$('sc-start').value) setWeek(0);
+    loadLookAhead();
     document.querySelectorAll('input[name=fallback]').forEach(r => { r.checked = r.value === state.settings.fallbackMode; });
     $('culture-day').value = Number.isInteger(state.settings.cultureDay) ? String(state.settings.cultureDay) : '';
     const showPast = $('sc-show-past').checked;
@@ -430,6 +432,66 @@
         <td><button class="btn subtle danger" data-del-sched="${s.id}">Remove</button></td></tr>`;
     }).join('') || '<tr><td colspan="5" class="muted">Nothing scheduled. Staff get topics from the rotation.</td></tr>';
   }
+  // ---------- look ahead ----------
+  let laStart = null;
+  const addDay = (iso, n) => { const [y, m, d] = iso.split('-').map(Number); return isoDay(new Date(y, m - 1, d + n)); };
+  const mondayOf = iso => { const [y, m, d] = iso.split('-').map(Number); const x = new Date(y, m - 1, d); return isoDay(new Date(y, m - 1, d - ((x.getDay() + 6) % 7))); };
+  const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const laLabel = { schedule: 'Scheduled', weekly: 'Topic of the week', daily: 'Topic of the day', culture: 'Culture day', random: '' };
+  async function loadLookAhead() {
+    if (!laStart) laStart = mondayOf(state.todayDate);
+    try {
+      const f = await api(`/api/admin/forecast?start=${laStart}&weeks=${$('la-weeks').value}`);
+      $('la-required').innerHTML = f.required.map(q => `<div class="la-req">📌 <b>Required education comes first:</b> ${escapeHtml(q.title)} for ${whoLabel(q.departments)}, until everyone has done it${q.endDate ? ` or ${fmtDate(q.endDate)}` : ''}. People who've finished it get the topics below.</div>`).join('');
+      const weeks = [];
+      for (let i = 0; i < f.days.length; i += 7) weeks.push(f.days.slice(i, i + 7));
+      const depts = f.days.length ? f.days[0].items.map(x => x.department) : [];
+      $('la-grid').innerHTML = `<div class="table-wrap">${weeks.map(w => {
+        const head = w.map((d, i) => `<th class="${d.date === f.today ? 'today' : ''}">${DAY_NAMES[i]}<br><span>${Number(d.date.slice(8))}</span></th>`).join('');
+        const rows = depts.map((dept, r) => {
+          const cells = [];
+          for (let i = 0; i < w.length;) {
+            const it = w[i].items[r];
+            let j = i + 1;
+            while (j < w.length) { const n = w[j].items[r]; if (n.source !== it.source || n.topicId !== it.topicId || n.scheduleId !== it.scheduleId) break; j++; }
+            const from = w[i].date, to = w[j - 1].date;
+            const cls = it.source === 'schedule' ? 'sched' : it.source === 'culture' ? 'culture' : it.topicId || it.source === 'random' ? 'auto' : 'none';
+            const title = it.source === 'random' ? 'A random rotation topic each visit' : it.title || 'Nothing in the rotation';
+            cells.push(`<td colspan="${j - i}"><button class="la-cell ${cls}${to < f.today ? ' past' : ''}" data-la-dept="${escapeHtml(dept)}" data-la-from="${from}" data-la-to="${to}" data-la-topic="${it.topicId || ''}" data-la-source="${it.source}"
+              title="${escapeHtml(title)} · ${escapeHtml(dept || 'All staff')} · ${fmtDate(from)}${to !== from ? ' – ' + fmtDate(to) : ''}">${escapeHtml(title)}<small>${laLabel[it.source] || ''}</small></button></td>`);
+            i = j;
+          }
+          return `<tr><td class="dept">${escapeHtml(dept || 'All staff')}</td>${cells.join('')}</tr>`;
+        }).join('');
+        return `<div class="la-week"><h3>Week of ${fmtDate(w[0].date)}</h3><table class="la"><thead><tr><th class="dept"></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+      }).join('')}</div>`;
+    } catch (err) { fail(err); }
+  }
+  $('la-prev').addEventListener('click', () => { laStart = addDay(laStart, -7); loadLookAhead(); });
+  $('la-next').addEventListener('click', () => { laStart = addDay(laStart, 7); loadLookAhead(); });
+  $('la-now').addEventListener('click', () => { laStart = null; loadLookAhead(); });
+  $('la-weeks').addEventListener('change', loadLookAhead);
+  $('la-grid').addEventListener('click', e => {
+    const b = e.target.closest('[data-la-dept]');
+    if (!b) return;
+    const ds = b.dataset;
+    if (ds.laSource === 'schedule') {
+      $('sc-rows').closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $('sc-rows').closest('.card').classList.remove('flash-card'); void $('sc-rows').offsetWidth; $('sc-rows').closest('.card').classList.add('flash-card');
+      return toast('Already scheduled. Remove it below to change it.');
+    }
+    // Fill in the form so they can keep the suggestion or swap the topic, then add it.
+    $('sc-topic').value = ds.laTopic || '';
+    $('sc-start').value = ds.laFrom < state.todayDate ? state.todayDate : ds.laFrom;
+    $('sc-end').value = ds.laTo;
+    $('sc-depts').querySelectorAll('input').forEach(i => { i.checked = !!ds.laDept && i.value === ds.laDept; });
+    $('sc-note').value = '';
+    const card = $('sc-form-card');
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    card.classList.remove('flash-card'); void card.offsetWidth; card.classList.add('flash-card');
+    toast('Check the topic and dates, then press "Add to schedule"');
+  });
+
   function setWeek(offset) {
     const d = new Date();
     const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7) + 7 * offset);
