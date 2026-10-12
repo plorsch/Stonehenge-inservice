@@ -330,7 +330,7 @@
         <button class="btn subtle" id="staff-bulk-clear">Clear selection</button>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th style="width:28px"><input type="checkbox" id="staff-all" title="Select all shown"></th><th>Name</th><th>Workday last 4</th><th>Department</th><th>Last in-service</th><th>Pending required</th><th></th></tr></thead>
+        <thead><tr><th style="width:28px"><input type="checkbox" id="staff-all" title="Select all shown"></th><th>Name</th><th>Workday last 4</th><th>Department</th><th>Last in-service</th><th>Lesson ratings</th><th>Pending required</th><th></th></tr></thead>
         <tbody id="staff-rows"></tbody>
       </table></div>
       <div class="muted small" style="margin-top:8px">Staff sign in on the iPad with the last 4 digits of their Workday ID, then tap their name to confirm. If two people share the same last 4, both names appear and each taps their own.</div>
@@ -347,6 +347,7 @@
         <select id="resp-topic"><option value="">All topics</option></select>
         <label><input type="checkbox" id="resp-missed"> Missed first try only</label>
         <select id="resp-helpful"><option value="">Any lesson rating</option><option value="any">Rated 👍 or 👎</option><option value="up">👍 Helpful</option><option value="down">👎 Not helpful</option></select>
+        <span class="pill" id="resp-person" hidden></span>
         <span class="grow"></span>
         <a class="btn" id="resp-csv" href="/api/admin/responses.csv">Download CSV</a>
       </div>

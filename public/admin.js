@@ -50,7 +50,17 @@
     if (!a) return;
     e.preventDefault();
     $('resp-from').value = ''; $('resp-to').value = ''; $('resp-dept').value = ''; $('resp-missed').checked = false;
-    $('resp-topic').value = a.dataset.ratings; $('resp-helpful').value = 'any';
+    $('resp-topic').value = a.dataset.ratings; $('resp-helpful').value = 'any'; respPerson = null;
+    document.querySelector('#nav button[data-tab="responses"]').click();
+  });
+  // 👍/👎 counts on the Staff tab open the Responses tab showing that person's ratings.
+  let respPerson = null;
+  document.addEventListener('click', e => {
+    const a = e.target.closest('[data-person-ratings]');
+    if (!a) return;
+    e.preventDefault();
+    $('resp-from').value = ''; $('resp-to').value = ''; $('resp-dept').value = ''; $('resp-topic').value = ''; $('resp-missed').checked = false;
+    $('resp-helpful').value = 'any'; respPerson = state.employees.find(x => x.id === a.dataset.personRatings) || null;
     document.querySelector('#nav button[data-tab="responses"]').click();
   });
 
@@ -652,9 +662,10 @@
       <td><strong>${escapeHtml(e.name)}</strong>${e.active ? '' : ' <span class="pill">Inactive</span>'}${e.birthday ? `<div class="muted small">🎂 ${e.birthday.split('-').map(Number).join('/')}</div>` : ''}</td>
       <td>${escapeHtml(e.last4)}</td><td>${escapeHtml(e.department)}${e.jobTitle && e.jobTitle !== e.department ? `<div class="muted small">${escapeHtml(e.jobTitle)}</div>` : ''}</td>
       <td data-last="${e.id}" class="small muted">…</td>
+      <td data-rated="${e.id}" class="small" style="white-space:nowrap"></td>
       <td data-pending="${e.id}"></td>
       <td style="white-space:nowrap"><button class="btn subtle" data-edit-staff="${e.id}">Edit</button><button class="btn subtle" data-record="${e.id}">Training record</button></td></tr>`).join('')
-      || '<tr><td colspan="7" class="muted">No staff yet. Add them one at a time or import your roster from a spreadsheet.</td></tr>';
+      || '<tr><td colspan="8" class="muted">No staff yet. Add them one at a time or import your roster from a spreadsheet.</td></tr>';
     fillStaffActivity();
     renderBulk();
     const sel = $('st-dept');
@@ -663,15 +674,18 @@
   async function fillStaffActivity() {
     try {
       const { responses } = await api('/api/admin/responses');
-      const last = {}, doneReq = {};
+      const last = {}, doneReq = {}, rated = {};
       for (const r of responses) {
         if (!r.employeeId) continue;
         if (!last[r.employeeId]) last[r.employeeId] = r.submittedAt;
+        if ('helpful' in r) { const x = rated[r.employeeId] || (rated[r.employeeId] = { up: 0, down: 0 }); x[r.helpful ? 'up' : 'down'] += 1; }
         if (r.requiredId && r.completed) (doneReq[r.employeeId] = doneReq[r.employeeId] || new Set()).add(r.requiredId);
       }
       for (const e of state.employees) {
         const c = document.querySelector(`[data-last="${e.id}"]`);
         if (c) c.textContent = last[e.id] ? fmtWhen(last[e.id]) : 'Never';
+        const t = document.querySelector(`[data-rated="${e.id}"]`);
+        if (t) t.innerHTML = rated[e.id] ? `<a href="#" data-person-ratings="${e.id}" title="See which lessons they rated">👍 ${rated[e.id].up} · 👎 ${rated[e.id].down}</a>` : '<span class="muted">–</span>';
         const p = document.querySelector(`[data-pending="${e.id}"]`);
         if (p) {
           const n = state.required.filter(r => r.active && (!r.departments.length || r.departments.includes(e.department)) && !(doneReq[e.id] && doneReq[e.id].has(r.id))).length;
@@ -944,12 +958,16 @@
     if ($('resp-topic').value) p.set('topicId', $('resp-topic').value);
     if ($('resp-missed').checked) p.set('missed', '1');
     if ($('resp-helpful').value) p.set('helpful', $('resp-helpful').value);
+    if (respPerson) p.set('employeeId', respPerson.id);
     return p.toString();
   }
   const kindLabel = { required: '<span class="pill req">Required</span>', scheduled: '<span class="pill brand">Scheduled</span>', rotation: '<span class="pill">Rotation</span>',
     starter: '<span class="pill good">New hire</span>', annual: '<span class="pill req">Yearly</span>', review: '<span class="pill brand">Review</span>' };
   async function loadResponses() {
     try {
+      const pc = $('resp-person');
+      pc.hidden = !respPerson;
+      if (respPerson) pc.innerHTML = `${escapeHtml(respPerson.name)} <a href="#" id="resp-person-x" title="Show everyone" style="text-decoration:none">×</a>`;
       const { responses } = await api('/api/admin/responses?' + respQuery());
       const first = responses.filter(r => r.firstTryCorrect).length;
       $('resp-summary').textContent = responses.length
@@ -970,6 +988,7 @@
     } catch (err) { fail(err); }
   }
   ['resp-from', 'resp-to', 'resp-dept', 'resp-topic', 'resp-missed', 'resp-helpful'].forEach(id => $(id).addEventListener('change', loadResponses));
+  $('resp-person').addEventListener('click', e => { if (e.target.id !== 'resp-person-x') return; e.preventDefault(); respPerson = null; loadResponses(); });
 
   // ---------- clock-in check ----------
   let ccRows = null, ccHeader = null, ccResult = null;
