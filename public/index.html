@@ -152,6 +152,8 @@
   .required-banner.starter { background: var(--good-soft); color: var(--good); }
   .required-banner.review { background: var(--brand-soft); color: var(--brand); }
   .required-banner.quiz { background: linear-gradient(120deg, #efe6ff, #e4f0ff); color: #4c2a85; border: 1px solid #d9c8f5; }
+  .required-banner.quiz { text-align: center; }
+  #s-question.quiz-mode #question-kicker, #s-question.quiz-mode #question-text, #s-question.quiz-mode #select-all { text-align: center; }
   .required-banner.quiz strong { font-size: 20px; text-transform: none; letter-spacing: 0; margin-bottom: 2px; }
   .review-note { font-size: 19px; font-weight: 600; color: var(--brand); margin: 8px 0 0; }
   .required-banner { background: var(--req-soft); color: var(--req); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 17px; }
@@ -794,6 +796,7 @@
     const qt = it.quizText || {};
     const quizHtml = `<strong>${T('🧠 Pop quiz!', '🧠 ¡Prueba sorpresa!')}</strong>${escapeHtml(T(qt.en || 'This checks something you learned this past week.', qt.es || qt.en || 'Esto repasa algo que aprendió esta semana.'))}<div style="margin-top:4px"><em>${T('(This counts toward your streak 🔥)', '(Esto cuenta para su racha 🔥)')}</em></div><div style="font-size:14px;margin-top:6px;opacity:.8">${T('Topic', 'Tema')}: ${escapeHtml(es() ? it.es.title : it.topic.title)}</div>`;
     $('question-review').className = 'required-banner ' + (it.kind === 'quiz' ? 'quiz' : 'review');
+    $('s-question').classList.toggle('quiz-mode', it.kind === 'quiz');
     $('question-review').innerHTML = it.kind === 'review' ? reviewHtml : it.kind === 'quiz' ? quizHtml : '';
     $('question-review').hidden = !['review', 'quiz'].includes(it.kind);
     banner.innerHTML = it.kind === 'required'
