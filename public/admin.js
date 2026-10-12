@@ -507,13 +507,25 @@
     if (cell || row.length) { row.push(cell.replace(/\r$/, '')); rows.push(row); }
     return rows.filter(r => r.some(c => String(c).trim()));
   }
+  // Some exports (Workday reports) record a too-small sheet size, so only the title row would be read. Use the real extent.
+  function fullSheet(ws) {
+    let maxR = 0, maxC = 0;
+    for (const k of Object.keys(ws)) {
+      if (k[0] === '!') continue;
+      const c = XLSX.utils.decode_cell(k);
+      if (c.r > maxR) maxR = c.r;
+      if (c.c > maxC) maxC = c.c;
+    }
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxR, c: maxC } });
+    return ws;
+  }
   // Returns rows (arrays) from the first sheet, or from the sheet whose name matches `prefer`.
   async function readSheet(file, prefer) {
     if (/\.xlsx?$/i.test(file.name)) {
       await loadXlsx();
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
       const name = wb.SheetNames.find(n => prefer && prefer.test(n)) || wb.SheetNames[0];
-      return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' })
+      return XLSX.utils.sheet_to_json(fullSheet(wb.Sheets[name]), { header: 1, raw: true, defval: '' })
         .map(r => r.map(c => c instanceof Date ? isoDay(new Date(Math.round(c.getTime() / 60000) * 60000)) : String(c)))
         .filter(r => r.some(c => c.trim()));
     }
@@ -831,7 +843,7 @@
     const main = wb.SheetNames.find(n => prefer.test(n)) || wb.SheetNames[0];
     const out = [];
     for (const n of wb.SheetNames.filter(x => x !== main)) {
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }).map(r => r.map(c => c instanceof Date ? isoDay(new Date(Math.round(c.getTime() / 60000) * 60000)) : String(c)));
+      const rows = XLSX.utils.sheet_to_json(fullSheet(wb.Sheets[n]), { header: 1, raw: true, defval: '' }).map(r => r.map(c => c instanceof Date ? isoDay(new Date(Math.round(c.getTime() / 60000) * 60000)) : String(c)));
       const hi = rows.slice(0, 10).findIndex(r => r.some(c => /birth|\bdob\b/i.test(c)) && r.some(c => /name|worker|employee/i.test(c)));
       if (hi < 0) continue;
       const h = rows[hi].map(c => String(c).trim());
@@ -856,8 +868,11 @@
     let jobC = findCol(header, [/job/i, /title/i, /position/i, /role/i]);
     if (jobC === nameC) jobC = -1;
     let leaderC = findCol(header, [/^(leader|supervisor|manager)$/i]);
-    let bdayC = findCol(header, [/birth/i, /^dob$/i, /\bdob\b/i]), hireC = findCol(header, [/continuous/i, /service date/i, /seniority/i]);
-    if (hireC < 0) hireC = findCol(header, [/hire/i, /anniversary/i, /^start date$/i]); // continuous service date wins: hire date is 11/1 for everyone since the acquisition
+    // Workday reports can split the birthday into "Birthday Month" and "Birthday Day" columns.
+    const bMonC = findCol(header, [/birth.*month/i]), bDayC = findCol(header, [/birth.*day$/i, /birth.*\bday\b/i]);
+    const splitBday = bMonC >= 0 && bDayC >= 0 && bMonC !== bDayC;
+    let bdayC = splitBday ? bMonC : findCol(header, [/birth/i, /^dob$/i, /\bdob\b/i]), hireC = findCol(header, [/continuous/i, /service date/i]);
+    if (hireC < 0) hireC = findCol(header, [/hire/i, /^anniversary date$/i, /^start date$/i]); // not "Next Anniversary". Continuous service date wins: hire date is 11/1 for everyone since the acquisition
     let body = rows.slice(hi + 1);
     const nameOnly = nameC >= 0 && idC < 0 && (bdayC >= 0 || hireC >= 0); // e.g. a birthday list: fills in people already on Staff
     if (!nameOnly && (nameC < 0 || idC < 0)) { nameC = 0; idC = 1; jobC = header.length > 2 ? 2 : -1; leaderC = bdayC = hireC = -1; body = rows; } // no header row
@@ -867,7 +882,7 @@
       return { name: firstLast(cell(r, nameC)), last4: nameOnly ? '' : padId(r[idC]),
         department: cell(r, deptC) || (job ? suggestDept(job) : ''), leader: cell(r, leaderC),
         ...(job ? { jobTitle: job, keepBlank: true } : {}),
-        ...(bdayC >= 0 ? { birthday: cell(r, bdayC), keepBlank: true } : {}), ...(hireC >= 0 ? { hireDate: cell(r, hireC), keepBlank: true } : {}) };
+        ...(bdayC >= 0 ? { birthday: splitBday ? (cell(r, bMonC) && cell(r, bDayC) ? `${cell(r, bMonC)}/${cell(r, bDayC)}` : '') : cell(r, bdayC), keepBlank: true } : {}), ...(hireC >= 0 ? { hireDate: cell(r, hireC), keepBlank: true } : {}) };
     }).filter(r => r.name || r.last4).concat(extraBirthdays || []);
     const bad = staffRows.filter(r => !r.name || (!nameOnly && !r.birthdayOnly && String(r.last4).replace(/\D/g, '').length < 4)).length;
     const bdays = staffRows.filter(r => r.birthday).length;
@@ -984,7 +999,7 @@
         await loadXlsx();
         const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
         const sheet = wb.SheetNames.find(n => /time ?clock|punch|clock/i.test(n)) || wb.SheetNames[0];
-        rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { header: 1, raw: true, defval: '' });
+        rows = XLSX.utils.sheet_to_json(fullSheet(wb.Sheets[sheet]), { header: 1, raw: true, defval: '' });
       } else rows = parseCsv((await file.text()).replace(/^﻿/, ''));
       rows = rows.filter(r => r.some(c => String(c).trim()));
       // Some exports put a title above the column headings; use the first row that names an ID column.

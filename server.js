@@ -721,10 +721,10 @@ function validateEmployee(input) {
   return { employee: e, errors };
 }
 
-// "Maria L." — enough for staff to recognize themselves without showing full names on the kiosk.
+// "Maria L" — enough for staff to recognize themselves without showing full names on the kiosk.
 function shortName(name) {
   const parts = name.trim().split(/\s+/);
-  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0];
+  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}` : parts[0];
 }
 
 // ---------- HTTP helpers ----------

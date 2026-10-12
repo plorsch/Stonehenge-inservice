@@ -154,7 +154,7 @@ If the iPad loses its connection after someone has started, it grades their answ
 
 The **Announcements** tab is for news that needs no question, like an all-staff meeting reminder. Each one has dates and, if you like, departments. Announcements add no taps: all-staff ones rotate in a line above the keypad, and after an in-service the last screen lists that person's announcements for a few extra seconds.
 
-Add a birthday (month and day only) and hire date on the Staff tab, or as Birthday and Hire date columns in a staff import. On the day, the iPad shows "Happy birthday, Ada L.!" or "3 years with us today!", and the person gets their own message after their in-service. This can be turned off on the Announcements tab.
+Add a birthday (month and day only) and hire date on the Staff tab, or as Birthday and Hire date columns in a staff import. On the day, the iPad shows "Happy birthday, Ada L!" or "3 years with us today!", and the person gets their own message after their in-service. This can be turned off on the Announcements tab.
 
 ### Home screen decor and forgotten codes
 
