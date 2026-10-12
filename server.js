@@ -795,6 +795,7 @@ function filterResponses(q) {
     (!q.get('topicId') || r.topicId === q.get('topicId')) &&
     (!q.get('department') || sameText(r.department, q.get('department'))) &&
     (!q.get('missed') || !r.firstTryCorrect) &&
+    (!q.get('helpful') || (q.get('helpful') === 'up' ? r.helpful === true : q.get('helpful') === 'down' ? r.helpful === false : 'helpful' in r)) &&
     (!q.get('employeeId') || r.employeeId === q.get('employeeId'))
   );
 }

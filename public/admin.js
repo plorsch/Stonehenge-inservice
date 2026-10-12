@@ -44,6 +44,16 @@
     sel.value = cur;
   }
 
+  // 👍/👎 counts in the topic library open the Responses tab filtered to that topic's ratings.
+  document.addEventListener('click', e => {
+    const a = e.target.closest('[data-ratings]');
+    if (!a) return;
+    e.preventDefault();
+    $('resp-from').value = ''; $('resp-to').value = ''; $('resp-dept').value = ''; $('resp-missed').checked = false;
+    $('resp-topic').value = a.dataset.ratings; $('resp-helpful').value = 'any';
+    document.querySelector('#nav button[data-tab="responses"]').click();
+  });
+
   // ---------- tabs ----------
   $('nav').addEventListener('click', e => {
     const b = e.target.closest('button[data-tab]');
@@ -302,7 +312,7 @@
         <td>${retired || draft ? '<span class="muted">–</span>' : `<input type="checkbox" data-rotation="${t.id}"${t.inRotation ? ' checked' : ''} aria-label="In rotation">`}</td>
         <td style="white-space:nowrap">${fmtDate(t.lastUsedDate)}</td>
         <td>${st ? st.responses : 0}</td>
-        <td>${pct}${st && st.helpful + st.notHelpful ? `<div class="small muted" title="Was this lesson helpful?">👍 ${st.helpful} · 👎 ${st.notHelpful}</div>` : ''}</td>
+        <td>${pct}${st && st.helpful + st.notHelpful ? `<div class="small" title="See who rated this lesson"><a href="#" data-ratings="${t.id}">👍 ${st.helpful} · 👎 ${st.notHelpful}</a></div>` : ''}</td>
         <td style="white-space:nowrap">
           <button class="btn subtle" data-act="preview" data-id="${t.id}">Preview</button>
           <button class="btn subtle" data-act="edit" data-id="${t.id}">Edit</button>
@@ -933,6 +943,7 @@
     if ($('resp-dept').value) p.set('department', $('resp-dept').value);
     if ($('resp-topic').value) p.set('topicId', $('resp-topic').value);
     if ($('resp-missed').checked) p.set('missed', '1');
+    if ($('resp-helpful').value) p.set('helpful', $('resp-helpful').value);
     return p.toString();
   }
   const kindLabel = { required: '<span class="pill req">Required</span>', scheduled: '<span class="pill brand">Scheduled</span>', rotation: '<span class="pill">Rotation</span>',
@@ -953,12 +964,12 @@
         <td>${escapeHtml(r.name)}${r.verified ? '' : ' <span class="pill" title="Typed their name; not on the roster">Not on roster</span>'}<div class="muted small">${escapeHtml(r.last4 || '')}</div></td>
         <td>${escapeHtml(r.department || '')}</td><td>${kindLabel[r.kind] || ''}${r.lang === 'es' ? ' <span class="pill">Español</span>' : ''}${r.offline ? ' <span class="pill" title="Answered while the iPad was offline, uploaded later">Saved offline</span>' : ''}</td>
         <td>${escapeHtml(r.topicTitle)}<div class="muted small">${escapeHtml(r.question)}</div></td>
-        <td>${escapeHtml(r.attempts[0] || '')}</td><td>${result}</td></tr>`;
+        <td>${escapeHtml(r.attempts[0] || '')}</td><td>${result}${r.helpful === true ? ' <span title="Said the lesson was helpful">👍</span>' : r.helpful === false ? ' <span title="Said the lesson was not helpful">👎</span>' : ''}</td></tr>`;
       }).join('');
       $('resp-csv').href = '/api/admin/responses.csv?' + respQuery();
     } catch (err) { fail(err); }
   }
-  ['resp-from', 'resp-to', 'resp-dept', 'resp-topic', 'resp-missed'].forEach(id => $(id).addEventListener('change', loadResponses));
+  ['resp-from', 'resp-to', 'resp-dept', 'resp-topic', 'resp-missed', 'resp-helpful'].forEach(id => $(id).addEventListener('change', loadResponses));
 
   // ---------- clock-in check ----------
   let ccRows = null, ccHeader = null, ccResult = null;
