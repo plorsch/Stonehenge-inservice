@@ -193,6 +193,14 @@
   .leaders h3 { margin: 0 0 6px; font-size: 18px; color: #8a5a00; text-align: center; }
   .leaders div { display: flex; gap: 10px; font-size: 19px; padding: 3px 0; }
   .leaders div b { width: 26px; } .leaders div span:last-child { margin-left: auto; color: var(--muted); }
+  .board-pop { position: absolute; right: 14px; top: calc(100% + 8px); z-index: 30; width: min(400px, calc(100vw - 28px)); max-height: 70vh; overflow-y: auto;
+    background: #fff; border: 2px solid #f1c94e; border-radius: 18px; box-shadow: 0 16px 44px rgba(0,0,0,.22); padding: 16px 16px 14px; text-align: center; animation: pop-in .18s ease-out; }
+  .board-pop::before { content: ""; position: absolute; top: -9px; right: 60px; width: 14px; height: 14px; background: #fff; border-left: 2px solid #f1c94e; border-top: 2px solid #f1c94e; transform: rotate(45deg); }
+  .board-pop h2 { font-size: 21px; margin: 0; } .board-pop .small-note { font-size: 14px; }
+  .board-pop .leaders { margin-top: 10px; } .board-pop .leaders div { font-size: 17px; }
+  .board-x { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 28px; line-height: 1; color: var(--muted); cursor: pointer; width: 40px; height: 40px; }
+  @keyframes pop-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
+  body:not(.on-home) .board-pop { display: none; }
   .leaders div.me { font-weight: 700; color: var(--brand); }
   .badge { width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 16px; font-size: 50px; font-weight: 700; background: var(--good-soft); color: var(--good); }
   .explain { text-align: center; background: var(--bg); border-radius: 14px; padding: 16px 20px; margin: 20px 0 0; font-size: 19px; }
@@ -221,6 +229,13 @@
     <div class="brand"><span class="brand-emoji left" id="decor-emoji-left" aria-hidden="true" hidden></span><img src="logo.png" alt="" class="logo"><span class="brand-emoji" id="decor-emoji" aria-hidden="true" hidden></span><span id="facility" hidden>Stonehenge</span></div>
     <div class="who" id="who-label"></div>
     <button class="trophy" id="trophy" aria-label="Streak leaderboard" hidden><span class="t-icon">🏆</span><span class="t-label">Leaderboard</span></button>
+    <!-- Leaderboard, from the 🏆 button: a small panel under it -->
+    <div class="board-pop" id="board-pop" hidden>
+      <button class="board-x" id="board-close" aria-label="Close">×</button>
+      <h2>🏆 Streak leaderboard</h2>
+      <div class="muted small-note">In a row, right on the first try</div>
+      <div id="board-lists"></div>
+    </div>
   </header>
   <main>
     <!-- Home: Workday ID keypad -->
@@ -339,15 +354,6 @@
     </section>
 
     <!-- Correct -->
-    <!-- Leaderboard, from the 🏆 button -->
-    <section class="screen" id="s-board">
-      <div class="card center">
-        <h2>🏆 Streak leaderboard</h2>
-        <div class="muted">In a row, right on the first try</div>
-        <div id="board-lists"></div>
-        <button class="btn" id="board-close" style="margin-top:22px">Back</button>
-      </div>
-    </section>
 
     <section class="screen" id="s-result">
       <div class="card center">
@@ -400,6 +406,7 @@
   function show(name) {
     document.querySelectorAll('.screen').forEach(el => el.classList.toggle('active', el.id === 's-' + name));
     document.body.classList.toggle('on-home', name === 'home');
+    if (name !== 'home') $('board-pop').hidden = true;
     document.querySelector('main').scrollTop = 0;
     clearInterval(countdownTimer);
     bumpIdle();
@@ -566,12 +573,20 @@
       (str.deptLeaders.length ? `<div class="leaders"><h3>Department leaders</h3>${str.deptLeaders.map(l => `<div><b style="width:auto;min-width:140px">${escapeHtml(l.department)}</b><span>${escapeHtml(l.name)}</span><span>🔥 ${l.streak}</span></div>`).join('')}</div>` : '');
     $('board-lists').innerHTML = html || '<p style="margin-top:18px">No one has 3 in a row yet. Be the first!</p>';
   }
-  $('trophy').addEventListener('click', async () => {
+  let boardTimer = null;
+  function closeBoard() { $('board-pop').hidden = true; clearTimeout(boardTimer); }
+  $('trophy').addEventListener('click', async e => {
+    e.stopPropagation();
+    if (!$('board-pop').hidden) return closeBoard();
     await loadConfig(); // freshest standings
     renderBoard();
-    show('board');
+    $('board-pop').hidden = false;
+    clearTimeout(boardTimer);
+    boardTimer = setTimeout(closeBoard, 30000);   // don't leave it open on an idle iPad
   });
-  $('board-close').addEventListener('click', () => goHome());
+  $('board-close').addEventListener('click', closeBoard);
+  // Tapping anywhere else closes it.
+  document.addEventListener('pointerdown', e => { if (!$('board-pop').hidden && !e.target.closest('#board-pop, #trophy')) closeBoard(); }, true);
   function rotateNews() {
     const str = st(s.config);
     const items = (s.config.announcements || []).filter(a => !a.departments.length).map(a => a.text)
