@@ -1348,11 +1348,13 @@ async function adminRoutes(req, res, p, m, url) {
   if (m === 'GET' && p === '/api/admin/state') {
     const topicStats = {};
     for (const r of db.responses) {
-      const st = topicStats[r.topicId] || (topicStats[r.topicId] = { responses: 0, firstTry: 0, helpful: 0, notHelpful: 0 });
+      const st = topicStats[r.topicId] || (topicStats[r.topicId] = { responses: 0, firstTry: 0, helpful: 0, notHelpful: 0, rated: [] });
       st.responses += 1;
       if (r.firstTryCorrect) st.firstTry += 1;
       if (r.helpful === true) st.helpful += 1;
       if (r.helpful === false) st.notHelpful += 1;
+      // The latest few ratings, for the hover on the topic library.
+      if (typeof r.helpful === 'boolean') { st.rated.push({ name: r.name, department: r.department, up: r.helpful, date: r.date }); if (st.rated.length > 8) st.rated.shift(); }
     }
     return send(res, 200, {
       topics: db.topics.map(t => t.status === 'draft' ? Object.assign({}, t, { problems: topicProblems(t) }) : t),

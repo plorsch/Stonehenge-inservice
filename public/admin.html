@@ -75,7 +75,7 @@
   .sk-opt.col { flex-direction: column; align-items: stretch; gap: 8px; }
   .sk-t { font-weight: 650; }
   .sk-d { color: var(--muted); font-size: 13px; margin-top: 2px; }
-  .sw { position: relative; width: 46px; height: 26px; flex: none; cursor: pointer; }
+  .sw { position: relative; display: inline-block; vertical-align: middle; width: 46px; height: 26px; flex: none; cursor: pointer; }
   .sw input { opacity: 0; width: 0; height: 0; position: absolute; }
   .sw span { position: absolute; inset: 0; background: #cdd6dd; border-radius: 26px; transition: background .2s; }
   .sw span::before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
@@ -296,7 +296,7 @@ table.la tr:hover td { background: transparent; }
 
 /* Styled end-screen messages */
 .cm-row { grid-template-columns: 1fr 34px 34px 34px !important; align-items: start; }
-.cm-row .cm-text { resize: none; overflow: hidden; min-height: 38px; line-height: 1.4; width: 100%; }
+.cm-row .cm-text { resize: vertical; overflow: hidden; field-sizing: content; min-height: 38px; line-height: 1.4; width: 100%; }
 .ipad-mock { margin: 14px auto 4px; width: min(440px, 100%); background: #1d2a33; border-radius: 28px; padding: 16px; }
 .ipad-screen { background: #fbf7f0; border-radius: 16px; padding: 26px 20px; text-align: center; }
 .ipad-check { width: 54px; height: 54px; border-radius: 50%; background: #e6f4ea; color: #1e7b3c; font-size: 30px; line-height: 54px; margin: 0 auto 8px; font-weight: 800; }
@@ -333,6 +333,26 @@ table.la tr:hover td { background: transparent; }
   .dt-topic a { color: var(--ink); text-decoration: none; } .dt-topic a:hover { color: var(--brand); text-decoration: underline; }
   .dt-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: auto; }
   .dt-foot .btn { margin-left: auto; padding: 4px 10px; font-size: 13px; }
+
+  /* ----- Topic library ----- */
+  #topic-rows tr { transition: background .12s; }
+  #topic-rows tr:hover { background: #f7fafc; }
+  #topic-rows td { padding: 12px 8px; vertical-align: middle; }
+  #topic-rows td:first-child { min-width: 230px; }
+  .tl-title { font-weight: 650; font-size: 15.5px; line-height: 1.3; }
+  .tl-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .tl-count { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 9px; background: var(--brand-soft); color: var(--brand); font-weight: 700; font-size: 13px; }
+  .tl-pct { display: flex; align-items: center; gap: 8px; } .tl-pct span { font-weight: 650; min-width: 36px; }
+  .tl-bar { flex: 1; min-width: 50px; height: 6px; background: var(--bg); border-radius: 6px; overflow: hidden; } .tl-bar i { display: block; height: 100%; border-radius: 6px; }
+  .tl-rate { display: inline-block; margin-top: 6px; font-size: 12.5px; padding: 2px 9px; border-radius: 999px; background: var(--bg); color: var(--ink); text-decoration: none; white-space: nowrap; }
+  .tl-rate:hover { background: var(--brand-soft); } .tl-rate span { opacity: .4; }
+  .tl-acts { display: flex; gap: 4px; justify-content: flex-end; align-items: center; white-space: nowrap; }
+  .tl-more { position: relative; } .tl-more summary { list-style: none; } .tl-more summary::-webkit-details-marker { display: none; }
+  .tl-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.14); padding: 4px; display: flex; flex-direction: column; min-width: 150px; }
+  .tl-menu .tl-act { border: 0; text-align: left; padding: 7px 10px; }
+  .tl-act { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 4px 9px; font: inherit; font-size: 13px; color: var(--brand); cursor: pointer; white-space: nowrap; }
+  .tl-act:hover { background: var(--brand-soft); border-color: #b9d6e2; }
+  .tl-act.danger { color: var(--warn); } .tl-act.danger:hover { background: var(--warn-soft); border-color: #f0cfb4; }
 
   /* ----- Phones ----- */
   @media (max-width: 700px) {
@@ -472,7 +492,7 @@ table.la tr:hover td { background: transparent; }
         <div><label class="block">🎉 Work anniversary messages <span class="hint">{years} = years worked, {name} = first name</span></label>
           <div class="rows-ed" id="an-anniv-msgs"></div><button class="btn subtle" id="add-anniv">+ Add an anniversary message</button></div>
       </div>
-      <div style="margin-top:10px"><button class="btn" id="an-save-msgs">Save messages</button></div>
+      <div class="toolbar" style="margin-top:10px"><button class="btn" id="an-save-msgs">Save messages</button><button class="btn ghost" data-show-preview="birthday">🎂 Play the birthday screen</button><button class="btn ghost" data-show-preview="anniversary">🎉 Play the anniversary screen</button></div>
       <h3 style="margin-top:14px">Coming up in the next 30 days</h3>
       <div id="an-upcoming" class="up-list"></div>
     </div>
@@ -493,6 +513,7 @@ table.la tr:hover td { background: transparent; }
             <input type="hidden" id="sk-top"><div class="seg" data-for="sk-top"><button data-v="3">Top 3</button><button data-v="1">Leader only</button></div></div>
         </div>
         <div class="sk-board-prev"><div class="sk-t" style="margin-bottom:8px">Longest streaks right now</div><div id="sk-now"></div>
+          <button class="btn ghost" data-show-preview="leaders" style="margin-top:10px">👁 See it on the iPad</button>
           <div class="sk-d" style="margin-top:10px">Counts first-try right answers in a row, 3 or more. A first-try miss starts it over.</div></div>
       </div>
     </div>
@@ -612,6 +633,8 @@ table.la tr:hover td { background: transparent; }
   <!-- Topics -->
   <section class="tab" id="tab-topics">
     <div class="card">
+      <div class="sk-head"><div class="sk-icon" style="background:linear-gradient(135deg,#5fb8ff,#1f6f8b)">📚</div><div><h2 style="margin:0">Topic library</h2>
+        <div class="muted small" id="topic-summary"></div></div></div>
       <div class="toolbar">
         <input type="text" id="topic-search" placeholder="Search topics" class="grow">
         <select id="topic-for" title="Show topics a department gets"></select>
@@ -1056,7 +1079,7 @@ table.la tr:hover td { background: transparent; }
     <textarea id="ai-about" rows="4" style="width:100%" placeholder="Example: Hand hygiene before and after resident contact. You can also paste a policy or your notes here."></textarea>
     <div class="toolbar">
       <label>Questions <select id="ai-count"><option>3</option><option selected>5</option><option>8</option></select></label>
-      <label><input type="checkbox" id="ai-es"> Include Spanish</label>
+      <label><input type="checkbox" id="ai-es" checked> Include Spanish</label>
     </div>
     <p class="small" style="margin:12px 0 6px"><strong>Step 1.</strong> Copy the instructions, then paste them into an AI chat:
       <a href="https://copilot.microsoft.com" target="_blank" rel="noopener">Copilot</a> ·

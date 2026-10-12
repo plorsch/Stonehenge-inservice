@@ -260,7 +260,7 @@
 
   async function refresh() {
     state = await api('/api/admin/state');
-    renderToday(); renderSchedule(); renderRequired(); renderStarter(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters(); renderReportFilters();
+    renderToday(); renderSchedule(); renderRequired(); renderStarter(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters(); renderReportFilters(); setTimeout(() => fitAllText(), 30);
   }
 
   // ---------- today ----------
@@ -353,7 +353,17 @@
       (list.length ? list.slice(0, 15).map(p => escapeHtml(p.name) + (p.jobTitle ? ` <span style="opacity:.7">${escapeHtml(p.jobTitle)}</span>` : '')).join('<br>') + (list.length > 15 ? `<br>…and ${list.length - 15} more` : '') : 'No active staff') +
       '<br><span style="opacity:.7">Click to see them on the Staff tab</span>');
   });
-  document.addEventListener('mouseout', e => { if (e.target.closest('[data-gap-dept]')) hideTip(); });
+  document.addEventListener('mouseout', e => { if (e.target.closest('[data-gap-dept], [data-rate-tip]')) hideTip(); });
+  // Hover the 👍/👎 on the topic library: the latest ratings, newest first.
+  document.addEventListener('mouseover', e => {
+    const a = e.target.closest('[data-rate-tip]');
+    if (!a) return;
+    const st = state.topicStats[a.dataset.rateTip] || {}, list = (st.rated || []).slice().reverse();
+    const total = st.helpful + st.notHelpful;
+    showTip(e, `<b>${Math.round(100 * st.helpful / (total || 1))}% found this lesson helpful</b> · ${total} rating${total === 1 ? '' : 's'}<br>` +
+      list.map(r => `${r.up ? '👍' : '👎'} ${escapeHtml(r.name || 'Someone')}${r.department ? ` <span style="opacity:.7">${escapeHtml(r.department)}</span>` : ''} <span style="opacity:.7">· ${fmtDate(r.date)}</span>`).join('<br>') +
+      (total > list.length ? `<br><span style="opacity:.7">…and ${total - list.length} more</span>` : '') + '<br><span style="opacity:.7">Click to see them all</span>');
+  });
   document.addEventListener('click', e => {
     const a = e.target.closest('[data-gap-dept]');
     if (!a) return;
@@ -722,31 +732,41 @@
       .sort((a, b) => (a.status === 'draft') - (b.status === 'draft') || (b.lastUsedDate || '').localeCompare(a.lastUsedDate || '') || a.title.localeCompare(b.title));
     $('topic-rows').innerHTML = rows.map(t => {
       const st = state.topicStats[t.id];
-      const pct = st && st.responses ? Math.round(100 * st.firstTry / st.responses) + '%' : '<span class="muted">–</span>';
+      const n = st && st.responses ? Math.round(100 * st.firstTry / st.responses) : null;
+      const pct = n === null ? '<span class="muted">–</span>'
+        : `<div class="tl-pct"><span>${n}%</span><div class="tl-bar"><i style="width:${n}%;background:${n >= 80 ? 'var(--good)' : n >= 60 ? '#d39b1d' : 'var(--warn)'}"></i></div></div>`;
       const retired = t.status === 'retired', draft = t.status === 'draft';
-      const tags = (t.annual ? ' <span class="pill req">Yearly</span>' : '') + (t.es && t.es.lesson ? ' <span class="pill brand">Español</span>' : '') +
-        (retired ? ' <span class="pill">Retired</span>' : '') +
-        (draft ? ` <span class="pill warn" title="${escapeHtml((t.problems || []).join(' '))}">Needs work</span>` : '');
+      const tags = (t.category ? `<span class="pill">${escapeHtml(t.category)}</span>` : '') + (t.annual ? '<span class="pill req">Yearly</span>' : '') + (t.es && t.es.lesson ? '<span class="pill brand">Español</span>' : '') +
+        (retired ? '<span class="pill">Retired</span>' : '') +
+        (draft ? `<span class="pill warn" title="${escapeHtml((t.problems || []).join(' '))}">Needs work</span>` : '');
+      const rated = st && st.helpful + st.notHelpful ? `<a href="#" class="tl-rate" data-ratings="${t.id}" data-rate-tip="${t.id}">👍 ${st.helpful} <span>·</span> 👎 ${st.notHelpful}</a>` : '';
       return `<tr class="${retired ? 'dim' : ''}">
-        <td><strong>${escapeHtml(t.title)}</strong>${tags}<div class="muted small">${escapeHtml(t.category || '')}${draft && t.problems ? ' · ' + escapeHtml(t.problems[0]) : ''}</div></td>
+        <td><div class="tl-title">${escapeHtml(t.title)}</div><div class="tl-tags">${tags}</div>${draft && t.problems ? `<div class="muted small">${escapeHtml(t.problems[0])}</div>` : ''}</td>
         <td class="small">${whoLabel(t.departments)}</td>
-        <td>${t.questions.length}</td>
-        <td>${retired || draft ? '<span class="muted">–</span>' : `<input type="checkbox" data-rotation="${t.id}"${t.inRotation ? ' checked' : ''} aria-label="In rotation">`}</td>
+        <td><span class="tl-count">${t.questions.length}</span></td>
+        <td>${retired || draft ? '<span class="muted">–</span>' : `<label class="sw" title="In rotation"><input type="checkbox" data-rotation="${t.id}"${t.inRotation ? ' checked' : ''} aria-label="In rotation"><span></span></label>`}</td>
         <td style="white-space:nowrap">${fmtDate(t.lastUsedDate)}</td>
         <td style="white-space:nowrap">${t.createdAt ? fmtDate(t.createdAt.slice(0, 10)) : '<span class="muted">–</span>'}</td>
         <td>${st ? st.responses : 0}</td>
-        <td>${pct}${st && st.helpful + st.notHelpful ? `<div class="small" title="See who rated this lesson"><a href="#" data-ratings="${t.id}">👍 ${st.helpful} · 👎 ${st.notHelpful}</a></div>` : ''}</td>
-        <td style="white-space:nowrap">
-          <button class="btn subtle" data-act="preview" data-id="${t.id}" title="Try it on the kiosk screens. Nothing is saved.">Preview</button><button class="btn subtle" data-act="details" data-id="${t.id}" title="All questions and answers on one page">Answer key</button>
-          <button class="btn subtle" data-act="edit" data-id="${t.id}">Edit</button>
-          <button class="btn subtle" data-act="duplicate" data-id="${t.id}">Copy</button>
-          ${retired ? `<button class="btn subtle" data-act="restore" data-id="${t.id}">Restore</button>`
-                    : `<button class="btn subtle danger" data-act="retire" data-id="${t.id}">Retire</button>`}
-        </td></tr>`;
+        <td>${pct}${rated}</td>
+        <td><div class="tl-acts">
+          <button class="tl-act" data-act="preview" data-id="${t.id}" title="Try it on the kiosk screens. Nothing is saved.">▶ Preview</button>
+          <button class="tl-act" data-act="edit" data-id="${t.id}">✏️ Edit</button>
+          <details class="tl-more"><summary class="tl-act" title="More">⋯</summary><div class="tl-menu">
+            <button class="tl-act" data-act="details" data-id="${t.id}" title="All questions and answers on one page">🔑 Answer key</button>
+            <button class="tl-act" data-act="duplicate" data-id="${t.id}">⧉ Copy</button>
+            ${retired ? `<button class="tl-act" data-act="restore" data-id="${t.id}">↩ Restore</button>`
+                      : `<button class="tl-act danger" data-act="retire" data-id="${t.id}">🗄 Retire</button>`}
+          </div></details>
+        </div></td></tr>`;
     }).join('') || '<tr><td colspan="9" class="muted">No topics match.</td></tr>';
+    const live = state.topics.filter(t => t.status === 'active');
+    $('topic-summary').textContent = `${live.length} active topic${live.length === 1 ? '' : 's'} · ${live.filter(t => t.inRotation).length} in rotation · ${state.topics.filter(t => t.status === 'draft').length} need work · ${live.filter(t => t.es && t.es.lesson).length} in Spanish`;
     const cats = [...new Set(state.topics.map(t => t.category).filter(Boolean))].sort();
     $('category-list').innerHTML = cats.map(c => `<option value="${escapeHtml(c)}">`).join('');
   }
+  // Only one "⋯" menu open at a time; a click anywhere else closes it.
+  document.addEventListener('click', e => { document.querySelectorAll('.tl-more[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.tl-menu')) d.open = false; }); });
   $('topic-search').addEventListener('input', renderTopics);
   $('topic-filter').addEventListener('change', renderTopics);
   $('topic-for').addEventListener('change', renderTopics);
@@ -1426,26 +1446,60 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const yearly = topics.map(t => ({ title: t.title, p: t.people.find(x => x.id === emp.id) })).filter(x => x.p);
       const words = { current: 'Up to date', soon: 'Due soon', overdue: 'Overdue', never: 'Not done yet' };
       const kinds = { required: 'Required', scheduled: 'Scheduled', rotation: 'Rotation', starter: 'New hire', annual: 'Yearly', review: 'Review' };
+      const pct = thisYear.length ? Math.round(100 * first / thisYear.length) : null;
+      const behind = yearly.filter(x => ['overdue', 'never'].includes(x.p.status)).length;
+      const tone = { current: 'ok', soon: 'soon', overdue: 'bad', never: 'bad' };
       win.document.open();
       win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(emp.name)} training record</title><style>
-        body { font: 13px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #111; margin: 28px; }
-        h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 15px; margin: 18px 0 6px; } .meta { color: #444; }
-        table { width: 100%; border-collapse: collapse; margin-top: 6px; } th, td { border: 1px solid #bbb; padding: 5px 7px; text-align: left; vertical-align: top; }
-        th { background: #eee; font-size: 12px; } .noprint { margin-bottom: 14px; }
-        @media print { .noprint { display: none; } body { margin: 0.4in; } tr { break-inside: avoid; } }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { font: 13px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #1d2b36; margin: 0; background: #eef3f6; }
+        .page { max-width: 8.5in; margin: 24px auto; background: #fff; padding: 36px 44px; border-radius: 14px; box-shadow: 0 6px 30px rgba(16,40,60,.12); }
+        .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-bottom: 3px solid #1f6f8b; padding-bottom: 14px; }
+        .top img { height: 42px; } .doc { text-align: right; color: #5b6b78; font-size: 12px; }
+        .doc b { display: block; color: #1f6f8b; font-size: 17px; letter-spacing: .3px; }
+        .who { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 18px 0; border: 1px solid #dbe3e9; border-radius: 10px; overflow: hidden; }
+        .who div { padding: 9px 12px; border-right: 1px solid #dbe3e9; } .who div:last-child { border-right: 0; }
+        .who small { display: block; color: #5b6b78; font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; }
+        .who strong { font-size: 14px; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 8px; }
+        .stat { background: #f3f8fa; border-radius: 10px; padding: 10px 12px; } .stat b { display: block; font-size: 22px; color: #1f6f8b; line-height: 1.1; }
+        .stat span { color: #5b6b78; font-size: 11.5px; } .stat.bad b { color: #a4521b; } .stat.ok b { color: #1e7a4c; }
+        h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: #1f6f8b; margin: 22px 0 8px; }
+        table { width: 100%; border-collapse: collapse; } th, td { padding: 7px 9px; text-align: left; vertical-align: top; border-bottom: 1px solid #e3e9ee; }
+        th { background: #1f6f8b; color: #fff; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+        th:first-child { border-top-left-radius: 8px; } th:last-child { border-top-right-radius: 8px; }
+        tbody tr:nth-child(even) td { background: #f7fafb; }
+        .pill { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 11.5px; font-weight: 600; border: 1px solid; }
+        .pill.ok { color: #1e7a4c; background: #e3f4ea; border-color: #b8e0c8; } .pill.soon { color: #8a6100; background: #fff5d6; border-color: #f0dc9c; }
+        .pill.bad { color: #a4521b; background: #fbeee2; border-color: #f0cfb4; } .pill.plain { color: #1f5f7a; background: #e4f0f5; border-color: #c4dde8; }
+        .sign { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-top: 34px; } .sign div { border-top: 1px solid #1d2b36; padding-top: 4px; font-size: 11px; color: #5b6b78; }
+        .foot { margin-top: 18px; color: #8796a1; font-size: 10.5px; display: flex; justify-content: space-between; }
+        .noprint { max-width: 8.5in; margin: 18px auto 0; text-align: right; }
+        .noprint button { font: 600 14px -apple-system, "Segoe UI", Roboto, Arial, sans-serif; padding: 9px 18px; border: 0; border-radius: 10px; background: #1f6f8b; color: #fff; cursor: pointer; }
+        @media print { body { background: #fff; } .noprint { display: none; } .page { margin: 0; padding: 0; box-shadow: none; border-radius: 0; max-width: none; }
+          @page { margin: 0.5in; } tr, .stat, .sign { break-inside: avoid; } thead { display: table-header-group; } }
       </style></head><body>
-        <div class="noprint"><button onclick="print()" style="font-size:15px;padding:6px 14px">Print or save as PDF</button></div>
-        <h1>${escapeHtml(state.settings.facilityName || '')} In-Service Training Record</h1>
-        <div class="meta"><strong>${escapeHtml(emp.name)}</strong> · ${escapeHtml(emp.department || 'No department')} · Workday last 4: ${escapeHtml(emp.last4)}${emp.hireDate ? ` · Hired ${fmtDate(emp.hireDate)}` : ''}<br>
-          ${year}: <strong>${thisYear.length}</strong> in-services completed${thisYear.length ? `, ${Math.round(100 * first / thisYear.length)}% correct on the first try` : ''}. All time: ${done.length}.</div>
-        ${yearly.length ? `<h2>Yearly requirements</h2><table><thead><tr><th>Topic</th><th>Status</th><th>Last completed</th><th>Due</th></tr></thead><tbody>
-          ${yearly.map(x => `<tr><td>${escapeHtml(x.title)}</td><td>${words[x.p.status]}</td><td>${x.p.last ? fmtDate(x.p.last) : ''}</td><td>${x.p.due ? fmtDate(x.p.due) : 'Now'}</td></tr>`).join('')}</tbody></table>` : ''}
+        <div class="noprint"><button onclick="print()">🖨 Print or save as PDF</button></div>
+        <div class="page">
+        <div class="top"><img src="${location.origin}/logo.png" alt="${escapeHtml(state.settings.facilityName || '')}"><div class="doc"><b>In-Service Training Record</b>${escapeHtml(state.settings.facilityName || '')}<br>As of ${fmtDate(state.todayDate)}</div></div>
+        <div class="who"><div><small>Employee</small><strong>${escapeHtml(emp.name)}</strong></div><div><small>Department</small><strong>${escapeHtml(emp.department || '—')}</strong></div>
+          <div><small>Workday ID (last 4)</small><strong>${escapeHtml(emp.last4)}</strong></div><div><small>Hire date</small><strong>${emp.hireDate ? fmtDate(emp.hireDate) : '—'}</strong></div></div>
+        <div class="stats">
+          <div class="stat"><b>${thisYear.length}</b><span>in-services completed in ${year}</span></div>
+          <div class="stat"><b>${pct === null ? '—' : pct + '%'}</b><span>correct on the first try in ${year}</span></div>
+          <div class="stat"><b>${done.length}</b><span>completed all time</span></div>
+          <div class="stat ${yearly.length ? (behind ? 'bad' : 'ok') : ''}"><b>${yearly.length ? (behind ? behind + ' due' : '✓ All') : '—'}</b><span>${yearly.length ? (behind ? 'yearly requirements outstanding' : 'yearly requirements current') : 'no yearly requirements'}</span></div>
+        </div>
+        ${yearly.length ? `<h2>Yearly requirements</h2><table><thead><tr><th>Topic</th><th>Status</th><th>Last completed</th><th>Next due</th></tr></thead><tbody>
+          ${yearly.map(x => `<tr><td>${escapeHtml(x.title)}</td><td><span class="pill ${tone[x.p.status]}">${words[x.p.status]}</span></td><td>${x.p.last ? fmtDate(x.p.last) : '—'}</td><td>${x.p.due ? fmtDate(x.p.due) : 'Now'}</td></tr>`).join('')}</tbody></table>` : ''}
         <h2>Completed in-services</h2>
-        <table><thead><tr><th>Completed</th><th>Topic</th><th>Type</th><th>Knowledge check</th></tr></thead><tbody>
-        ${done.map(r => `<tr><td>${fmtWhen(r.completedAt)}</td><td>${escapeHtml(r.topicTitle)}</td><td>${kinds[r.kind] || ''}</td>
-          <td>${r.firstTryCorrect ? 'Correct first try' : `Correct on try ${r.attempts.length}`}</td></tr>`).join('') || '<tr><td colspan="4">None yet.</td></tr>'}
+        <table><thead><tr><th style="width:25%">Completed</th><th>Topic</th><th style="width:13%">Type</th><th style="width:20%">Knowledge check</th></tr></thead><tbody>
+        ${done.map(r => `<tr><td style="white-space:nowrap">${fmtWhen(r.completedAt)}</td><td>${escapeHtml(r.topicTitle)}${r.lang === 'es' ? ' <span class="pill plain">Español</span>' : ''}</td><td>${kinds[r.kind] || ''}</td>
+          <td><span class="pill ${r.firstTryCorrect ? 'ok' : 'plain'}">${r.firstTryCorrect ? '✓ Correct first try' : `✓ Correct on try ${r.attempts.length}`}</span></td></tr>`).join('') || '<tr><td colspan="4">None yet.</td></tr>'}
         </tbody></table>
-        <p style="margin-top:14px;color:#666;font-size:11px">Printed ${escapeHtml(new Date().toLocaleString())} from the in-service admin page.</p>
+        <div class="sign"><div>Reviewed by (name and title)</div><div>Date</div></div>
+        <div class="foot"><span>Each in-service ends with a knowledge check. Staff retry with a hint until correct.</span><span>Printed ${escapeHtml(new Date().toLocaleString())}</span></div>
+        </div>
       </body></html>`);
       win.document.close();
     } catch (err) { win.close(); fail(err); }
@@ -2215,6 +2269,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     return row;
   }
   function addDeptRow(v = '') { return reRow($('set-depts'), `<input type="text" data-clear="1" maxlength="60" placeholder="Department" value="${escapeHtml(v)}">`); }
+  // Message boxes grow to fit their words. A box on a hidden tab measures 0, so they're re-fit when shown.
+  function fitText(ta) { if (!ta.offsetParent) return; ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; }
+  const fitAllText = () => document.querySelectorAll('.cm-text').forEach(fitText);
+  document.getElementById('nav').addEventListener('click', () => setTimeout(fitAllText, 30));
+  window.addEventListener('resize', () => { clearTimeout(fitAllText.t); fitAllText.t = setTimeout(fitAllText, 150); });
   // End-screen message rows: the text, plus an optional font, color, size and GIF.
   function addClosingRow(v = '', box = $('set-closing'), placeholder = 'Thanks for keeping our residents safe!') {
     const m = typeof v === 'string' ? { text: v } : v;
@@ -2239,7 +2298,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       row.querySelector('.cm-text').setAttribute('style', messageStyle(Object.assign({}, msg, { size: '' })));
       panel.querySelector('.cm-preview').innerHTML = `<div class="muted small">On the iPad:</div>` + (msg && msg.gif ? `<img src="${escapeHtml(msg.gif)}" alt="">` : '') +
         `<div style="font-size:26px;font-weight:700;color:#1f6f8b;${messageStyle(msg)}">${formatMessage(sampleText(messageText(msg))) || '<span class="muted">Type a message</span>'}</div>`;
-      const ta = row.querySelector('.cm-text'); ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px';
+      fitText(row.querySelector('.cm-text'));
     };
     row.addEventListener('input', e => { if (e.target.classList.contains('cm-gif')) { const g = gifUrl(e.target.value); if (g !== e.target.value.trim()) e.target.value = g; } sync(); });
     row.addEventListener('change', sync);
@@ -2522,6 +2581,14 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   });
   $('add-bday').addEventListener('click', () => focusLast(addClosingRow('', $('an-bday-msgs'), 'Happy birthday, {name}!')));
   $('add-anniv').addEventListener('click', () => focusLast(addClosingRow('', $('an-anniv-msgs'), 'Happy {years}-year anniversary, {name}!')));
+  // Plays the real iPad last screen (confetti, balloons, leaderboard) with a pretend person. Unsaved messages are included.
+  function previewLastScreen(show) {
+    try { localStorage.setItem('previewDraft', JSON.stringify({ messages: { birthdayMessages: closingValues($('an-bday-msgs')), anniversaryMessages: closingValues($('an-anniv-msgs')) },
+      streaks: { board: $('sk-board').value, top: Number($('sk-top').value) } })); } catch { /* preview uses saved messages */ }
+    const w = window.open('/admin/preview?show=' + show, 'inservice-preview', 'width=820,height=1080');
+    if (w) w.focus();
+  }
+  document.addEventListener('click', e => { const b = e.target.closest('[data-show-preview]'); if (b) previewLastScreen(b.dataset.showPreview); });
   $('an-save-msgs').addEventListener('click', async () => {
     try {
       await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ birthdayMessages: closingValues($('an-bday-msgs')), anniversaryMessages: closingValues($('an-anniv-msgs')) }) });

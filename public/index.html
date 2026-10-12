@@ -192,7 +192,7 @@
   .leaders { margin: 18px auto 0; max-width: 420px; text-align: left; background: #fff8e6; border: 1px solid #f1dfae; border-radius: 14px; padding: 12px 18px; }
   .leaders h3 { margin: 0 0 6px; font-size: 18px; color: #8a5a00; text-align: center; }
   .leaders div { display: flex; gap: 10px; font-size: 19px; padding: 3px 0; }
-  .leaders div b { width: 26px; } .leaders div span:last-child { margin-left: auto; color: var(--muted); }
+  .leaders div b { width: 26px; } .leaders div span:last-child { margin-left: auto; color: var(--muted); white-space: nowrap; }
   .board-pop { position: absolute; right: 14px; top: calc(100% + 8px); z-index: 30; width: min(400px, calc(100vw - 28px)); max-height: 70vh; overflow-y: auto;
     background: #fff; border: 2px solid #f1c94e; border-radius: 18px; box-shadow: 0 16px 44px rgba(0,0,0,.22); padding: 16px 16px 14px; text-align: center; animation: pop-in .18s ease-out; }
   .board-pop::before { content: ""; position: absolute; top: -9px; right: 60px; width: 14px; height: 14px; background: #fff; border-left: 2px solid #f1c94e; border-top: 2px solid #f1c94e; transform: rotate(45deg); }
@@ -1035,9 +1035,36 @@
     $('preview-bar').hidden = false;
     begin({});
   }
-  $('preview-again').addEventListener('click', () => { if (!s.busy) { clearInterval(countdownTimer); startPreview(); } });
+  // Admin "preview" of the last screen: ?show=birthday | anniversary | leaders. A pretend person, nothing saved.
+  // Unsaved messages typed on the admin page come through localStorage so they can be seen before saving.
+  const previewShow = location.pathname.startsWith('/admin/preview') ? new URLSearchParams(location.search).get('show') : null;
+  function startShow() {
+    document.body.classList.add('previewing');
+    $('preview-bar').hidden = false;
+    $('preview-bar').querySelector('span').textContent = 'What staff see on the last screen. Nothing is saved.';
+    clearInterval(countdownTimer); stopParty();
+    let draft = {}; try { draft = JSON.parse(localStorage.getItem('previewDraft') || '{}'); } catch { /* none */ }
+    const cfg = s.config = Object.assign({}, s.config, draft.messages || {});
+    const dept = (cfg.departments || [])[0] || '';
+    s.who = { employeeId: 'preview', name: 'Maria Lopez', department: dept, last4: '0000' };
+    s.lang = 'en';
+    cfg.celebrations = previewShow === 'birthday' ? [{ type: 'birthday', id: 'preview', name: 'Maria L', department: dept }]
+      : previewShow === 'anniversary' ? [{ type: 'anniversary', id: 'preview', name: 'Maria L', department: dept, years: 5 }] : [];
+    if (previewShow === 'leaders') {
+      const k = st(cfg);
+      const demo = [{ id: 'p1', name: 'Jasmine R', department: 'Nursing', streak: 14 }, { id: 'preview', name: 'Maria L', department: dept, streak: 9 }, { id: 'p3', name: 'Tom B', department: 'Dietary', streak: 6 }];
+      const top = (draft.streaks && draft.streaks.top) || 3;
+      cfg.streaks = Object.assign({}, k, { leadersOn: 'end', leaders: (k.leaders.length ? k.leaders : demo).slice(0, top),
+        deptLeaders: k.deptLeaders.length ? k.deptLeaders : [{ id: 'preview', name: 'Maria L', department: dept, streak: 9 }] });
+      if (draft.streaks && draft.streaks.board === 'dept') cfg.streaks.leaders = [];
+      if (draft.streaks && draft.streaks.board === 'facility') cfg.streaks.deptLeaders = [];
+    }
+    s.items = [{ kind: 'regular', topic: { id: 'preview', title: 'Preview' }, question: {} }]; s.idx = 0;
+    showResult({ correct: true, firstTryCorrect: true, explanation: '', responseId: null, offline: true });
+  }
+  $('preview-again').addEventListener('click', () => { if (s.busy) return; clearInterval(countdownTimer); if (previewShow) startShow(); else startPreview(); });
   $('preview-close').addEventListener('click', () => { window.close(); });
-  loadConfig().then(() => { if (previewTopic) startPreview(); });
+  loadConfig().then(() => { if (previewTopic) startPreview(); else if (previewShow) startShow(); });
   setInterval(() => { if ($('s-home').classList.contains('active')) loadConfig(); }, 60000);
   setInterval(() => { if ($('s-home').classList.contains('active') && Date.now() - loadedAt > RELOAD_EVERY_MS) safeReload(); }, 10 * 60000);
 
