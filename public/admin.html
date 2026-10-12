@@ -411,10 +411,11 @@
       <div class="toolbar">
         <select id="cc-filter"><option value="people">People to follow up, by leader</option><option value="problems">Missed or unfinished shifts</option><option value="all">All shifts</option><option value="done">Completed</option></select>
         <span class="grow"></span>
+        <button class="btn ghost" id="cc-email" title="Email each department leader the ticked people who clocked in without doing the in-service">✉ Email leaders</button>
         <button class="btn" id="cc-csv">Download as CSV</button>
       </div>
       <div class="table-wrap" id="cc-people-table"><table>
-        <thead><tr><th>Name</th><th>Department</th><th>Shifts missed</th><th>Dates missed</th></tr></thead>
+        <thead><tr><th style="width:28px"><input type="checkbox" id="cc-all" checked title="Include everyone in the email"></th><th>Name</th><th>Department</th><th>Shifts missed</th><th>Dates missed</th></tr></thead>
         <tbody id="cc-people-rows"></tbody>
       </table></div>
       <div class="table-wrap" id="cc-shift-table" hidden><table>

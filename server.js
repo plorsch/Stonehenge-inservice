@@ -1724,6 +1724,34 @@ async function adminRoutes(req, res, p, m, url) {
     if (!sent) return send(res, 400, { error: 'Sending failed: ' + failed });
     return send(res, 200, { ok: true, leaders: sent, skipped: [...new Set(skipped)] });
   }
+  // Clock-in check: email each department leader the people (ticked on the admin page) who clocked in without doing the in-service.
+  if (m === 'POST' && p === '/api/admin/clock-check/email') {
+    const b = await readBody(req, 5e6);
+    const people = (Array.isArray(b.people) ? b.people : []).slice(0, 2000).map(x => ({ name: cleanText(x.name, 100), last4: cleanLast4(x.last4) || '', department: cleanText(x.department, 60),
+      shifts: Number(x.shifts) || 0, neverDone: !!x.neverDone, missedDates: cleanList(x.missedDates, 10, 62) })).filter(x => x.name);
+    const groups = new Map(), skipped = [];
+    for (const x of people) {
+      const to = emailsIn(leaderFor(x.department));
+      if (!to.length) { skipped.push(`${x.name}${x.department ? ' (' + x.department + ')' : ''}`); continue; }
+      const k = to.join(',');
+      groups.set(k, (groups.get(k) || []).concat(x));
+    }
+    if (!groups.size) return send(res, 400, { error: 'No leader emails for these departments. Add them in Settings → Department leaders, like "Dietary: Andi, andi@stonehenge.com".' });
+    const md = d => { const [, mo, day] = d.split('-'); return `${Number(mo)}/${Number(day)}`; };
+    let sent = 0, sentPeople = 0, failed = '';
+    for (const [k, list] of groups) {
+      const html = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1d2b36;max-width:600px">
+        <h2 style="color:#1f5f7a;margin:0 0 8px">${list.length} ${list.length === 1 ? 'person' : 'people'} clocked in without doing the in-service</h2>
+        <p style="margin:0 0 14px;color:#5b6b78">Please remind them to do their quick in-service on the iPad when they clock in.</p>
+        <table style="border-collapse:collapse;width:100%">${list.map(x => `<tr><td style="padding:8px 10px;border-top:1px solid #dbe3e9"><strong>${esc(x.name)}</strong>${x.department ? ` <span style="color:#5b6b78">(${esc(x.department)})</span>` : ''}${x.neverDone ? ' <span style="color:#a4521b;font-size:13px">· hasn\'t done any yet</span>' : ''}</td>
+          <td style="padding:8px 10px;border-top:1px solid #dbe3e9;color:#5b6b78;font-size:13px">Missed ${x.missedDates.length} of ${x.shifts} shift${x.shifts === 1 ? '' : 's'}: ${esc(x.missedDates.map(md).join(', '))}</td></tr>`).join('')}</table>
+        <p style="color:#5b6b78;font-size:12px;margin-top:20px">Sent by the ${esc(db.settings.facilityName || 'Stonehenge')} in-service kiosk from the Clock-in check.</p></div>`;
+      const log = await sendEmail(k.split(','), `${list.length} staff missed their in-service at clock-in`, html, 'clock-in check');
+      if (log.status === 'sent') { sent++; sentPeople += list.length; } else failed = log.status === 'email not set up' ? 'Email is not connected yet (see Settings → Email alerts).' : log.error || log.status;
+    }
+    if (!sent) return send(res, 400, { error: 'Sending failed: ' + failed });
+    return send(res, 200, { ok: true, leaders: sent, people: sentPeople, skipped });
+  }
   if (m === 'POST' && p === '/api/admin/email/test') {
     const b = await readBody(req);
     const to = emailsIn(b.to).length ? emailsIn(b.to) : db.settings.alertEmails || [];

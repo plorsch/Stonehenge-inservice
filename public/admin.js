@@ -1423,20 +1423,25 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     return [...by.values()].filter(p => p.missedDates.length)
       .sort((a, b) => (!a.leader - !b.leader) || a.leader.localeCompare(b.leader) || b.missedDates.length - a.missedDates.length || a.name.localeCompare(b.name));
   }
+  // People unticked here are left off the leader emails.
+  const ccKey = p => `${p.last4}|${p.name.toLowerCase()}`;
+  const ccLeftOff = new Set();
   function renderClockCheck() {
     const people = $('cc-filter').value === 'people';
     $('cc-shift-table').hidden = people; $('cc-people-table').hidden = !people;
+    $('cc-email').hidden = !people;
     if (people) {
       const list = ccPeople();
       let lastLeader = null;
       $('cc-people-rows').innerHTML = list.map(p => {
-        const head = p.leader !== lastLeader ? `<tr class="group"><th colspan="4">${escapeHtml(p.leader || 'No leader set')} <span class="muted small">(${list.filter(x => x.leader === p.leader).length} to follow up)</span></th></tr>` : '';
+        const head = p.leader !== lastLeader ? `<tr class="group"><th colspan="5">${escapeHtml(p.leader || 'No leader set')} <span class="muted small">(${list.filter(x => x.leader === p.leader).length} to follow up)</span></th></tr>` : '';
         lastLeader = p.leader;
-        return head + `<tr><td>${escapeHtml(p.name)}${p.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}<div class="muted small">${escapeHtml(p.last4)}</div></td>
+        return head + `<tr class="${ccLeftOff.has(ccKey(p)) ? 'dim' : ''}"><td><input type="checkbox" data-cc-pick="${escapeHtml(ccKey(p))}"${ccLeftOff.has(ccKey(p)) ? '' : ' checked'} title="Include in the leader email"></td><td>${escapeHtml(p.name)}${p.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}<div class="muted small">${escapeHtml(p.last4)}</div></td>
           <td>${escapeHtml(p.department || '')}</td>
           <td><strong>${p.missedDates.length}</strong> of ${p.shifts}${p.done ? '' : ' <span class="pill warn">Never did it</span>'}</td>
           <td>${p.missedDates.map(shortDay).join(', ')}</td></tr>`;
-      }).join('') || '<tr><td colspan="4" class="muted">Nobody to follow up with. Everyone did their in-service.</td></tr>';
+      }).join('') || '<tr><td colspan="5" class="muted">Nobody to follow up with. Everyone did their in-service.</td></tr>';
+      $('cc-all').checked = list.every(p => !ccLeftOff.has(ccKey(p)));
       return;
     }
     $('cc-rows').innerHTML = ccFiltered().map(r => `<tr>
@@ -1449,6 +1454,27 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   ['cc-col-id', 'cc-col-name', 'cc-col-date', 'cc-col-time', 'cc-col-pay', 'cc-col-job'].forEach(id => $(id).addEventListener('change', runClockCheck));
   $('cc-run').addEventListener('click', runClockCheck);
   $('cc-filter').addEventListener('change', renderClockCheck);
+  $('cc-people-rows').addEventListener('change', e => {
+    const c = e.target.closest('[data-cc-pick]');
+    if (!c) return;
+    if (c.checked) ccLeftOff.delete(c.dataset.ccPick); else ccLeftOff.add(c.dataset.ccPick);
+    c.closest('tr').classList.toggle('dim', !c.checked);
+    $('cc-all').checked = ccPeople().every(p => !ccLeftOff.has(ccKey(p)));
+  });
+  $('cc-all').addEventListener('change', () => {
+    ccPeople().forEach(p => { if ($('cc-all').checked) ccLeftOff.delete(ccKey(p)); else ccLeftOff.add(ccKey(p)); });
+    renderClockCheck();
+  });
+  $('cc-email').addEventListener('click', async () => {
+    const people = ccPeople().filter(p => !ccLeftOff.has(ccKey(p)));
+    if (!people.length) return alert('Tick at least one person to email about.');
+    if (!confirm(`Email department leaders about ${people.length} ${people.length === 1 ? 'person' : 'people'} who clocked in without doing the in-service?`)) return;
+    try {
+      const r = await post('/api/admin/clock-check/email', { people: people.map(p => ({ name: p.name, last4: p.last4, department: p.department, shifts: p.shifts, neverDone: !p.done, missedDates: p.missedDates })) });
+      alert(`Sent to ${r.leaders} leader${r.leaders === 1 ? '' : 's'} about ${r.people} ${r.people === 1 ? 'person' : 'people'}.` +
+        (r.skipped.length ? `\n\nNot emailed (no leader email for their department): ${r.skipped.join(', ')}. Add leader emails in Settings → Department leaders.` : ''));
+    } catch (err) { alert(err.message); }
+  });
   $('cc-csv').addEventListener('click', () => {
     const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const lines = $('cc-filter').value === 'people'
