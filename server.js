@@ -934,12 +934,27 @@ function followUpMiss(r) {
     leader: leaderName(leader), emailedTo: emailsIn(leader), createdAt: nowIso(), attestedAt: null, attestedBy: '' };
   db.followups.push(f);
   saveDb();
-  if (!f.emailedTo.length) return;
-  sendEmail(f.emailedTo, `Please follow up: ${r.name} missed an in-service question`, emailHtml(`${r.name} missed a question`, [
-    ['Staff', `${r.name}${r.department ? ' (' + r.department + ')' : ''}`], ['Topic', r.topicTitle], ['Question', r.question],
-    ['They first answered', f.firstAnswer], ['Correct answer', r.correctAnswer], ['When', when(r.completedAt || r.submittedAt)],
-    ['What to do', 'Take a minute to go over this with them, then tap the button to confirm.']
-  ], { url: `${siteUrl()}/attest/${f.token}`, label: "I've educated them" }), 'follow-up').catch(() => {});
+  if (f.emailedTo.length) emailFollowup(f, false).catch(() => {});
+}
+function emailFollowup(f, reminder) {
+  return sendEmail(f.emailedTo, `${reminder ? 'Reminder: please' : 'Please'} follow up: ${f.name} missed an in-service question`,
+    emailHtml(`${reminder ? 'Reminder: ' : ''}${f.name} missed a question`, [
+      ['Staff', `${f.name}${f.department ? ' (' + f.department + ')' : ''}`], ['Topic', f.topicTitle], ['Question', f.question],
+      ['They first answered', f.firstAnswer], ['Correct answer', f.correctAnswer], ['When', when(f.createdAt)],
+      ['What to do', 'Take a minute to go over this with them, then tap the button to confirm.']
+    ], { url: `${siteUrl()}/attest/${f.token}`, label: "I've educated them" }), reminder ? 'reminder' : 'follow-up');
+}
+// One reminder email per leader listing everyone still waiting on them.
+function digestHtml(list) {
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1d2b36;max-width:600px">
+    <h2 style="color:#1f5f7a;margin:0 0 8px">Reminder: ${list.length} ${list.length === 1 ? 'person needs' : 'people need'} a quick re-education</h2>
+    <p style="margin:0 0 14px;color:#5b6b78">Go over the question with each person, then tap their button to confirm.</p>
+    ${list.map(f => `<div style="border:1px solid #dbe3e9;border-radius:10px;padding:12px 14px;margin-bottom:10px">
+      <strong>${esc(f.name)}</strong>${f.department ? ` <span style="color:#5b6b78">(${esc(f.department)})</span>` : ''} <span style="color:#5b6b78;font-size:13px">· ${esc(when(f.createdAt))}</span>
+      <div style="margin-top:4px">${esc(f.question)}</div>
+      <div style="font-size:13px;color:#5b6b78;margin-top:2px">They answered: ${esc(f.firstAnswer)} · Correct: ${esc(f.correctAnswer)}</div>
+      <div style="margin-top:10px"><a href="${esc(siteUrl() + '/attest/' + f.token)}" style="background:#1f5f7a;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:14px">I've educated ${esc(f.name.split(' ')[0])}</a></div></div>`).join('')}
+    <p style="color:#5b6b78;font-size:12px;margin-top:20px">Sent by the ${esc(db.settings.facilityName || 'Stonehenge')} in-service kiosk.</p></div>`;
 }
 function attestPage(f) {
   const done = f.attestedAt;
@@ -1677,6 +1692,37 @@ async function adminRoutes(req, res, p, m, url) {
     if (b.undo) { f.attestedAt = null; f.attestedBy = ''; } else if (!f.attestedAt) { f.attestedAt = nowIso(); f.attestedBy = cleanText(b.by, 80) || 'Admin'; }
     saveDb();
     return send(res, 200, { ok: true });
+  }
+  // "Remind": email the leader again, for one follow-up or (all) one email per leader with everything still open.
+  const fr = m === 'POST' && p.match(/^\/api\/admin\/followups\/([\w-]+)\/remind$/);
+  if (fr) {
+    const f = db.followups.find(x => x.id === fr[1]);
+    if (!f || f.attestedAt) return send(res, 400, { error: 'Already educated.' });
+    f.emailedTo = emailsIn(leaderFor(f.department)).length ? emailsIn(leaderFor(f.department)) : f.emailedTo;   // pick up a newly added leader email
+    if (!f.emailedTo.length) return send(res, 400, { error: `No leader email for ${f.department || 'this department'}. Add one in Settings → Department leaders.` });
+    const log = await emailFollowup(f, true);
+    if (log.status !== 'sent') return send(res, 400, { error: log.status === 'email not set up' ? 'Email is not connected yet (see Settings → Email alerts).' : 'Sending failed: ' + (log.error || log.status) });
+    f.reminders = (f.reminders || []).concat(nowIso()); saveDb();
+    return send(res, 200, { ok: true, to: f.emailedTo });
+  }
+  if (m === 'POST' && p === '/api/admin/followups/remind-all') {
+    const groups = new Map(), skipped = [];
+    for (const f of db.followups.filter(x => !x.attestedAt)) {
+      const to = emailsIn(leaderFor(f.department)).length ? emailsIn(leaderFor(f.department)) : f.emailedTo;
+      if (!to.length) { skipped.push(f.department || 'No department'); continue; }
+      f.emailedTo = to;
+      const k = to.join(',');
+      groups.set(k, (groups.get(k) || []).concat(f));
+    }
+    if (!groups.size) return send(res, 400, { error: skipped.length ? `No leader emails for: ${[...new Set(skipped)].join(', ')}.` : 'Nothing is waiting.' });
+    let sent = 0, failed = '';
+    for (const [k, list] of groups) {
+      const log = await sendEmail(k.split(','), `Reminder: ${list.length} in-service follow-up${list.length === 1 ? '' : 's'} waiting`, digestHtml(list), 'reminder');
+      if (log.status === 'sent') { sent++; list.forEach(f => { f.reminders = (f.reminders || []).concat(nowIso()); }); } else failed = log.status === 'email not set up' ? 'Email is not connected yet (see Settings → Email alerts).' : log.error || log.status;
+    }
+    saveDb();
+    if (!sent) return send(res, 400, { error: 'Sending failed: ' + failed });
+    return send(res, 200, { ok: true, leaders: sent, skipped: [...new Set(skipped)] });
   }
   if (m === 'POST' && p === '/api/admin/email/test') {
     const b = await readBody(req);

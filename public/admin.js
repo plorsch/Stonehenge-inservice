@@ -1689,6 +1689,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const { followups, emailReady } = await api('/api/admin/followups');
       const open = followups.filter(f => !f.attestedAt).length;
       $('fu-count').hidden = !open; $('fu-count').textContent = `${open} open`;
+      $('fu-remind-all').hidden = !open;
       fillSelect($('fu-dept'), [['', 'All departments']], [...new Set(followups.map(f => f.department).filter(Boolean))].sort());
       $('fu-email-note').textContent = emailReady ? '' : 'Email isn\'t connected yet, so leaders aren\'t emailed. See Settings → Email alerts.';
       const fv = $('fu-filter').value, fd = $('fu-dept').value;
@@ -1699,12 +1700,27 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <td>${escapeHtml(f.firstAnswer)}</td>
         <td class="small">${escapeHtml(f.leader || '')}${f.emailedTo.length ? `<div class="muted">✉ ${escapeHtml(f.emailedTo.join(', '))}</div>` : '<div class="muted">No leader email</div>'}</td>
         <td style="white-space:nowrap">${f.attestedAt ? `<span class="pill good">✓ Educated</span><div class="muted small">${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}</div><a href="#" class="small" data-fu-undo="${f.id}">Undo</a>`
-          : `<button class="btn subtle" data-fu-attest="${f.id}">Mark educated</button>`}</td></tr>`).join('')
+          : `<button class="btn subtle" data-fu-attest="${f.id}">Mark educated</button><button class="btn subtle" data-fu-remind="${f.id}" title="Email the leader a reminder">✉ Remind</button>${(f.reminders || []).length ? `<div class="muted small">Reminded ${f.reminders.length}×, last ${fmtWhen(f.reminders[f.reminders.length - 1])}</div>` : ''}`}</td></tr>`).join('')
         || `<tr><td colspan="7" class="muted">${fv === 'open' ? 'Nothing waiting. Everyone is caught up. 🎉' : 'None yet.'}</td></tr>`;
     } catch (err) { fail(err); }
   }
   ['fu-filter', 'fu-dept'].forEach(id => $(id).addEventListener('change', loadFollowups));
+  $('fu-remind-all').addEventListener('click', async () => {
+    if (!confirm('Email each department leader one reminder listing everyone still waiting on them?')) return;
+    try {
+      const r = await post('/api/admin/followups/remind-all');
+      alert(`Sent to ${r.leaders} leader${r.leaders === 1 ? '' : 's'}.` + (r.skipped.length ? `\n\nNo leader email for: ${r.skipped.join(', ')}. Add one in Settings → Department leaders.` : ''));
+    } catch (err) { alert(err.message); }
+    loadFollowups();
+  });
   $('fu-rows').addEventListener('click', async e => {
+    const rm = e.target.closest('[data-fu-remind]');
+    if (rm) {
+      rm.disabled = true;
+      try { const r = await post(`/api/admin/followups/${rm.dataset.fuRemind}/remind`); toast('Reminder sent to ' + r.to.join(', ')); }
+      catch (err) { alert(err.message); }
+      return loadFollowups();
+    }
     const a = e.target.closest('[data-fu-attest]'), u = e.target.closest('[data-fu-undo]');
     if (!a && !u) return;
     e.preventDefault();
