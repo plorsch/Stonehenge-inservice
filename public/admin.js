@@ -328,6 +328,27 @@
   const showTip = (e, html) => { tip.innerHTML = html; tip.hidden = false; const r = tip.getBoundingClientRect();
     tip.style.left = Math.min(innerWidth - r.width - 8, e.clientX + 14) + 'px'; tip.style.top = Math.max(8, e.clientY - r.height - 12) + 'px'; };
   const hideTip = () => { tip.hidden = true; };
+  // Hover a department in the missing-leader warning to see who's in it; click to open it on the Staff tab.
+  const deptPeople = d => state.employees.filter(e => e.active && sameDept(e.department, d)).sort((a, b) => a.name.localeCompare(b.name));
+  document.addEventListener('mouseover', e => {
+    const a = e.target.closest('[data-gap-dept]');
+    if (!a) return;
+    const list = deptPeople(a.dataset.gapDept);
+    showTip(e, `<b>${escapeHtml(a.dataset.gapDept)}</b> · ${list.length} active staff<br>` +
+      (list.length ? list.slice(0, 15).map(p => escapeHtml(p.name) + (p.jobTitle ? ` <span style="opacity:.7">${escapeHtml(p.jobTitle)}</span>` : '')).join('<br>') + (list.length > 15 ? `<br>…and ${list.length - 15} more` : '') : 'No active staff') +
+      '<br><span style="opacity:.7">Click to see them on the Staff tab</span>');
+  });
+  document.addEventListener('mouseout', e => { if (e.target.closest('[data-gap-dept]')) hideTip(); });
+  document.addEventListener('click', e => {
+    const a = e.target.closest('[data-gap-dept]');
+    if (!a) return;
+    e.preventDefault(); hideTip();
+    goTab('staff');
+    $('staff-filter').value = 'all'; $('staff-search').value = ''; $('staff-missing').value = '';
+    renderStaff();
+    const opt = [...$('staff-dept').options].find(o => sameDept(o.value, a.dataset.gapDept));
+    if (opt) { $('staff-dept').value = opt.value; renderStaff(); }
+  });
   const dayLabel = d => { const [y, m, day] = d.split('-').map(Number); return new Date(y, m - 1, day); };
   // Stacked columns: right first try on the bottom, missed on top, 2px gap between, rounded top.
   function drawDays(days) {
@@ -1284,8 +1305,10 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const g = leaderGaps();
     if (!g.noLeader.length && !g.noEmail.length) return '';
     const go = link ? ' <a href="#" data-go="leaders">Fix it →</a>' : '';
-    return [g.noLeader.length ? `<b>No leader:</b> ${g.noLeader.map(escapeHtml).join(', ')}` : '',
-      g.noEmail.length ? `<b>Leader has no email:</b> ${g.noEmail.map(escapeHtml).join(', ')}` : ''].filter(Boolean).join('<br>') + go;
+    const chip = d => { const n = state.employees.filter(e => e.active && sameDept(e.department, d)).length;
+      return `<a href="#" class="gap-dept" data-gap-dept="${escapeHtml(d)}">${escapeHtml(d)} <span class="muted">(${n})</span></a>`; };
+    return [g.noLeader.length ? `<b>No leader:</b> ${g.noLeader.map(chip).join(', ')}` : '',
+      g.noEmail.length ? `<b>Leader has no email:</b> ${g.noEmail.map(chip).join(', ')}` : ''].filter(Boolean).join('<br>') + go;
   }
   const mainDepts = () => [...new Set(MAIN_DEPTS.concat(Object.keys(state.settings.leaders || {})))];
   $('staff-group-btn').addEventListener('click', () => {
