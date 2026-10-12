@@ -139,6 +139,7 @@ function defaultSettings() {
     // button: a 🏆 button on the home screen that opens the full leaderboard.
     streaks: { shoutOuts: false, leaderboard: 'off', top: 3, board: 'facility', button: false },
     newsSeconds: 3,           // how long each announcement shows in the home screen banner
+    kioskQuietMin: 120,       // warn on the admin page when the iPad hasn't checked in for this long (0 = never)
     // Shown to the person after their in-service on their day; one picked at random. {name} = first name, {years} = years worked.
     birthdayMessages: ['Happy birthday, {name}! We hope your day is as great as you are.', 'Happy birthday, {name}! Thanks for spending part of your special day with us.',
       'Happy birthday, {name}! Our residents and team are lucky to have you.', 'It\'s your day, {name}! Happy birthday from all of us.'],
@@ -850,7 +851,18 @@ const todaysCelebrations = () => celebrationsOn(today());
 // ---------- Kiosk routes (no login) ----------
 
 // When the iPad last checked in. It asks for its settings every minute while it shows the keypad.
+// When the iPad last loaded its settings (it does every minute on the home screen). Kept in a small file so a restart
+// or update doesn't look like the iPad went quiet.
+const KIOSK_SEEN_FILE = path.join(DATA_DIR, 'kiosk-seen.json');
 let kioskSeen = null;
+try { kioskSeen = JSON.parse(fs.readFileSync(KIOSK_SEEN_FILE, 'utf8')); } catch { kioskSeen = null; }
+let kioskSeenSaved = 0;
+function noteKioskSeen(seen) {
+  kioskSeen = seen;
+  if (Date.now() - kioskSeenSaved < 5 * 60000) return;
+  kioskSeenSaved = Date.now();
+  try { fs.writeFileSync(KIOSK_SEEN_FILE, JSON.stringify(seen)); } catch { /* not important */ }
+}
 const serverStartedAt = nowIso();
 
 // ---------- Email alerts and leader follow-ups ----------
@@ -998,8 +1010,8 @@ async function kioskRoutes(req, res, p, m) {
     // ?month=10 previews another month's decor from the admin page.
     const previewMonth = Number(new URL(req.url, 'http://localhost').searchParams.get('month'));
     if (!previewMonth) {
-      kioskSeen = { at: nowIso(), device: /iPad|Macintosh.*Mobile/.test(req.headers['user-agent'] || '') ? 'iPad' : 'browser',
-        waiting: Math.max(0, Math.min(10000, Number(new URL(req.url, 'http://localhost').searchParams.get('waiting')) || 0)) };
+      noteKioskSeen({ at: nowIso(), device: /iPad|Macintosh.*Mobile/.test(req.headers['user-agent'] || '') ? 'iPad' : 'browser',
+        waiting: Math.max(0, Math.min(10000, Number(new URL(req.url, 'http://localhost').searchParams.get('waiting')) || 0)) });
     }
     const month = previewMonth || new Date().getMonth() + 1;
     const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
@@ -1628,6 +1640,7 @@ async function adminRoutes(req, res, p, m, url) {
     }
     if (Array.isArray(b.birthdayMessages)) s.birthdayMessages = cleanList(b.birthdayMessages, 250, 300);
     if (Array.isArray(b.anniversaryMessages)) s.anniversaryMessages = cleanList(b.anniversaryMessages, 250, 300);
+    if ('kioskQuietMin' in b && [0, 30, 60, 120, 240, 480].includes(Number(b.kioskQuietMin))) s.kioskQuietMin = Number(b.kioskQuietMin);
     if ('newsSeconds' in b) { const n = Number(b.newsSeconds); if (n >= 1 && n <= 60) s.newsSeconds = Math.round(n); }
     if (Array.isArray(b.closingMessages)) s.closingMessages = b.closingMessages.slice(0, 100).map(cleanMessage).filter(Boolean);
     if (b.decor && typeof b.decor === 'object' && Array.isArray(b.decor.months) && b.decor.months.length === 12) {

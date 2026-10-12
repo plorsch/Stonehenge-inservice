@@ -430,7 +430,7 @@
 
   // ---------- iPad check ----------
   // The iPad asks for its settings every minute while it shows the keypad. Warn when it goes quiet.
-  const KIOSK_QUIET_MIN = 10;
+  const quietMin = () => state && state.settings && Number.isInteger(state.settings.kioskQuietMin) ? state.settings.kioskQuietMin : 120;
   const ago = mins => mins < 1 ? 'just now' : mins < 60 ? `${Math.round(mins)} minute${Math.round(mins) === 1 ? '' : 's'} ago`
     : mins < 48 * 60 ? `${Math.round(mins / 60)} hour${Math.round(mins / 60) === 1 ? '' : 's'} ago` : `${Math.round(mins / 1440)} days ago`;
   async function checkKiosk() {
@@ -440,7 +440,8 @@
     const mins = k.kioskSeen ? (now - new Date(k.kioskSeen.at)) / 60000 : null;
     const upMins = (now - new Date(k.serverStartedAt)) / 60000;
     // Right after an update the site restarts and hasn't heard from the iPad yet; give it a few minutes.
-    const quiet = mins === null ? upMins > 5 : mins > KIOSK_QUIET_MIN;
+    const limit = quietMin();
+    const quiet = !!limit && (mins === null ? upMins > Math.max(5, limit) : mins > limit);
     const noneToday = !k.responseCountToday && new Date().getHours() >= 10;
     const alerts = [];
     if (quiet) alerts.push(`The iPad hasn't checked in for ${mins === null ? 'over ' + ago(upMins).replace(' ago', '') : ago(mins).replace(' ago', '')}. <span class="small">Check that it's charged, on Wi-Fi, and showing the in-service page.</span>`);
@@ -450,10 +451,20 @@
     $('kiosk-status').innerHTML = `<div><span class="dot${quiet ? ' off' : ''}"></span>${k.kioskSeen ? `Last checked in ${ago(mins)}${k.kioskSeen.device === 'iPad' ? ' from the iPad' : ''}.` : 'Waiting to hear from the iPad.'}</div>
       <div class="muted" style="margin-top:4px">Last in-service: ${k.lastResponseAt ? fmtWhen(k.lastResponseAt) : 'none yet'}. Completed today: ${k.responseCountToday}.</div>
       ${k.kioskSeen && k.kioskSeen.waiting ? `<div style="margin-top:4px">${k.kioskSeen.waiting} answer${k.kioskSeen.waiting === 1 ? '' : 's'} saved on the iPad while it was offline ${k.kioskSeen.waiting === 1 ? 'is' : 'are'} waiting to upload.</div>` : ''}
-      <div class="muted" style="margin-top:4px">A warning shows at the top of this page if the iPad goes ${KIOSK_QUIET_MIN} minutes without checking in, or if no one has done an in-service by 10 am.</div>`;
+      <div style="margin-top:10px">The iPad checks in every minute while it shows the in-service page, whether or not anyone uses it. Warn me at the top of this page when it's been quiet for
+        <select id="quiet-min">${[[30, '30 minutes'], [60, '1 hour'], [120, '2 hours'], [240, '4 hours'], [480, '8 hours'], [0, 'never warn me']].map(([v, l]) => `<option value="${v}"${v === limit ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="muted" style="margin-top:4px">A warning also shows if no one has done an in-service by 10 am.</div>`;
   }
   checkKiosk();
   setInterval(checkKiosk, 60000);
+  $('kiosk-status').addEventListener('change', async e => {
+    if (e.target.id !== 'quiet-min') return;
+    try {
+      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ kioskQuietMin: Number(e.target.value) }) });
+      state.settings.kioskQuietMin = Number(e.target.value);
+      toast('Saved'); checkKiosk();
+    } catch (err) { fail(err); }
+  });
 
   // ---------- schedule ----------
   function renderSchedule() {
@@ -2013,30 +2024,63 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         if (!b) return;
         t.style.setProperty('--span', b.dataset.span); markWidth(t); saveLayout();
       });
-      // Drag to move (mouse, trackpad or touch).
-      ctl.addEventListener('pointerdown', e => {
-        if (e.target.closest('.w') || !$('set-grid').classList.contains('editing')) return;
+      // Drag anywhere on a tile to move it (mouse, trackpad or touch). The tile follows the pointer,
+      // a dashed space shows where it will land, and the other tiles slide out of the way.
+      t.addEventListener('pointerdown', e => {
+        if (!$('set-grid').classList.contains('editing') || e.button > 0 || e.target.closest('.w, .tile-resize')) return;
         e.preventDefault();
-        ctl.setPointerCapture(e.pointerId);
-        t.classList.add('dragging');
-        let target = null, after = false;
-        const clear = () => tiles().forEach(x => x.classList.remove('drop-before', 'drop-after'));
-        const move = ev => {
-          clear();
-          const el = document.elementFromPoint(ev.clientX, ev.clientY);
-          const over = el && el.closest('#set-grid > .card');
-          if (!over || over === t) { target = null; return; }
+        const grid = $('set-grid');
+        const r0 = t.getBoundingClientRect();
+        const dx = e.clientX - r0.left, dy = e.clientY - r0.top;
+        const ph = document.createElement('div');
+        ph.className = 'tile-ph';
+        ph.style.setProperty('--span', spanOf(t));
+        ph.style.height = r0.height + 'px';
+        t.after(ph);
+        Object.assign(t.style, { position: 'fixed', left: r0.left + 'px', top: r0.top + 'px', width: r0.width + 'px', height: r0.height + 'px', zIndex: 50 });
+        t.classList.add('lifted');
+        let lastX = e.clientX, lastY = e.clientY, scrollTimer = null;
+        // Smoothly slide tiles from where they were to where they are now.
+        const slide = fn => {
+          const others = tiles().filter(x => x !== t);
+          const before = new Map(others.map(x => [x, x.getBoundingClientRect()]));
+          fn();
+          for (const x of others) {
+            const b = before.get(x), n = x.getBoundingClientRect();
+            if (!b || (b.left === n.left && b.top === n.top)) continue;
+            x.animate([{ transform: `translate(${b.left - n.left}px, ${b.top - n.top}px)` }, { transform: 'none' }], { duration: 180, easing: 'ease-out' });
+          }
+        };
+        const place = () => {
+          t.style.left = (lastX - dx) + 'px'; t.style.top = (lastY - dy) + 'px';
+          const over = tiles().filter(x => x !== t).find(x => { const r = x.getBoundingClientRect(); return lastX >= r.left && lastX <= r.right && lastY >= r.top && lastY <= r.bottom; });
+          if (!over) return;
           const r = over.getBoundingClientRect();
-          after = ev.clientX > r.left + r.width / 2;
-          target = over;
-          over.classList.add(after ? 'drop-after' : 'drop-before');
+          // Same row: left or right half decides. Full-width tiles: top or bottom half.
+          const after = r.width > grid.clientWidth * 0.75 ? lastY > r.top + r.height / 2 : lastX > r.left + r.width / 2;
+          const ref = after ? over.nextElementSibling : over;
+          if (ref === ph || (after ? over.nextElementSibling === ph : over.previousElementSibling === ph)) return;
+          slide(() => grid.insertBefore(ph, after ? over.nextSibling : over));
         };
+        const move = ev => { lastX = ev.clientX; lastY = ev.clientY; place(); };
+        // Scroll the page when dragging near the top or bottom edge.
+        scrollTimer = setInterval(() => {
+          const edge = 90, speed = lastY < edge ? -(edge - lastY) / 3 : lastY > innerHeight - edge ? (lastY - innerHeight + edge) / 3 : 0;
+          if (speed) { scrollBy(0, speed); place(); }
+        }, 16);
         const up = () => {
-          ctl.removeEventListener('pointermove', move); ctl.removeEventListener('pointerup', up); ctl.removeEventListener('pointercancel', up);
-          clear(); t.classList.remove('dragging');
-          if (target) { target.insertAdjacentElement(after ? 'afterend' : 'beforebegin', t); saveLayout(); }
+          clearInterval(scrollTimer);
+          removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+          const rp = ph.getBoundingClientRect();
+          ph.replaceWith(t);
+          Object.assign(t.style, { position: '', left: '', top: '', width: '', height: '', zIndex: '' });
+          t.classList.remove('lifted');
+          const rn = t.getBoundingClientRect();
+          t.animate([{ transform: `translate(${lastX - dx - rn.left}px, ${lastY - dy - rn.top}px)` }, { transform: 'none' }], { duration: 160, easing: 'ease-out' });
+          void rp;
+          saveLayout();
         };
-        ctl.addEventListener('pointermove', move); ctl.addEventListener('pointerup', up); ctl.addEventListener('pointercancel', up);
+        addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
       });
       // Drag the right edge to resize; it snaps to the 12-column grid.
       rz.addEventListener('pointerdown', e => {

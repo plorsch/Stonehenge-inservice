@@ -237,13 +237,19 @@ table.la tr:hover td { background: transparent; }
 /* Settings tiles and the layout editor */
 .layout-bar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .lay-help { margin-right: auto; font-size: 13px; color: #17485d; background: #e9f3f7; padding: 6px 12px; border-radius: 999px; }
-.tiles-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.tiles-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; align-items: stretch; }
 .tiles-grid > .card { grid-column: span var(--span, 6); margin: 0; min-width: 0; position: relative; }
 @media (max-width: 760px) { .tiles-grid > .card { grid-column: 1 / -1 !important; } }
 .tile-ctl { display: none; }
-.tiles-grid.editing > .card { outline: 2px dashed #8fb3c2; outline-offset: 2px; padding-top: 0; overflow: hidden; }
+.tiles-grid.editing > .card { outline: 2px dashed #8fb3c2; outline-offset: 2px; padding-top: 0; overflow: hidden; max-height: 170px; cursor: grab; touch-action: none; user-select: none; }
+.tiles-grid.editing > .card::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 60px; background: linear-gradient(transparent, var(--card, #fff)); pointer-events: none; }
+.tiles-grid.editing > .card:hover { outline-color: #1f6f8b; }
+.tiles-grid.editing > .card > h2:first-of-type { display: none; }
+.tiles-grid > .card.lifted { cursor: grabbing; box-shadow: 0 18px 40px rgba(16, 40, 60, .28); transform: rotate(1.2deg) scale(1.02); outline-color: #1f6f8b; }
+.tile-ph { grid-column: span var(--span, 6); border: 2px dashed #1f6f8b; border-radius: 16px; background: rgba(31, 111, 139, .07); }
+@media (max-width: 760px) { .tile-ph { grid-column: 1 / -1; } }
 .tiles-grid.editing > .card > :not(.tile-ctl):not(.tile-resize) { pointer-events: none; opacity: .55; user-select: none; }
-.tiles-grid.editing .tile-ctl { display: flex; align-items: center; gap: 8px; margin: 0 -22px 14px; padding: 8px 12px; background: #e9f3f7; cursor: grab; touch-action: none; user-select: none; }
+.tiles-grid.editing .tile-ctl { display: flex; align-items: center; gap: 8px; margin: 0 -22px 14px; padding: 8px 12px; background: #e9f3f7; }
 .tile-ctl .grip { font-size: 18px; color: #1f6f8b; }
 .tile-ctl .t { font-weight: 700; color: #17485d; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile-ctl .w { display: flex; gap: 3px; }
@@ -252,9 +258,6 @@ table.la tr:hover td { background: transparent; }
 .tile-resize { display: none; position: absolute; top: 0; right: 0; width: 14px; height: 100%; cursor: ew-resize; touch-action: none; }
 .tile-resize::after { content: ''; position: absolute; top: 50%; right: 4px; width: 4px; height: 44px; margin-top: -22px; border-radius: 4px; background: #1f6f8b; opacity: .6; }
 .tiles-grid.editing .tile-resize { display: block; }
-.tiles-grid > .card.dragging { opacity: .4; }
-.tiles-grid > .card.drop-before { box-shadow: -6px 0 0 #f4b400; }
-.tiles-grid > .card.drop-after { box-shadow: 6px 0 0 #f4b400; }
 
 /* Styled end-screen messages */
 #set-closing .cm-row { grid-template-columns: 1fr 34px 34px 34px; align-items: start; }
@@ -718,7 +721,7 @@ table.la tr:hover td { background: transparent; }
   <!-- Settings -->
   <section class="tab" id="tab-settings">
     <div class="layout-bar" id="lay-bar">
-      <span class="lay-help" id="lay-help" hidden>Drag a tile by its top bar to move it. Drag its right edge, or pick a width, to resize. Changes save for your login.</span>
+      <span class="lay-help" id="lay-help" hidden>Drag any tile to move it. Drag its right edge, or pick a width, to resize. Changes save for your login.</span>
       <button class="btn ghost" id="lay-reset" hidden>Reset to default</button>
       <button class="btn ghost" id="lay-edit">✥ Edit layout</button>
     </div>
