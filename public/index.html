@@ -792,7 +792,7 @@
     const reviewHtml = `<strong>${T('Quick check-in', 'Repaso rápido')}</strong>${T("This one was tricky last time. Let's see if it stuck.", 'Esta fue difícil la última vez. Veamos si la recuerda.')}`;
     // Quiz day: the editable explainer from Settings, above the question.
     const qt = it.quizText || {};
-    const quizHtml = `<strong>${T('🧠 Pop quiz!', '🧠 ¡Prueba sorpresa!')}</strong>${escapeHtml(T(qt.en || 'This checks something you learned this past week.', qt.es || qt.en || 'Esto repasa algo que aprendió esta semana.'))}<div style="font-size:14px;margin-top:6px;opacity:.8">${T('Topic', 'Tema')}: ${escapeHtml(es() ? it.es.title : it.topic.title)}</div>`;
+    const quizHtml = `<strong>${T('🧠 Pop quiz!', '🧠 ¡Prueba sorpresa!')}</strong>${escapeHtml(T(qt.en || 'This checks something you learned this past week.', qt.es || qt.en || 'Esto repasa algo que aprendió esta semana.'))}<div style="margin-top:4px"><em>${T('(This counts toward your streak 🔥)', '(Esto cuenta para su racha 🔥)')}</em></div><div style="font-size:14px;margin-top:6px;opacity:.8">${T('Topic', 'Tema')}: ${escapeHtml(es() ? it.es.title : it.topic.title)}</div>`;
     $('question-review').className = 'required-banner ' + (it.kind === 'quiz' ? 'quiz' : 'review');
     $('question-review').innerHTML = it.kind === 'review' ? reviewHtml : it.kind === 'quiz' ? quizHtml : '';
     $('question-review').hidden = !['review', 'quiz'].includes(it.kind);
