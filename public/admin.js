@@ -615,8 +615,13 @@
   function renderStaff() {
     const q = $('staff-search').value.trim().toLowerCase();
     const f = $('staff-filter').value;
-    const rows = state.employees
-      .filter(e => f === 'all' || (f === 'active' ? e.active : !e.active))
+    const inSet = state.employees.filter(e => f === 'all' || (f === 'active' ? e.active : !e.active));
+    const noBday = inSet.filter(e => !e.birthday).length, noHire = inSet.filter(e => !e.hireDate).length;
+    const mo = $('staff-missing').options;
+    mo[0].textContent = `Everyone (${inSet.length})`; mo[1].textContent = `Missing birthday (${noBday})`; mo[2].textContent = `Missing hire date (${noHire})`;
+    const miss = $('staff-missing').value;
+    const rows = inSet
+      .filter(e => !miss || (miss === 'birthday' ? !e.birthday : !e.hireDate))
       .filter(e => !q || [e.name, e.last4, e.department].join(' ').toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name));
     staffShown = rows.map(e => e.id);
@@ -734,6 +739,7 @@
 
   $('staff-search').addEventListener('input', renderStaff);
   $('staff-filter').addEventListener('change', renderStaff);
+  $('staff-missing').addEventListener('change', renderStaff);
   function openStaff(e) {
     editingStaffId = e ? e.id : null;
     $('staff-heading').textContent = e ? 'Edit staff' : 'Add staff';
