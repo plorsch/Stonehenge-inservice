@@ -586,10 +586,23 @@
   $('la-next').addEventListener('click', () => { laStart = addDay(laStart, 7); loadLookAhead(); });
   $('la-now').addEventListener('click', () => { laStart = null; loadLookAhead(); });
   $('la-weeks').addEventListener('change', loadLookAhead);
+  // Tapping a square shows what that topic is, with buttons to schedule it (or swap it) and to preview it.
   $('la-grid').addEventListener('click', e => {
     const b = e.target.closest('[data-la-dept]');
     if (!b) return;
-    const ds = b.dataset;
+    const ds = b.dataset, t = ds.laTopic && topicById(ds.laTopic);
+    if (!t) return laSchedule(ds);
+    const when = `${fmtDate(ds.laFrom)}${ds.laTo !== ds.laFrom ? ' – ' + fmtDate(ds.laTo) : ''}`;
+    const what = (b.querySelector('small') || {}).textContent || '';
+    showDetails(t, {
+      note: `📅 ${escapeHtml(ds.laDept || 'All staff')} · ${when}${what ? ' · ' + escapeHtml(what) : ''}`,
+      actions: [
+        ...(t.questions.length ? [['▶ Preview on the iPad', () => showPreview(t)]] : []),
+        [ds.laSource === 'schedule' ? '📋 See it in the schedule list' : '📅 Schedule this or swap it', () => { $('viewer').close(); laSchedule(ds); }]
+      ]
+    });
+  });
+  function laSchedule(ds) {
     if (ds.laSource === 'schedule') {
       $('sc-rows').closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
       $('sc-rows').closest('.card').classList.remove('flash-card'); void $('sc-rows').offsetWidth; $('sc-rows').closest('.card').classList.add('flash-card');
@@ -605,7 +618,7 @@
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     card.classList.remove('flash-card'); void card.offsetWidth; card.classList.add('flash-card');
     toast('Check the topic and dates, then press "Add to schedule"');
-  });
+  }
 
   function setWeek(offset) {
     const d = new Date();
@@ -842,10 +855,13 @@
     if (!w) return alert('Your browser blocked the preview window. Allow pop-ups for this site and try again.');
     w.focus();
   }
-  function showDetails(t) {
+  // opts: { note (html shown at the top), actions: [[label, fn], ...] for extra buttons at the bottom }
+  function showDetails(t, opts = {}) {
     if (!t) return;
     $('vw-title').textContent = t.title;
-    $('vw-body').innerHTML = `<div class="muted small" style="margin-top:12px">For: ${whoLabel(t.departments)}</div>
+    $('vw-actions').innerHTML = (opts.actions || []).map(([label], i) => `<button class="btn ghost" data-vw-act="${i}">${escapeHtml(label)}</button>`).join('');
+    $('vw-actions').onclick = e => { const x = e.target.closest('[data-vw-act]'); if (x) opts.actions[x.dataset.vwAct][1](); };
+    $('vw-body').innerHTML = `${opts.note ? `<div class="vw-note">${opts.note}</div>` : ''}<div class="muted small" style="margin-top:12px">For: ${whoLabel(t.departments)}</div>
       <div class="lesson-preview" style="margin-top:8px">${formatLesson(t.lesson) || '<span class="muted">No lesson yet.</span>'}</div>
       ${t.questions.map((q, n) => `
         <h3 style="margin-top:18px">Question ${n + 1}${q.type === 'multi' ? ' <span class="pill brand">Select all that apply</span>' : ''}: ${formatInline(q.text)}</h3>
