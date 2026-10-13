@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign in · In-Service Admin</title>
+<link rel="manifest" href="/admin.webmanifest">
+<meta name="theme-color" content="#1f5f7a">
+<link rel="apple-touch-icon" href="/admin-apple-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="In-Service">
+<style>
+  :root { --brand: #1f5f7a; --ink: #1d2b36; --muted: #5b6b78; --line: #dbe3e9; --warn: #a4521b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink);
+    background: linear-gradient(160deg, #17485d, #1f6f8b 55%, #2b8aa3); }
+  form { width: min(380px, 100%); background: #fff; border-radius: 20px; padding: 28px 24px 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, .25); }
+  img { display: block; width: 200px; max-width: 70%; margin: 0 auto 6px; }
+  h1 { font-size: 19px; text-align: center; margin: 0 0 20px; color: var(--brand); }
+  label { display: block; font-weight: 600; font-size: 14px; margin: 12px 0 5px; }
+  input { width: 100%; font: inherit; font-size: 17px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #f7fafc; }
+  input:focus { outline: 2px solid var(--brand); outline-offset: -1px; background: #fff; }
+  button { width: 100%; margin-top: 20px; padding: 14px; border: 0; border-radius: 12px; background: var(--brand); color: #fff; font: inherit; font-size: 17px; font-weight: 650; cursor: pointer; }
+  button[disabled] { opacity: .6; }
+  .err { color: var(--warn); font-size: 14px; min-height: 20px; margin-top: 10px; text-align: center; }
+  .note { color: var(--muted); font-size: 13px; text-align: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+<form id="f">
+  <img src="/logo.png" alt="Stonehenge of Springville">
+  <h1>In-Service Admin</h1>
+  <label for="u">Username</label>
+  <input id="u" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+  <label for="p">Password</label>
+  <input id="p" name="password" type="password" autocomplete="current-password" required>
+  <button id="go">Sign in</button>
+  <div class="err" id="err"></div>
+  <div class="note">You stay signed in on this device for 90 days.</div>
+</form>
+<script>
+  const f = document.getElementById('f'), err = document.getElementById('err'), go = document.getElementById('go');
+  const next = new URLSearchParams(location.search).get('next') || '';
+  f.addEventListener('submit', async e => {
+    e.preventDefault();
+    err.textContent = ''; go.disabled = true; go.textContent = 'Signing in…';
+    try {
+      const r = await fetch('/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ username: f.username.value, password: f.password.value }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'Something went wrong. Try again.');
+      // Only go back to a page on this admin site.
+      location.replace(/^\/admin([/?#]|$)/.test(next) ? next : '/admin');
+    } catch (x) { err.textContent = x.message; go.disabled = false; go.textContent = 'Sign in'; }
+  });
+</script>
+</body>
+</html>

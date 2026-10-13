@@ -33,6 +33,7 @@
   async function api(path, opts = {}) {
     const res = await fetch(path, Object.assign({ cache: 'no-store', headers: { 'Content-Type': 'application/json' } }, opts));
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && data.signIn) { location.href = '/admin/login?next=' + encodeURIComponent(location.pathname); throw new Error('Signing in again…'); }
     if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
     return data;
   }

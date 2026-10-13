@@ -193,6 +193,7 @@ function upgradeDb(d) {
   d.followups = Array.isArray(d.followups) ? d.followups : [];
   d.emailLog = Array.isArray(d.emailLog) ? d.emailLog : [];
   d.admins = Array.isArray(d.admins) ? d.admins : [];
+  d.sessionSecret = d.sessionSecret || crypto.randomBytes(32).toString('hex');   // signs the admin sign-in cookie
   const old = d.settings || {};
   d.settings = Object.assign(defaultSettings(), old);
   d.settings.review = Object.assign({ on: true, firstDays: 2, secondDays: 7 }, d.settings.review);
@@ -819,9 +820,12 @@ const hashPassword = (password, salt = crypto.randomBytes(16).toString('hex')) =
 const okLogins = new Map();   // recently checked "user:password" -> username, so each page request doesn't re-run scrypt
 function isAdmin(req) {
   const header = req.headers.authorization || '';
-  if (!header.startsWith('Basic ')) return null;
+  if (!header.startsWith('Basic ')) return sessionUser(req);
   const [user, ...rest] = Buffer.from(header.slice(6), 'base64').toString('utf8').split(':');
-  const pass = rest.join(':');
+  return checkLogin(user, rest.join(':'), header);
+}
+function checkLogin(user, pass, cacheKey = `${user}:${pass}`) {
+  const header = cacheKey;
   const given = Buffer.from(`${user}:${pass}`);
   const expected = Buffer.from(`${config.adminUser}:${config.adminPassword}`);
   if (given.length === expected.length && crypto.timingSafeEqual(given, expected)) return config.adminUser;
@@ -838,10 +842,35 @@ function isAdmin(req) {
   return a.username;
 }
 
+// Signing in on the sign-in page sets a cookie that lasts 90 days. This is what the home-screen app uses,
+// since an iPhone home-screen app can't show the browser's username/password box.
+// The cookie stops working when that login's password changes or the login is removed.
+const SESSION_DAYS = 90;
+const loginStamp = user => user === config.adminUser ? crypto.createHash('sha256').update(String(config.adminPassword)).digest('hex').slice(0, 16)
+  : ((db.admins || []).find(a => a.username === user) || {}).hash;
+const sessionSig = (user, exp) => crypto.createHmac('sha256', db.sessionSecret).update(`${user}|${exp}|${loginStamp(user)}`).digest('base64url');
+function sessionCookie(req, user) {
+  const exp = Date.now() + SESSION_DAYS * 864e5;
+  const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
+  return `adm=${encodeURIComponent(user)}.${exp}.${sessionSig(user, exp)}; Path=/; Max-Age=${SESSION_DAYS * 86400}; HttpOnly; SameSite=Lax${secure}`;
+}
+function sessionUser(req) {
+  const m = /(?:^|;\s*)adm=([^;]+)/.exec(req.headers.cookie || '');
+  if (!m) return null;
+  const [u, exp, sig] = m[1].split('.');
+  const user = decodeURIComponent(u || '');
+  if (!user || !(Number(exp) > Date.now()) || !loginStamp(user)) return null;
+  const want = Buffer.from(sessionSig(user, exp)), got = Buffer.from(sig || '');
+  return want.length === got.length && crypto.timingSafeEqual(want, got) ? user : null;
+}
 function requireAdmin(req, res) {
   req.adminUser = isAdmin(req);
   if (req.adminUser) return true;
-  send(res, 401, 'Admin sign-in required.', 'text/plain', { 'WWW-Authenticate': 'Basic realm="In-Service Admin", charset="UTF-8"' });
+  const url = req.url || '/admin';
+  if (req.method === 'GET' && !url.startsWith('/api/')) {
+    res.writeHead(302, { Location: '/admin/login?next=' + encodeURIComponent(url), 'Cache-Control': 'no-store' });
+    res.end();
+  } else send(res, 401, { error: 'Please sign in again.', signIn: true });
   return false;
 }
 
@@ -2198,6 +2227,17 @@ async function handle(req, res) {
     });
   }
 
+  if (m === 'GET' && p === '/admin/login') return serveStatic(res, 'admin-login.html');
+  if (m === 'POST' && p === '/admin/login') {
+    const b = await readBody(req);
+    const user = checkLogin(String(b.username || '').trim().toLowerCase(), String(b.password || ''));
+    if (!user) { await new Promise(r => setTimeout(r, 600)); return send(res, 401, { error: 'That username and password don\'t match.' }); }
+    return send(res, 200, { ok: true }, 'application/json', { 'Set-Cookie': sessionCookie(req, user) });
+  }
+  if (p === '/admin/logout') {
+    res.writeHead(302, { Location: '/admin/login', 'Set-Cookie': 'adm=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax', 'Cache-Control': 'no-store' });
+    return res.end();
+  }
   if (p === '/admin' || p.startsWith('/admin/') || p === '/admin.js' || p.startsWith('/api/admin/')) {
     if (!requireAdmin(req, res)) return;
     if (m === 'GET' && (p === '/admin' || p === '/admin/')) return serveStatic(res, 'admin.html');
