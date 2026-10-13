@@ -45,11 +45,16 @@
   .who { font-size: 16px; color: var(--muted); }
   header { position: relative; }
   .trophy { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 12px 0 8px;
-    border-radius: 30px; border: 2px solid #f1c94e; background: #fff8e6; cursor: pointer; font: inherit; color: #8a5a00; animation: lb-glow 3.2s ease-in-out infinite; }
+    border-radius: 30px; border: 2px solid #f1c94e; background: #fff8e6; cursor: pointer; font: inherit; color: #8a5a00; }
+  /* The glow fades a fixed shadow in and out (opacity is cheap; animating box-shadow repaints every frame) */
+  .trophy::after { content: ''; position: absolute; inset: -2px; border-radius: inherit; box-shadow: 0 0 16px 4px rgba(241, 201, 78, .6); opacity: .3; pointer-events: none; animation: lb-glow 3.2s ease-in-out infinite; }
   .trophy .t-icon { font-size: 26px; line-height: 1; }
   .trophy .t-label { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
-  @keyframes lb-glow { 0%, 100% { box-shadow: 0 0 6px 1px rgba(241, 201, 78, .35); } 50% { box-shadow: 0 0 16px 4px rgba(241, 201, 78, .6); } }
-  @media (prefers-reduced-motion: reduce) { .trophy { animation: none; } }
+  @keyframes lb-glow { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .trophy::after { animation: none; } }
+  /* Rest mode: after a few quiet minutes on the home screen, stop everything that moves to save battery. A touch wakes it. */
+  body.on-home.resting #decor { display: none; }
+  body.resting *, body.resting *::before, body.resting *::after { animation-play-state: paused !important; }
   body:not(.on-home) .trophy { display: none; }
   main {
     flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
@@ -443,6 +448,8 @@
 <script>
 (() => {
   const IDLE_RESET_MS = 60000;          // back to the keypad after 1 minute without a touch
+  const REST_AFTER_MS = 2 * 60000;      // home screen stops its animations after 2 quiet minutes (battery)
+  let restTimer = null;
   const RESULT_RESET_S = 15;            // final screen returns to the keypad after this many seconds
   const RELOAD_EVERY_MS = 6 * 3600000;  // refresh the page every 6 hours while idle
 
@@ -466,8 +473,10 @@
     bumpIdle();
   }
   function bumpIdle() {
-    clearTimeout(idleTimer);
+    clearTimeout(idleTimer); clearTimeout(restTimer);
+    document.body.classList.remove('resting');
     if (!$('s-home').classList.contains('active')) idleTimer = setTimeout(goHome, IDLE_RESET_MS);
+    else restTimer = setTimeout(() => document.body.classList.add('resting'), REST_AFTER_MS);
   }
   function goHome() {
     Object.assign(s, { pin: '', dept: '', who: null, items: [], idx: 0, answers: [], choice: null, responseId: null, lang: 'en', hint: null, offlineRec: null });
@@ -1153,6 +1162,7 @@
   $('preview-again').addEventListener('click', () => { if (s.busy) return; clearInterval(countdownTimer); if (previewShow) startShow(); else startPreview(); });
   $('preview-close').addEventListener('click', () => { window.close(); });
   loadConfig().then(() => { if (previewTopic) startPreview(); else if (previewShow) startShow(); });
+  bumpIdle();  // start the rest-mode countdown on first load
   setInterval(() => { if ($('s-home').classList.contains('active')) loadConfig(); }, 60000);
   setInterval(() => { if ($('s-home').classList.contains('active') && Date.now() - loadedAt > RELOAD_EVERY_MS) safeReload(); }, 10 * 60000);
 
@@ -1179,7 +1189,7 @@
     });
   }
   // Values set from code (e.g. opening an editor) don't fire 'input', so check every so often.
-  setInterval(() => document.querySelectorAll('.clearwrap').forEach(w => { const i = w.querySelector('input'), b = w.querySelector('.clearbtn'); if (i && b) b.hidden = !i.value; }), 500);
+  setInterval(() => document.body.classList.contains('resting') || document.querySelectorAll('.clearwrap').forEach(w => { const i = w.querySelector('input'), b = w.querySelector('.clearbtn'); if (i && b) b.hidden = !i.value; }), 500);
   addClearButtons(document);
   new MutationObserver(() => addClearButtons(document)).observe(document.body, { childList: true, subtree: true });
 })();
