@@ -2715,7 +2715,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <div class="small muted">${a.everyTime ? 'Every clock-in' : 'Once per person'} · seen by ${a.seen || 0}</div>` : formatInline(a.text);
       return `<tr class="${!live && a.startDate < state.todayDate ? 'dim' : ''}"><td>${what}${status}</td><td>${whoLabel(a.departments)}</td>
         <td style="white-space:nowrap">${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'}</td>
-        <td><button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
+        <td style="white-space:nowrap"><button class="btn subtle" data-prev-ann="${a.id}">👁 Preview</button> <button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
     }).join('') || '<tr><td colspan="4" class="muted">No announcements yet.</td></tr>';
     $('an-celebrate').checked = state.settings.celebrations !== false;
     renderStreakSettings();
@@ -2769,7 +2769,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   // Pop-up announcements: title, picture (uploaded like topic pictures), once or every time.
   function popupForm() {
     const on = $('an-popup').checked;
-    $('an-popup-fields').hidden = !on; $('an-popup-preview').hidden = !on;
+    $('an-popup-fields').hidden = !on;
     $('an-text-label').textContent = on ? 'Message under the picture (optional)' : 'Announcement';
     $('an-text').maxLength = on ? 400 : 200;
     $('an-text').placeholder = on ? 'Scan the code with your phone camera to RSVP by Dec 1.' : '📅 All-staff meeting Thursday at 2 pm in the dining room';
@@ -2794,10 +2794,14 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     } catch (err) { $('an-image-status').textContent = err.message; }
   });
   $('an-image-clear').addEventListener('click', () => { popupImage(''); $('an-image-file').value = ''; $('an-image-file').dispatchEvent(new Event('change')); });
-  $('an-popup-preview').addEventListener('click', () => {
-    try { localStorage.setItem('previewDraft', JSON.stringify({ popup: { title: $('an-title').value, text: $('an-text').value, image: $('an-image').value } })); } catch { /* private window */ }
-    window.open('/admin/preview?show=popup', 'kiosk-preview', 'width=760,height=1000');
-  });
+  // Preview an announcement on the real iPad screens: a pop-up as staff see it after picking their name,
+  // a regular one on the last screen (where it's listed after an in-service).
+  function previewAnnouncement(a) {
+    try { localStorage.setItem('previewDraft', JSON.stringify(a.popup ? { popup: { title: a.title, text: a.text, image: a.image } } : { news: a.text })); } catch { /* private window */ }
+    const w = window.open('/admin/preview?show=' + (a.popup ? 'popup' : 'news'), 'inservice-preview', 'width=820,height=1080');
+    if (w) w.focus();
+  }
+  $('an-popup-preview').addEventListener('click', () => previewAnnouncement({ popup: $('an-popup').checked, title: $('an-title').value, text: $('an-text').value, image: $('an-image').value }));
   $('an-add').addEventListener('click', async () => {
     $('an-error').textContent = '';
     try {
@@ -2810,6 +2814,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     } catch (err) { $('an-error').textContent = err.message; }
   });
   $('an-rows').addEventListener('click', async e => {
+    const pv = e.target.closest('[data-prev-ann]');
+    if (pv) return previewAnnouncement((state.announcements || []).find(a => a.id === pv.dataset.prevAnn) || {});
     const b = e.target.closest('[data-del-ann]');
     if (!b || !confirm('Remove this announcement?')) return;
     try { await api('/api/admin/announcements/' + b.dataset.delAnn, { method: 'DELETE' }); toast('Removed'); await refresh(); }

@@ -1128,6 +1128,10 @@
     const dept = (cfg.departments || [])[0] || '';
     s.who = { employeeId: 'preview', name: 'Maria Lopez', department: dept, last4: '0000' };
     s.lang = 'en';
+    if (previewShow === 'news') {
+      $('preview-bar').querySelector('span').textContent = 'Where announcements show after an in-service. Nothing is saved.';
+      cfg.announcements = [{ text: draft.news || 'Your announcement shows here.', departments: [] }];
+    }
     cfg.celebrations = previewShow === 'birthday' ? [{ type: 'birthday', id: 'preview', name: 'Maria L', department: dept }]
       : previewShow === 'anniversary' ? [{ type: 'anniversary', id: 'preview', name: 'Maria L', department: dept, years: 5 }] : [];
     if (previewShow === 'leaders') {
