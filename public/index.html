@@ -45,12 +45,11 @@
   .who { font-size: 16px; color: var(--muted); }
   header { position: relative; }
   .trophy { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 12px 0 8px;
-    border-radius: 30px; border: 2px solid #f1c94e; background: #fff8e6; cursor: pointer; font: inherit; color: #8a5a00; animation: lb-glow 1.4s ease-in-out infinite; }
+    border-radius: 30px; border: 2px solid #f1c94e; background: #fff8e6; cursor: pointer; font: inherit; color: #8a5a00; animation: lb-glow 3.2s ease-in-out infinite; }
   .trophy .t-icon { font-size: 26px; line-height: 1; }
-  .trophy .t-label { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; animation: lb-blink 1.4s ease-in-out infinite; }
-  @keyframes lb-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 191, 0, .6); } 50% { box-shadow: 0 0 0 8px rgba(255, 191, 0, 0); background: #ffefb8; } }
-  @keyframes lb-blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-  @media (prefers-reduced-motion: reduce) { .trophy, .trophy .t-label { animation: none; } }
+  .trophy .t-label { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
+  @keyframes lb-glow { 0%, 100% { box-shadow: 0 0 6px 1px rgba(241, 201, 78, .35); } 50% { box-shadow: 0 0 16px 4px rgba(241, 201, 78, .6); } }
+  @media (prefers-reduced-motion: reduce) { .trophy { animation: none; } }
   body:not(.on-home) .trophy { display: none; }
   main {
     flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
@@ -89,15 +88,15 @@
   .pin span.filled { border-color: var(--brand); }
   .pin.shake { animation: shake .35s; }
   @keyframes shake { 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
-  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: 380px; margin: 0 auto; }
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 420px; margin: 0 auto; }
   .key {
-    min-height: 72px; border-radius: 16px; border: 1px solid var(--line); background: #fff;
-    font: inherit; font-size: 30px; font-weight: 600; color: var(--ink); cursor: pointer;
+    min-height: 84px; border-radius: 16px; border: 1px solid var(--line); background: #fff;
+    font: inherit; font-size: 34px; font-weight: 600; color: var(--ink); cursor: pointer;
   }
   .key:active { background: var(--brand-soft); }
   .key.fn { font-size: 18px; color: var(--muted); background: var(--bg); }
 
-  .forgot { display: flex; width: 100%; max-width: 380px; margin: 16px auto 0; min-height: 56px; font-size: 19px; }
+  .forgot { display: flex; width: 100%; max-width: 420px; margin: 16px auto 0; min-height: 56px; font-size: 19px; }
 
   /* Announcements: one rotating line on the home screen, a short list on the end screen */
   .news { margin-bottom: 14px; background: var(--brand-soft); border: 1px solid #c9dfe8; color: var(--brand-dark); border-radius: 14px; padding: 14px 20px; font-size: 19px; font-weight: 600; text-align: center; transition: opacity .4s; }
@@ -112,10 +111,20 @@
   .popup-card img { display: block; margin: 0 auto 14px; max-width: 100%; max-height: 46vh; border-radius: 12px; }
   .popup-card .pp-text { font-size: 19px; line-height: 1.4; margin-bottom: 18px; }
   .popup-card .pp-count { font-size: 14px; color: var(--muted); margin-top: 10px; }
-  .news-list { margin: 18px auto 0; max-width: 420px; text-align: center; background: var(--brand-soft); border: 1px solid #c9dfe8; border-radius: 14px; padding: 12px 18px; }
-  .news-list h3 { margin: 0 0 4px; font-size: 18px; color: var(--brand); }
+  .extras { margin: 20px auto 0; max-width: 460px; background: var(--bg); border-radius: 14px; padding: 4px 18px; }
+  .extras[hidden] { display: none; }
+  .extras > div + div { border-top: 1px solid var(--line); }
+  .news-list { padding: 12px 0; text-align: center; }
+  .news-list h3, .extras .leaders h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
   .news-list div { font-size: 17px; padding: 6px 0; line-height: 1.35; }
-  .news-list div + div { border-top: 1px solid #c9dfe8; }
+  .news-list div + div { border-top: 1px dashed var(--line); }
+  .extras .leaders { margin: 0; max-width: none; background: none; border: 0; border-radius: 0; padding: 12px 0; }
+  .end-actions { display: flex; align-items: center; gap: 12px; margin-top: 22px; }
+  .end-actions .btn { flex: 1; }
+  .end-actions .helpful { margin: 0; flex-direction: column; gap: 4px; }
+  .end-actions .helpful > span { font-size: 13px; }
+  .end-actions .helpful .chip { min-height: 52px; min-width: 56px; font-size: 22px; }
+  .end-actions .thumbs { display: flex; gap: 6px; }
 
   /* Seasonal decor (home screen only) */
   #decor { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; display: none; }
@@ -276,7 +285,7 @@
     <div class="board-pop" id="board-pop" hidden>
       <button class="board-x" id="board-close" aria-label="Close">×</button>
       <h2>🏆 Streak leaderboard</h2>
-      <div class="muted small-note">In a row, right on the first try</div>
+      <div class="muted small-note">Days in a row, right on the first try</div>
       <div id="board-lists"></div>
     </div>
   </header>
@@ -288,7 +297,6 @@
         <div class="home-grid">
           <div class="center">
             <div class="decor-msg" id="decor-msg" hidden></div>
-            <div class="kicker">Daily In-Service</div>
             <h1>Enter the last 4 digits of your Workday ID</h1>
             <div class="pin" id="pin"><span></span><span></span><span></span><span></span></div>
             <div class="error" id="pin-error"></div>
@@ -372,7 +380,7 @@
         <img class="lesson-img" id="lesson-img" alt="" hidden>
         <div class="lesson" id="lesson-body"></div>
         <div class="row">
-          <button class="btn secondary" data-action="home" id="lesson-cancel">Cancel</button>
+          <button class="btn secondary" data-action="home" id="lesson-cancel">That's not me</button>
           <button class="btn" id="to-question">I've read this</button>
         </div>
       </div>
@@ -391,7 +399,7 @@
         <div class="answers" id="answers"></div>
         <div class="error" id="question-error"></div>
         <div class="row">
-          <button class="btn secondary" data-action="lesson" id="review-lesson">Review lesson</button>
+          <button class="btn secondary" data-action="lesson" id="review-lesson">📖 Read the lesson again</button>
           <button class="btn" id="submit" disabled>Submit answer</button>
         </div>
       </div>
@@ -402,7 +410,6 @@
     <section class="screen" id="s-result">
       <div class="card center">
         <div class="party" id="result-party" hidden><div class="party-emoji" id="party-emoji"></div><div class="party-title" id="party-title"></div><div class="party-sub" id="party-sub"></div></div>
-        <img src="logo.png" alt="Stonehenge of Springville" class="end-logo" id="end-logo" hidden>
         <div class="badge" id="result-badge">✓</div>
         <h1 id="result-title"></h1>
         <div class="cheer" id="result-cheer" hidden></div>
@@ -410,13 +417,15 @@
         <div class="explain" id="result-explain" hidden></div>
         <div class="review-note" id="result-review" hidden></div>
         <div class="closing" id="result-closing" hidden></div>
-        <div class="news-list" id="result-news" hidden></div>
-        <div class="leaders" id="result-leaders" hidden></div>
-        <div class="row"><button class="btn wide" id="result-next">Done</button></div>
+        <div class="extras" id="result-extras" hidden>
+          <div class="news-list" id="result-news" hidden></div>
+          <div class="leaders" id="result-leaders" hidden></div>
+        </div>
+        <div class="end-actions"><button class="btn" id="result-next">Done</button>
+          <div class="helpful" id="helpful" hidden><span id="helpful-q"></span><div class="thumbs">
+            <button class="chip" data-helpful="1" aria-label="Helpful">👍</button><button class="chip" data-helpful="0" aria-label="Not helpful">👎</button></div></div>
+          <div class="helpful" id="helpful-thanks" hidden></div></div>
         <div class="countdown muted" id="countdown"></div>
-        <div class="helpful" id="helpful" hidden><span id="helpful-q"></span>
-          <button class="chip" data-helpful="1" aria-label="Helpful">👍</button><button class="chip" data-helpful="0" aria-label="Not helpful">👎</button></div>
-        <div class="helpful" id="helpful-thanks" hidden></div>
       </div>
     </section>
 
@@ -857,12 +866,12 @@
     $('lesson-body').innerHTML = formatLesson(es() ? it.es.lesson : it.topic.lesson);
     $('lesson-img').hidden = !it.topic.image;
     if (it.topic.image) $('lesson-img').src = it.topic.image; else $('lesson-img').removeAttribute('src');
-    $('lesson-cancel').textContent = T('Cancel', 'Cancelar');
+    $('lesson-cancel').textContent = T("That's not me", 'No soy yo');
     $('to-question').textContent = T("I've read this", 'Ya lo leí');
     $('question-kicker').textContent = T('Question', 'Pregunta') + multi;
     $('select-all').textContent = T('Select all that apply', 'Seleccione todas las correctas');
     $('select-all-hint').textContent = T('(then tap Submit answer at the bottom)', '(luego toque Enviar respuesta abajo)');
-    $('review-lesson').textContent = it.kind === 'quiz' ? T('📖 Read the lesson again', '📖 Leer la lección otra vez') : T('Review lesson', 'Ver la lección');
+    $('review-lesson').textContent = T('📖 Read the lesson again', '📖 Leer la lección otra vez');
     $('submit').textContent = T('Submit answer', 'Enviar respuesta');
     renderTryAgain();
     renderQuestion();
@@ -1039,10 +1048,9 @@
     $('result-cheer').hidden = !cheer;
     // "Was this helpful?" needs the saved record, so it's skipped for answers saved offline.
     s.feedbackFor = r.offline ? null : r.responseId;
-    $('helpful-q').textContent = T('Was this lesson helpful?', '¿Le sirvió esta lección?');
+    $('helpful-q').textContent = T('Helpful?', '¿Le sirvió?');
     $('helpful').hidden = !s.feedbackFor;
     $('helpful-thanks').hidden = true;
-    $('end-logo').hidden = more;
     $('result-closing').hidden = more;
     const news = more ? [] : newsFor(s.who);
     const personal = more ? '' : personalLine(s.who);
@@ -1055,7 +1063,6 @@
     const party = !more && personal ? myCelebrations(s.who) : [];
     $('result-closing').classList.toggle('celebrating', !!party.length);
     $('result-party').hidden = !party.length;
-    $('end-logo').hidden = more || !!party.length;
     $('result-badge').hidden = !!party.length;
     const str = st(r.streaks ? { streaks: r.streaks } : s.config);
     const showBoard = !more && ['end', 'both'].includes(str.leadersOn);
@@ -1066,8 +1073,9 @@
     $('result-leaders').innerHTML = (g.length ? `<h3>🏅 ${T(g.length === 1 ? 'Streak leader' : 'Top streaks', g.length === 1 ? 'Líder de racha' : 'Mejores rachas')}</h3>` + g.map((p, i) => tierRow(MEDALS[i] || `${i + 1}.`, p)).join('') : '') +
       (myDept.length ? `<h3${g.length ? ' style="margin-top:10px"' : ''}>🏅 ${T(`${escapeHtml(myDept[0].department)} leader`, `Líder de ${escapeHtml(myDept[0].department)}`)}</h3>` + tierRow('', myDept.map(l => Object.assign({}, l, { department: '' }))) : '');
     $('result-leaders').hidden = !board.length && !myDept.length;
-    $('result-news').innerHTML = `<h3>📣 ${T('Announcements', 'Anuncios')}</h3>` + news.slice(0, 4).map(t => `<div>${formatInline(t)}</div>`).join('');
+    $('result-news').innerHTML = `<h3>${T('Announcements', 'Anuncios')}</h3>` + news.slice(0, 4).map(t => `<div>${formatInline(t)}</div>`).join('');
     $('result-news').hidden = !news.length;
+    $('result-extras').hidden = $('result-news').hidden && $('result-leaders').hidden;
     show('result');
     if (more) return;
     if (party.length) celebrate(party);
@@ -1083,7 +1091,7 @@
     api('/api/kiosk/feedback', { responseId: s.feedbackFor, helpful: b.dataset.helpful === '1' }).catch(() => {});
     s.feedbackFor = null;
     $('helpful').hidden = true;
-    $('helpful-thanks').textContent = T('Thanks for the feedback!', '¡Gracias por su opinión!');
+    $('helpful-thanks').textContent = T('Thanks! 💙', '¡Gracias! 💙');
     $('helpful-thanks').hidden = false;
   });
   $('result-next').addEventListener('click', () => {
