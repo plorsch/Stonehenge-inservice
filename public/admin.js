@@ -44,6 +44,37 @@
     clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
   }
   function fail(err) { alert(err.message || err); }
+  // Cards that save on their own: a moment after any change, with a small "Saved ✓" by the heading.
+  // save(true) means "quiet": no toast, and problems come back as an error to show by the heading.
+  const pendingSaves = new Set();
+  window.addEventListener('beforeunload', e => { if (pendingSaves.size) { e.preventDefault(); e.returnValue = ''; } });
+  function autoSave(card, save, hideButtons = []) {
+    if (!card) return;
+    hideButtons.forEach(b => { if (!b) return; b.hidden = true; const p = b.parentElement; if (p && p !== card && ![...p.children].some(c => !c.hidden)) p.hidden = true; });
+    const tick = document.createElement('span');
+    tick.className = 'saved-tick';
+    tick.setAttribute('aria-live', 'polite');
+    (card.querySelector('h2, h3') || card).appendChild(tick);
+    let timer = null, running = false, again = false;
+    const run = async () => {
+      timer = null;
+      if (running) { again = true; return; }
+      running = true;
+      tick.className = 'saved-tick'; tick.textContent = 'Saving…';
+      try { await save(true); tick.className = 'saved-tick ok'; tick.textContent = 'Saved ✓'; }
+      catch (err) { tick.className = 'saved-tick bad'; tick.textContent = err.message || String(err); }
+      running = false;
+      if (again) { again = false; timer = setTimeout(run, 0); } else if (!timer) pendingSaves.delete(card);
+    };
+    const queue = ms => { pendingSaves.add(card); clearTimeout(timer); timer = setTimeout(run, ms); };
+    card.addEventListener('input', e => { if (e.target.matches('input[type=text], input[type=number], input[type=email], input[type=color], textarea')) queue(900); });
+    card.addEventListener('change', e => { if (e.target.matches('select, input[type=checkbox], input[type=radio], input[type=number], input[type=color]')) queue(200); });
+    card.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (b && !b.closest('table, dialog') && !b.matches('.cm-toggle, .cm-look, .linkish, [data-show-preview], [data-no-save]')) setTimeout(() => queue(200));
+    });
+    return { now: () => queue(0) };
+  }
   function fmtDate(d) {
     if (!d) return '<span class="muted">Never</span>';
     const [y, m, day] = d.split('-').map(Number);
@@ -294,9 +325,10 @@
     loadDashboard();
     $('stat-required').textContent = state.required.filter(q => q.active).length;
     $('stat-staff').textContent = state.employees.filter(e => e.active).length;
-    $('kiosk-urls').innerHTML = state.kioskUrls.length
-      ? state.kioskUrls.map(u => `<div><code>${escapeHtml(u)}</code></div>`).join('')
-      : '<span class="muted">Use this site\'s web address.</span>';
+    // The iPad opens this same site. On a laptop running it locally, list the network addresses instead.
+    const local = /^(localhost|127\.|\[::1\])/.test(location.hostname);
+    const urls = local && state.kioskUrls.length ? state.kioskUrls : [location.origin + '/'];
+    $('kiosk-urls').innerHTML = urls.map(u => `<div><a href="${escapeHtml(u)}" target="_blank" rel="noopener"><code>${escapeHtml(u)}</code></a></div>`).join('');
     const openReq = state.required.filter(q => q.active);
     const DT_COLORS = ['#1f6f8b', '#c2410c', '#7c3aed', '#15803d', '#be185d', '#0e7490', '#a16207', '#4338ca'];
     $('today-rows').innerHTML = state.today.map((d, i) => {
@@ -353,7 +385,7 @@
     const cel = dash.celebrationsToday || [];
     const line = (icon, html) => `<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)"><span>${icon}</span><span>${html}</span></div>`;
     $('dash-glance').innerHTML =
-      line('🎂', cel.length ? cel.map(c => `${escapeHtml(c.name)} <span class="muted">(${c.type === 'birthday' ? 'birthday' : c.years + '-year anniversary'})</span>`).join(', ') : '<span class="muted">No birthdays or work anniversaries today</span>') +
+      line('🎂', cel.length ? cel.map(c => `${personLink(c.id, c.name)} <span class="muted">(${c.type === 'birthday' ? 'birthday' : c.years + '-year anniversary'})</span>`).join(', ') : '<span class="muted">No birthdays or work anniversaries today</span>') +
       (dash.quizDay || dash.quizzesToday ? line('🧠', `It's quiz day. <a href="#" data-go="today-quiz">${dash.quizzesToday} pop quiz${dash.quizzesToday === 1 ? '' : 'zes'} done so far</a>`) : '') +
       line('🙋', dash.unlistedToday ? `<a href="#" data-go="today-all">${dash.unlistedToday} not on the roster today</a>` : '<span class="muted">Everyone today was on the roster</span>') +
       line('⏸️', dash.unfinishedToday ? `<a href="#" data-go="today-all">${dash.unfinishedToday} started but didn't finish</a>` : '<span class="muted">No unfinished in-services today</span>') +
@@ -579,9 +611,32 @@
           return `<tr><td class="dept">${escapeHtml(dept || 'All staff')}</td>${cells.join('')}</tr>`;
         }).join('');
         return `<div class="la-week"><h3>Week of ${fmtDate(w[0].date)}</h3><table class="la"><thead><tr><th class="dept"></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
-      }).join('')}</div>`;
+      }).join('')}</div>` + laPhoneList(f, depts);
     } catch (err) { fail(err); }
   }
+  // On a phone the calendar is too narrow, so it becomes a day-by-day list for one department.
+  let laPhoneDept = null;
+  function laPhoneList(f, depts) {
+    if (!depts.length) return '';
+    const dept = depts.includes(laPhoneDept) ? laPhoneDept : depts[0], r = depts.indexOf(dept);
+    const day = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    const runs = [];
+    for (let i = 0; i < f.days.length;) {
+      const it = f.days[i].items[r];
+      let j = i + 1;
+      while (j < f.days.length) { const n = f.days[j].items[r]; if (n.source !== it.source || n.topicId !== it.topicId || n.scheduleId !== it.scheduleId) break; j++; }
+      runs.push({ it, from: f.days[i].date, to: f.days[j - 1].date });
+      i = j;
+    }
+    return `<div class="la-phone"><label class="small muted">Department <select id="la-phone-dept">${depts.map(d => `<option value="${escapeHtml(d)}"${d === dept ? ' selected' : ''}>${escapeHtml(d || 'All staff')}</option>`).join('')}</select></label>
+      <div class="la-list">${runs.filter(x => x.to >= f.today).map(({ it, from, to }) => {
+        const cls = it.source === 'schedule' ? 'sched' : it.source === 'culture' ? 'culture' : it.source === 'quiz' ? 'quiz' : it.topicId || it.source === 'random' ? 'auto' : 'none';
+        const title = it.source === 'random' ? 'A random rotation topic each visit' : it.source === 'quiz' ? '🧠 Pop quiz from their past week' : it.title || 'Nothing in the rotation';
+        return `<button class="la-cell la-row ${cls}" data-la-dept="${escapeHtml(dept)}" data-la-from="${from}" data-la-to="${to}" data-la-topic="${it.topicId || ''}" data-la-source="${it.source}">
+          <span class="la-when">${from <= f.today && f.today <= to ? '<b>Now</b> · ' : ''}${day(from)}${to !== from ? ` – ${day(to)}` : ''}</span><span class="la-what">${escapeHtml(title)}<small>${laLabel[it.source] || ''}</small></span></button>`;
+      }).join('')}</div></div>`;
+  }
+  $('la-grid').addEventListener('change', e => { if (e.target.id === 'la-phone-dept') { laPhoneDept = e.target.value; loadLookAhead(); } });
   $('la-prev').addEventListener('click', () => { laStart = addDay(laStart, -7); loadLookAhead(); });
   $('la-next').addEventListener('click', () => { laStart = addDay(laStart, 7); loadLookAhead(); });
   $('la-now').addEventListener('click', () => { laStart = null; loadLookAhead(); });
@@ -644,14 +699,14 @@
     try { await api('/api/admin/schedules/' + b.dataset.delSched, { method: 'DELETE' }); toast('Removed'); await refresh(); }
     catch (err) { fail(err); }
   });
-  $('save-fallback').addEventListener('click', async () => {
+  autoSave($('save-fallback').closest('.card'), async () => {
     const v = document.querySelector('input[name=fallback]:checked');
     if (!v) return;
     const cd = $('culture-day').value, qd = $('quiz-day').value;
-    try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ fallbackMode: v.value, cultureDay: cd === '' ? null : Number(cd),
-      quizDay: qd === '' ? null : Number(qd), quizText: { en: $('quiz-text-en').value, es: $('quiz-text-es').value } }) }); toast('Saved'); await refresh(); }
-    catch (err) { fail(err); }
-  });
+    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ fallbackMode: v.value, cultureDay: cd === '' ? null : Number(cd),
+      quizDay: qd === '' ? null : Number(qd), quizText: { en: $('quiz-text-en').value, es: $('quiz-text-es').value } }) });
+    await refresh();
+  }, [$('save-fallback')]);
 
   // ---------- required ----------
   function renderRequired() {
@@ -704,9 +759,9 @@
         $('vw-title').textContent = t ? t.title : 'Required education';
         $('vw-body').innerHTML = `
           <h3 style="margin-top:14px">Still to do (${pr.pending.length})</h3>
-          ${pr.pending.length ? `<table><tbody>${pr.pending.map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.department)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Everyone is done.</p>'}
+          ${pr.pending.length ? `<table><tbody>${pr.pending.map(p => `<tr><td>${personLink(p.id, p.name)}</td><td>${escapeHtml(p.department)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Everyone is done.</p>'}
           <h3 style="margin-top:18px">Done (${pr.done.length})</h3>
-          ${pr.done.length ? `<table><tbody>${pr.done.map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.department)}</td><td>${fmtWhen(p.completedAt)}</td><td>${p.firstTryCorrect ? '<span class="pill good">Right first try</span>' : '<span class="pill warn">Needed a retry</span>'}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No one yet.</p>'}`;
+          ${pr.done.length ? `<table><tbody>${pr.done.map(p => `<tr><td>${personLink(p.id, p.name)}</td><td>${escapeHtml(p.department)}</td><td>${fmtWhen(p.completedAt)}</td><td>${p.firstTryCorrect ? '<span class="pill good">Right first try</span>' : '<span class="pill warn">Needed a retry</span>'}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No one yet.</p>'}`;
         $('viewer').showModal();
       }
     } catch (err) { fail(err); }
@@ -725,7 +780,7 @@
         <button class="btn subtle danger" data-ns-del="${i}">Remove</button></li>`;
     }).join('') || '<li class="muted" style="list-style:none;margin-left:-20px">No topics yet. Add the ones every new person should see first.</li>';
     topicOptions($('ns-add-topic'));
-    $('nh-rows').innerHTML = (state.newHires || []).map(n => `<tr><td>${escapeHtml(n.name)}</td><td>${escapeHtml(n.department || '')}</td>
+    $('nh-rows').innerHTML = (state.newHires || []).map(n => `<tr><td>${personLink(n.id, n.name)}</td><td>${escapeHtml(n.department || '')}</td>
       <td style="white-space:nowrap">${fmtDate(n.hireDate)}<div class="muted small">new hire until ${fmtDate(n.until)}</div></td>
       <td>${n.total ? `<div class="progress-bar"><span style="width:${Math.round(100 * n.done / n.total)}%"></span></div><div class="small">${n.done} of ${n.total} done</div>` : '<span class="muted">No topics for their department</span>'}</td>
       <td>${n.next ? escapeHtml(n.next) : n.total ? '<span class="pill good">Finished</span>' : ''}</td></tr>`).join('')
@@ -747,12 +802,10 @@
     $('ns-add-topic').value = ''; nsDirty = true; renderStarter();
   });
   $('ns-days').addEventListener('input', () => { nsDirty = true; });
-  $('ns-save').addEventListener('click', async () => {
-    try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ starter: { topicIds: nsIds, days: Number($('ns-days').value) } }) });
-      nsDirty = false; toast('Starter set saved'); await refresh();
-    } catch (err) { fail(err); }
-  });
+  autoSave($('ns-save').closest('.card'), async () => {
+    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ starter: { topicIds: nsIds, days: Number($('ns-days').value) } }) });
+    nsDirty = false; await refresh();
+  }, [$('ns-save')]);
 
   // ---------- topics ----------
   // Fills a filter dropdown, keeping the current choice if it still exists.
@@ -786,12 +839,11 @@
         (draft ? `<span class="pill warn" title="${escapeHtml((t.problems || []).join(' '))}">Needs work</span>` : '');
       const rated = st && st.helpful + st.notHelpful ? `<a href="#" class="tl-rate" data-ratings="${t.id}" data-rate-tip="${t.id}">👍 ${st.helpful} <span>·</span> 👎 ${st.notHelpful}</a>` : '';
       return `<tr class="${retired ? 'dim' : ''}">
-        <td><div class="tl-title">${escapeHtml(t.title)}</div><div class="tl-tags">${tags}</div>${draft && t.problems ? `<div class="muted small">${escapeHtml(t.problems[0])}</div>` : ''}</td>
+        <td><button class="tl-title linkish" data-act="details" data-id="${t.id}" title="See the lesson and questions">${escapeHtml(t.title)}</button><div class="tl-tags">${tags}</div>${draft && t.problems ? `<div class="muted small">${escapeHtml(t.problems[0])}</div>` : ''}</td>
         <td class="small">${whoLabel(t.departments)}</td>
         <td><span class="tl-count">${t.questions.length}</span></td>
         <td>${retired || draft ? '<span class="muted">–</span>' : `<label class="sw" title="In rotation"><input type="checkbox" data-rotation="${t.id}"${t.inRotation ? ' checked' : ''} aria-label="In rotation"><span></span></label>`}</td>
         <td style="white-space:nowrap">${fmtDate(t.lastUsedDate)}</td>
-        <td style="white-space:nowrap">${t.createdAt ? fmtDate(t.createdAt.slice(0, 10)) : '<span class="muted">–</span>'}</td>
         <td>${st ? st.responses : 0}</td>
         <td>${pct}${rated}</td>
         <td><div class="tl-acts">
@@ -804,7 +856,7 @@
                       : `<button class="tl-act danger" data-act="retire" data-id="${t.id}">🗄 Retire</button>`}
           </div></details>
         </div></td></tr>`;
-    }).join('') || '<tr><td colspan="9" class="muted">No topics match.</td></tr>';
+    }).join('') || '<tr><td colspan="8" class="muted">No topics match.</td></tr>';
     const live = state.topics.filter(t => t.status === 'active');
     $('topic-summary').textContent = `${live.length} active topic${live.length === 1 ? '' : 's'} · ${live.filter(t => t.inRotation).length} in rotation · ${state.topics.filter(t => t.status === 'draft').length} need work · ${live.filter(t => t.es && t.es.lesson).length} in Spanish`;
     const cats = [...new Set(state.topics.map(t => t.category).filter(Boolean))].sort();
@@ -1318,7 +1370,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     staffShown = rows.map(e => e.id);
     $('staff-rows').innerHTML = rows.map(e => `<tr class="${e.active ? '' : 'dim'}">
       <td><input type="checkbox" data-pick="${e.id}"${staffPicked.has(e.id) ? ' checked' : ''}></td>
-      <td><strong>${escapeHtml(e.name)}</strong>${e.active ? '' : ' <span class="pill">Inactive</span>'}${e.birthday ? `<div class="muted small">🎂 ${e.birthday.split('-').map(Number).join('/')}</div>` : ''}</td>
+      <td><strong>${personLink(e.id, e.name)}</strong>${e.active ? '' : ' <span class="pill">Inactive</span>'}${e.birthday ? `<div class="muted small">🎂 ${e.birthday.split('-').map(Number).join('/')}</div>` : ''}</td>
       <td>${escapeHtml(e.last4)}</td><td>${escapeHtml(e.department)}${e.jobTitle && e.jobTitle !== e.department ? `<div class="muted small">${escapeHtml(e.jobTitle)}</div>` : ''}</td>
       <td data-last="${e.id}" class="small muted">…</td>
       <td data-rated="${e.id}" class="small" style="white-space:nowrap"></td>
@@ -1481,6 +1533,54 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const rec = e.target.closest('[data-record]');
     if (rec) printRecord(state.employees.find(x => x.id === rec.dataset.record));
   });
+  // One rule for names: a person's name opens that person, a topic's name opens that topic.
+  const personLink = (id, name) => state.employees.some(e => e.id === id) ? `<button class="linkish" data-person="${escapeHtml(id)}">${escapeHtml(name)}</button>` : escapeHtml(name);
+  const topicLink = (id, title) => topicById(id) ? `<button class="linkish" data-topic="${escapeHtml(id)}">${escapeHtml(title)}</button>` : escapeHtml(title);
+  document.addEventListener('click', e => {
+    const p = e.target.closest('[data-person], [data-up-staff]');
+    if (p) { e.preventDefault(); return showPerson(state.employees.find(x => x.id === (p.dataset.person || p.dataset.upStaff))); }
+    const t = e.target.closest('[data-topic]');
+    if (t) { e.preventDefault(); showDetails(topicById(t.dataset.topic), { actions: [['▶ Preview', () => showPreview(topicById(t.dataset.topic))], ['✏️ Edit', () => { $('viewer').close(); openEditor(topicById(t.dataset.topic)); }]] }); }
+  });
+  $('viewer').addEventListener('close', () => { $('vw-actions').innerHTML = ''; });
+  // A person at a glance: their numbers, recent answers, reviews and ratings, with Edit and Training record.
+  async function showPerson(emp) {
+    if (!emp) return;
+    $('vw-title').textContent = emp.name;
+    $('vw-actions').innerHTML = '<button class="btn ghost" data-pv="edit">✏️ Edit</button><button class="btn ghost" data-pv="record">🖨 Training record</button><button class="btn ghost" data-pv="all">All their answers</button>';
+    $('vw-actions').onclick = e => {
+      const b = e.target.closest('[data-pv]'); if (!b) return;
+      if (b.dataset.pv === 'record') return printRecord(emp);
+      $('viewer').close();
+      if (b.dataset.pv === 'edit') { goTab('staff'); openStaff(emp); }
+      if (b.dataset.pv === 'all') openResponses({ person: emp });
+    };
+    $('vw-body').innerHTML = '<p class="muted">Loading…</p>';
+    if (!$('viewer').open) $('viewer').showModal();
+    try {
+      const [{ responses }, { reviews }] = await Promise.all([api('/api/admin/responses?employeeId=' + encodeURIComponent(emp.id)), api('/api/admin/reviews').catch(() => ({ reviews: [] }))]);
+      const done = responses.filter(r => r.completed), year = state.todayDate.slice(0, 4);
+      const yr = done.filter(r => r.date.startsWith(year));
+      const first = yr.filter(r => r.firstTryCorrect).length;
+      const streak = (state.streakTop || []).find(l => l.id === emp.id);
+      const mine = reviews.filter(r => r.employeeId === emp.id);
+      const rated = responses.filter(r => typeof r.helpful === 'boolean');
+      const up = rated.filter(r => r.helpful).length;
+      const res = r => !r.completed ? '<span class="pill warn">Unfinished</span>' : r.firstTryCorrect ? '<span class="pill good">Right first try</span>' : `<span class="pill warn">Right on try ${r.attempts.length}</span>`;
+      $('vw-body').innerHTML = `
+        <div class="muted" style="margin-top:6px">${escapeHtml([emp.department, 'Workday …' + emp.last4, emp.hireDate && 'hired ' + fmtDate(emp.hireDate)].filter(Boolean).join(' · '))}${emp.active ? '' : ' <span class="pill">Inactive</span>'}</div>
+        <div class="pv-stats">
+          <div><b>${yr.length}</b><span>in-services in ${year}</span></div>
+          <div><b>${yr.length ? Math.round(100 * first / yr.length) + '%' : '–'}</b><span>right first try</span></div>
+          <div><b>${streak ? '🔥 ' + streak.streak : '–'}</b><span>${streak ? 'days in a row' : 'no streak yet'}</span></div>
+          <div><b>${rated.length ? `👍 ${up} · 👎 ${rated.length - up}` : '–'}</b><span>lesson ratings</span></div>
+        </div>
+        ${mine.length ? `<h3 style="margin-top:16px">Coming back for review</h3><ul class="pv-list">${mine.map(r => `<li>${topicLink(r.topicId, r.title)} <span class="muted small">due ${fmtDate(r.due)}</span></li>`).join('')}</ul>` : ''}
+        <h3 style="margin-top:16px">Recent answers</h3>
+        ${responses.length ? `<ul class="pv-list">${responses.slice().sort((x, y) => String(y.submittedAt).localeCompare(String(x.submittedAt))).slice(0, 10).map(r => `<li><span class="pv-date">${fmtDate(r.date)}</span>${topicLink(r.topicId, r.topicTitle)} ${res(r)}${r.helpful === true ? ' 👍' : r.helpful === false ? ' 👎' : ''}<div class="muted small">${escapeHtml(stripFormat(r.question || ''))}</div></li>`).join('')}</ul>`
+          : '<p class="muted">No in-services yet.</p>'}`;
+    } catch (err) { $('vw-body').innerHTML = `<p class="err">${escapeHtml(err.message)}</p>`; }
+  }
   // A printable training record for one person, for their HR file.
   async function printRecord(emp) {
     const win = window.open('', '_blank');
@@ -1696,7 +1796,18 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       $('resp-summary').textContent = responses.length
         ? `${responses.length} response${responses.length === 1 ? '' : 's'}${quizzes && quizzes < responses.length ? ` (${responses.length - quizzes} in-services, ${quizzes} quiz${quizzes === 1 ? '' : 'zes'})` : ''}. ${Math.round(100 * first / responses.length)}% right on the first try.`
         : 'No responses for this selection.';
-      $('resp-rows').innerHTML = responses.slice(0, 1000).map(r => {
+      respList = responses; respShown = 0;
+      $('resp-rows').innerHTML = '';
+      showMoreResponses();
+      $('resp-csv').href = '/api/admin/responses.csv?' + respQuery();
+    } catch (err) { fail(err); }
+  }
+  // Responses show 100 at a time, with "Show more" at the bottom.
+  let respList = [], respShown = 0;
+  function showMoreResponses() {
+    const next = respList.slice(respShown, respShown + 100);
+    respShown += next.length;
+    $('resp-rows').insertAdjacentHTML('beforeend', next.map(r => {
         const result = !r.completed ? '<span class="pill warn">Did not finish</span>'
           : r.firstTryCorrect ? '<span class="pill good">Right first try</span>'
           : `<span class="pill warn">Missed, right on try ${r.attempts.length}</span>`;
@@ -1706,10 +1817,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <td>${escapeHtml(r.department || '')}</td><td>${kindLabel[r.kind] || ''}${r.lang === 'es' ? ' <span class="pill">Español</span>' : ''}${r.offline ? ' <span class="pill" title="Answered while the iPad was offline, uploaded later">Saved offline</span>' : ''}</td>
         <td><a href="#" class="row-link">${escapeHtml(r.topicTitle)}</a><div class="muted small">${escapeHtml(stripFormat(r.question))}</div></td>
         <td>${escapeHtml(r.attempts[0] || '')}</td><td>${result}${r.helpful === true ? ' <span title="Said the lesson was helpful">👍</span>' : r.helpful === false ? ' <span title="Said the lesson was not helpful">👎</span>' : ''}</td></tr>`;
-      }).join('');
-      $('resp-csv').href = '/api/admin/responses.csv?' + respQuery();
-    } catch (err) { fail(err); }
+      }).join(''));
+    const left = respList.length - respShown;
+    $('resp-more').hidden = left <= 0;
+    $('resp-more').textContent = `Show ${Math.min(100, left)} more (${left} left)`;
   }
+  $('resp-more').addEventListener('click', showMoreResponses);
   ['resp-from', 'resp-to', 'resp-dept', 'resp-topic', 'resp-missed', 'resp-helpful', 'resp-kind'].forEach(id => $(id).addEventListener('change', loadResponses));
   $('resp-rows').addEventListener('click', e => {
     const tr = e.target.closest('[data-resp]');
@@ -1826,7 +1939,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   function rangeFor(k) {
     const t = new Date(state.todayDate + 'T12:00:00'), y = t.getFullYear(), m = t.getMonth();
     const add = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-    const wk = add(t, -t.getDay());   // weeks start on Sunday
+    const wk = add(t, -((t.getDay() + 6) % 7));   // weeks start on Monday, like the calendar and the topic of the week
     return { today: [t, t], yesterday: [add(t, -1), add(t, -1)], week: [wk, t], lastweek: [add(wk, -7), add(wk, -1)],
       month: [new Date(y, m, 1), t], lastmonth: [new Date(y, m - 1, 1), new Date(y, m, 0)], d30: [add(t, -29), t], d90: [add(t, -89), t],
       year: [new Date(y, 0, 1), t], any: null }[k];
@@ -1848,7 +1961,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     // Typing dates by hand shows which quick range they match, or "Custom dates".
     const match = () => {
       if (!$(f).value && !$(t).value) return void (sel.value = 'any');
-      const hit = RANGES.find(([k]) => { const r = rangeFor(k); return r && iso(r[0]) === $(f).value && iso(r[1]) === $(t).value; });
+      // Keep the current pick when it still fits (on a Monday, "This week" and "Today" are the same days).
+      const hit = [RANGES.find(([k]) => k === sel.value), ...RANGES].find(x => { const r = x && rangeFor(x[0]); return r && iso(r[0]) === $(f).value && iso(r[1]) === $(t).value; });
       sel.value = hit ? hit[0] : 'custom';
     };
     [f, t].forEach(id => $(id).addEventListener('change', match));
@@ -1856,7 +1970,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   });
   // Clear filters: puts every box in the toolbar back to its starting value. Shows only when something is filtered.
   const filterBars = ['topic-search', 'staff-search', 'resp-from', 'rp-from', 'mm-from'].map(id => $(id).closest('.toolbar'));
-  const ctlDefault = el => el.type === 'checkbox' ? el.defaultChecked : el.tagName === 'SELECT' ? (([...el.options].find(o => o.defaultSelected) || el.options[0] || {}).value || '') : '';
+  const ctlDefault = el => el.type === 'checkbox' ? el.defaultChecked : el.tagName === 'SELECT' ? (([...el.options].find(o => o.defaultSelected) || el.options[0] || {}).value || '') : el.defaultValue || '';
   const ctlValue = el => el.type === 'checkbox' ? el.checked : el.value;
   const filterCtls = bar => [...bar.querySelectorAll('input:not([type=file]), select')].filter(el => !el.dataset.keep && !el.closest('.clear-filters'));
   function syncClear() {
@@ -2013,7 +2127,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     }
     $('cc-rows').innerHTML = ccFiltered().map(r => `<tr>
       <td style="white-space:nowrap">${fmtDate(r.date)}</td><td>${escapeHtml(r.time || '')}</td>
-      <td>${escapeHtml(r.name)}${r.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}${r.ambiguous ? ' <span class="pill warn" title="Several staff share these last 4 digits">Shared ID</span>' : ''}</td>
+      <td>${personLink(r.employeeId, r.name)}${r.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}${r.ambiguous ? ' <span class="pill warn" title="Several staff share these last 4 digits">Shared ID</span>' : ''}</td>
       <td>${escapeHtml(r.last4)}</td><td>${escapeHtml(r.department || '')}</td>
       <td>${ccLabel[r.status]}${r.status === 'done' ? `<div class="muted small">${fmtWhen(r.completedAt)}</div>` : ''}</td></tr>`).join('')
       || '<tr><td colspan="6" class="muted">Nothing to show. Everyone did their in-service.</td></tr>';
@@ -2138,10 +2252,10 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         const q = t && t.questions.find(x => x.id === g.questionId);
         const [wrong, n] = Object.entries(g.wrong).sort((a, b) => b[1] - a[1])[0] || [];
         const pct = Math.round(100 * g.missed / g.asked);
-        return `<tr class="${g.asked < 5 ? 'dim' : ''}"><td>${escapeHtml(q ? q.text : g.question)}<div class="muted small">${escapeHtml(t ? t.title : g.topicTitle)}</div></td>
+        return `<tr class="${g.asked < 5 ? 'dim' : ''}"><td>${escapeHtml(q ? q.text : g.question)}<div class="muted small">${t ? topicLink(t.id, t.title) : escapeHtml(g.topicTitle)}</div></td>
           <td>${g.asked}</td><td><strong>${pct}%</strong> <span class="muted small">(${g.missed})</span></td>
           <td>${wrong ? `${escapeHtml(wrong)} <span class="muted small">(${n})</span>` : ''}</td>
-          <td>${t ? `<button class="btn subtle" data-mm-edit="${t.id}">Edit topic</button>` : ''}</td></tr>`;
+          <td style="white-space:nowrap">${t ? `<button class="btn subtle" data-mm-edit="${t.id}">Edit topic</button>` : ''}</td></tr>`;
       }).join('') || '<tr><td colspan="5" class="muted">No missed questions for this selection.</td></tr>';
     } catch (err) { fail(err); }
   }
@@ -2157,11 +2271,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const { reviews, thin, settings } = await api('/api/admin/reviews');
       $('rv-on').checked = !!settings.on; $('rv-first').value = settings.firstDays; $('rv-second').value = settings.secondDays;
       const today = state.todayDate;
-      $('rv-rows').innerHTML = reviews.map(r => `<tr><td>${escapeHtml(r.name)}<div class="muted small">${escapeHtml(r.department || '')}</div></td>
-        <td>${escapeHtml(r.title)}<div class="muted small">missed ${fmtDate(r.since)}</div></td>
+      $('rv-rows').innerHTML = reviews.map(r => `<tr><td>${personLink(r.employeeId, r.name)}<div class="muted small">${escapeHtml(r.department || '')}</div></td>
+        <td>${topicLink(r.topicId, r.title)}<div class="muted small">missed ${fmtDate(r.since)}</div></td>
         <td>${r.stage === 1 ? 'First' : 'Final'}</td>
         <td style="white-space:nowrap">${fmtDate(r.due)} ${r.due <= today ? '<span class="pill warn">Due now</span>' : ''}</td>
-        <td style="white-space:nowrap"><button class="btn subtle danger" data-rv-skip="${r.employeeId}|${r.topicId}" data-rv-name="${escapeHtml(r.name)}" data-rv-title="${escapeHtml(r.title)}" title="Remove this review. It comes back only if they miss this topic again.">Take off</button></td></tr>`).join('')
+        <td style="white-space:nowrap"><button class="btn subtle" data-rv-skip="${r.employeeId}|${r.topicId}" data-rv-name="${escapeHtml(r.name)}" data-rv-title="${escapeHtml(r.title)}" title="Remove this review. It comes back only if they miss this topic again.">Take off</button></td></tr>`).join('')
         || '<tr><td colspan="5" class="muted">No one has anything to review right now.</td></tr>';
       $('rv-thin').innerHTML = thin.length ? `<strong>Topics with fewer than 3 questions</strong> <span class="muted">(add more so a review can ask it a different way):</span> ` +
         thin.map(t => `<a href="#" data-thin="${t.id}">${escapeHtml(t.title)}</a> (${t.questions})`).join(', ') : '';
@@ -2179,12 +2293,10 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const a = e.target.closest('[data-thin]');
     if (a) { e.preventDefault(); openEditor(topicById(a.dataset.thin)); }
   });
-  $('rv-save').addEventListener('click', async () => {
-    try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ review: { on: $('rv-on').checked, firstDays: Number($('rv-first').value), secondDays: Number($('rv-second').value) } }) });
-      toast('Saved'); await refresh(); loadReviews();
-    } catch (err) { fail(err); }
-  });
+  autoSave($('rv-save').closest('.card'), async () => {
+    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ review: { on: $('rv-on').checked, firstDays: Number($('rv-first').value), secondDays: Number($('rv-second').value) } }) });
+    await refresh();
+  }, [$('rv-save')]);
 
   // Yearly requirements
   let annual = [];
@@ -2207,7 +2319,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const people = t.people.slice().sort((a, c) => order[a.status] - order[c.status] || (a.due || '').localeCompare(c.due || '') || a.name.localeCompare(c.name));
     $('vw-title').textContent = t.title;
     $('vw-body').innerHTML = `<table style="margin-top:12px"><thead><tr><th>Name</th><th>Department</th><th>Status</th><th>Last done</th><th>Due</th></tr></thead><tbody>
-      ${people.map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.department || '')}</td><td>${yrLabel[p.status]}</td><td>${p.last ? fmtDate(p.last) : ''}</td><td>${p.due ? fmtDate(p.due) : 'Now'}</td></tr>`).join('')
+      ${people.map(p => `<tr><td>${personLink(p.id, p.name)}</td><td>${escapeHtml(p.department || '')}</td><td>${yrLabel[p.status]}</td><td>${p.last ? fmtDate(p.last) : ''}</td><td>${p.due ? fmtDate(p.due) : 'Now'}</td></tr>`).join('')
         || '<tr><td colspan="5" class="muted">No active staff in these departments.</td></tr>'}</tbody></table>`;
     $('viewer').showModal();
   });
@@ -2395,7 +2507,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     bar.innerHTML = `<span class="lay-help" hidden>${LAYOUT_HELP}</span><button class="btn ghost lay-reset" hidden>Reset to default</button><button class="btn ghost lay-edit">✥ Edit layout</button>`;
     return bar;
   };
-  const settingsLayout = makeLayout('settings', $('set-grid'), [['kiosk', 6], ['email', 6], ['depts', 12], ['closing', 12], ['logins', 6], ['password', 6], ['backup', 6], ['golive', 6], ['decor', 12]], $('lay-bar'));
+  const settingsLayout = makeLayout('settings', $('set-grid'), [['kiosk', 6], ['email', 6], ['depts', 12], ['closing', 12], ['logins', 6], ['password', 6], ['backup', 6], ['decor', 12]], $('lay-bar'));
   // Other tabs: their cards become tiles. Ids come from each card's heading, so they stay the same between visits.
   function tileTab(page, blocks) {
     const sec = $('tab-' + page);
@@ -2404,7 +2516,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const bar = layoutBar();
     const els = blocks.map(([el]) => el).filter(Boolean);
     if (!els.length) return;
-    els[0].before(bar); bar.after(grid);
+    els[0].before(grid); grid.after(bar);
     const used = new Set(), defaults = [];
     blocks.forEach(([el, span, title]) => {
       if (!el) return;
@@ -2457,7 +2569,39 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     loadEmailStatus();
     $('pw-form').hidden = !!state.passwordFromEnv && main;
     $('pw-form').querySelector('.muted').innerHTML = main ? 'Used to open this admin page. The username is <code>admin</code>.' : `You're signed in as <code>${escapeHtml(state.me || '')}</code>. Change your own password here.`;
+    // Nothing to change here when the hosting service sets the main password; the Admin logins card says so instead.
+    document.querySelector('[data-tile="password"]').hidden = !!state.passwordFromEnv && main;
+    renderIpadMap();
   }
+  // Settings → "What staff see on the iPad": every setting that changes the iPad, with a link to where it lives.
+  const IPAD_MAP = [
+    ['🗓️', 'Which topic shows each day', 'Topic of the week, culture day, quiz day', () => $('save-fallback')],
+    ['📌', 'Scheduled topics', 'A set topic for a week or a department', () => $('sc-add')],
+    ['❗', 'Required education', 'Shows first, until it\'s done', () => $('rq-topic')],
+    ['🌱', 'New hire starter topics', 'What a new person sees first', () => $('ns-save')],
+    ['📣', 'Announcements and pop-ups', 'Above the keypad, after the in-service, or a full pop-up', () => $('an-popup')],
+    ['🎂', 'Birthdays and anniversaries', 'Messages and the celebration screen', () => $('an-celebrate')],
+    ['🔥', 'Streaks and leaderboard', 'Shout-outs and the 🏆 button', () => document.querySelector('.sk-card')],
+    ['🔁', 'Spaced review', 'Missed topics come back a few days later', () => $('rv-on')],
+    ['💬', 'End-screen messages', 'The thank-you line after each in-service', () => $('closing-card')],
+    ['🍂', 'Home screen decor', 'Seasonal decorations, message and color', () => $('decor-on')],
+    ['🏷️', 'Facility name and banner speed', 'Plus staff who aren\'t on the roster', () => $('set-facility')],
+    ['👥', 'Departments', 'Used everywhere a department is picked', () => $('dept-card')],
+  ];
+  function renderIpadMap() {
+    $('ipad-map').innerHTML = IPAD_MAP.map(([icon, title, sub], i) => {
+      const el = IPAD_MAP[i][3](), tab = el && el.closest('.tab');
+      const where = tab ? (document.querySelector(`#nav button[data-tab="${tab.id.slice(4)}"]`) || {}).textContent : '';
+      return `<button class="map-item" data-map="${i}"><span class="mi-icon">${icon}</span><span><b>${title}</b><small>${sub}</small></span><span class="mi-where">${escapeHtml((where || '').trim())} ›</span></button>`;
+    }).join('');
+  }
+  $('ipad-map').addEventListener('click', e => {
+    const b = e.target.closest('[data-map]'); if (!b) return;
+    const el = IPAD_MAP[Number(b.dataset.map)][3](); if (!el) return;
+    const tab = el.closest('.tab');
+    if (tab) goTab(tab.id.slice(4));
+    showFound(el.closest('.card') || el);
+  });
   // Simple row editors: one box per item, with a remove button.
   const EMAIL_RE = /[^\s<>,;:"'()]+@[^\s<>,;:"'()]+\.[a-z]{2,}/gi;
   function reRow(box, inner) {
@@ -2512,7 +2656,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         const dataUrl = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = bad; r.readAsDataURL(f); });
         const r = await post('/api/admin/media', { dataUrl });
         panel.querySelector('.cm-gif').value = r.url; sync();
-        toast('Uploaded. Press Save to keep it.');
+        panel.querySelector('.cm-gif').dispatchEvent(new Event('input', { bubbles: true }));
       } catch (err) { fail(err); }
     });
     sync();
@@ -2610,12 +2754,13 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     }
     $('leader-bulk').close();
     $('dept-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    alert(`${added ? `${added} added` : ''}${added && updated ? ', ' : ''}${updated ? `${updated} updated` : ''}. Press Save under Departments and leaders to keep them.`);
+    toast(`${added ? `${added} added` : ''}${added && updated ? ', ' : ''}${updated ? `${updated} updated` : ''}`);
+    deptSave.now();
   });
   async function saveSettings() {
     const lv = leaderValues();
-    if (lv.bad.length) return alert(`Check the email for ${lv.bad.join(', ')}. It doesn't look like an email address.`);
-    try {
+    if (lv.bad.length) throw new Error(`Check the email for ${lv.bad.join(', ')}`);
+    {
       await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({
         facilityName: $('set-facility').value,
         departments: [...new Set(rowValues('set-depts'))],
@@ -2625,13 +2770,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         newsSeconds: Number($('set-news-seconds').value)
       }) });
       $('sc-depts').dataset.init = ''; $('rq-depts').dataset.init = ''; $('an-depts').dataset.init = '';
-      toast('Settings saved');
       await refresh();
-    } catch (err) { fail(err); }
+    }
   }
-  $('save-settings').addEventListener('click', saveSettings);
-  $('save-depts').addEventListener('click', saveSettings);
-  $('save-closing').addEventListener('click', saveSettings);
+  autoSave($('save-settings').closest('.card'), saveSettings, [$('save-settings')]);
+  const deptSave = autoSave($('save-depts').closest('.card'), saveSettings, [$('save-depts')]);
+  autoSave($('save-closing').closest('.card'), saveSettings, [$('save-closing')]);
   // ---------- email alerts and follow-ups ----------
   async function loadEmailStatus() {
     try {
@@ -2642,12 +2786,10 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         : '<div class="muted" style="margin-top:6px">None yet.</div>';
     } catch { /* leave as is */ }
   }
-  $('save-email').addEventListener('click', async () => {
-    try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ alertEmails: splitLines($('set-alert-emails').value), missedFollowup: $('set-missed-followup').checked }) });
-      toast('Email settings saved'); await refresh();
-    } catch (err) { fail(err); }
-  });
+  autoSave($('save-email').closest('.card'), async () => {
+    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ alertEmails: splitLines($('set-alert-emails').value), missedFollowup: $('set-missed-followup').checked }) });
+    await refresh();
+  }, [$('save-email')]);
   $('test-email').addEventListener('click', async () => {
     try { await post('/api/admin/email/test', { to: $('set-alert-emails').value }); toast('Test email sent. Check the inbox.'); }
     catch (err) { alert(err.message); }
@@ -2751,20 +2893,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   function syncSegs() { document.querySelectorAll('.seg[data-for]').forEach(g => g.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === $(g.dataset.for).value))); }
   document.querySelectorAll('.seg[data-for]').forEach(g => g.addEventListener('click', e => {
     const b = e.target.closest('button[data-v]'); if (!b) return;
-    $(g.dataset.for).value = b.dataset.v; syncSegs(); saveStreaks();
+    $(g.dataset.for).value = b.dataset.v; syncSegs();
   }));
-  ['sk-shout', 'sk-button'].forEach(id => $(id).addEventListener('change', saveStreaks));
-  document.addEventListener('click', e => {
-    const b = e.target.closest('[data-up-staff]'); if (!b) return;
-    const emp = state.employees.find(x => x.id === b.dataset.upStaff);
-    if (emp) { goTab('staff'); openStaff(emp); }
+  autoSave(document.querySelector('.sk-card'), async () => {
+    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ streaks: { shoutOuts: $('sk-shout').checked, leaderboard: $('sk-where').value, top: Number($('sk-top').value), board: $('sk-board').value, button: $('sk-button').checked } }) });
+    await refresh();
   });
-  async function saveStreaks() {
-    try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ streaks: { shoutOuts: $('sk-shout').checked, leaderboard: $('sk-where').value, top: Number($('sk-top').value), board: $('sk-board').value, button: $('sk-button').checked } }) });
-      toast('Saved. The iPad picks it up within a minute.'); await refresh();
-    } catch (err) { fail(err); }
-  }
   $('an-show-past').addEventListener('change', renderAnnouncements);
   // Pop-up announcements: title, picture (uploaded like topic pictures), once or every time.
   function popupForm() {
@@ -2831,16 +2965,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     if (w) w.focus();
   }
   document.addEventListener('click', e => { const b = e.target.closest('[data-show-preview]'); if (b) previewLastScreen(b.dataset.showPreview); });
-  $('an-save-msgs').addEventListener('click', async () => {
-    try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ birthdayMessages: closingValues($('an-bday-msgs')), anniversaryMessages: closingValues($('an-anniv-msgs')) }) });
-      toast('Messages saved'); await refresh();
-    } catch (err) { fail(err); }
-  });
-  $('an-celebrate').addEventListener('change', async () => {
-    try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ celebrations: $('an-celebrate').checked }) }); toast('Saved'); await refresh(); }
-    catch (err) { fail(err); }
-  });
+  autoSave($('an-save-msgs').closest('.card'), async () => {
+    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ celebrations: $('an-celebrate').checked,
+      birthdayMessages: closingValues($('an-bday-msgs')), anniversaryMessages: closingValues($('an-anniv-msgs')) }) });
+    await refresh();
+  }, [$('an-save-msgs')]);
 
   // ---------- going live: clear test data ----------
   async function loadTestData() {
@@ -2889,22 +3018,19 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <td><a href="/?month=${i + 1}" target="_blank" rel="noopener">Preview</a></td></tr>`;
     }).join('');
   }
-  $('save-decor').addEventListener('click', async () => {
+  autoSave($('save-decor').closest('.card'), async () => {
     const months = [...$('decor-rows').querySelectorAll('tr')].map(tr => ({
       emoji: tr.querySelector('[data-decor=emoji]').value, message: tr.querySelector('[data-decor=message]').value, color: tr.querySelector('[data-decor=color]').value }));
-    try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ decor: { on: $('decor-on').checked, months } }) });
-      toast('Decor saved. The iPad picks it up within a few minutes.');
-      await refresh();
-    } catch (err) { fail(err); }
-  });
+    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ decor: { on: $('decor-on').checked, months } }) });
+    await refresh();
+  }, [$('save-decor')]);
   // ----- extra admin logins -----
   async function loadAdminUsers() {
     try {
       const { users } = await api('/api/admin/users');
       const main = state.isMainAdmin !== false;
       $('au-add').hidden = !main;
-      $('au-rows').innerHTML = `<tr><td>Main login</td><td><code>admin</code></td><td class="muted small">–</td><td></td></tr>` + users.map(u => `<tr>
+      $('au-rows').innerHTML = `<tr><td><strong>${escapeHtml(state.settings.adminName || 'Main login')}</strong><div class="muted small">Main login${state.passwordFromEnv ? ' · password is set in Render' : ''}</div></td><td><code>admin</code></td><td class="muted small">–</td><td></td></tr>` + users.map(u => `<tr>
         <td><strong>${escapeHtml(u.name)}</strong></td><td><code>${escapeHtml(u.username)}</code></td>
         <td class="small">${u.lastSeen ? fmtWhen(u.lastSeen) : '<span class="muted">Not yet</span>'}</td>
         <td style="white-space:nowrap">${main ? `<button class="btn subtle" data-au-pw="${u.id}">New password</button><button class="btn subtle danger" data-au-del="${u.id}">Remove</button>` : ''}</td></tr>`).join('');
@@ -3060,5 +3186,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   new MutationObserver(() => addFmtBars(document)).observe(document.body, { childList: true, subtree: true });
 
 
-  refresh().catch(fail);
+  // Responses start on this week; Any time is one click away.
+  refresh().then(() => {
+    const [m, t] = rangeFor('week');
+    $('resp-from').defaultValue = iso(m); $('resp-to').defaultValue = iso(t);
+    const pick = $('resp-from').closest('label').previousElementSibling;
+    pick.querySelector('[value=week]').defaultSelected = true; pick.value = 'week';
+  }).catch(fail);
 })();

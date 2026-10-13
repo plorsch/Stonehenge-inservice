@@ -1306,7 +1306,7 @@ function clockCheck(punches) {
     else if (rs.length) status = 'unfinished';
     else status = 'missed';
     results.push({
-      date: sh.date, time: sh.time, last4: sh.last4,
+      date: sh.date, time: sh.time, last4: sh.last4, employeeId: emp ? emp.id : null,
       name: emp ? emp.name : sh.name, department, leader: leaderName((emp && db.settings.leaders && db.settings.leaders[department]) || ''),
       onRoster: !!emp, ambiguous: candidates.length > 1,
       status, completedAt: done ? done.completedAt : null, topic: done ? done.topicTitle : (rs[0] ? rs[0].topicTitle : '')
