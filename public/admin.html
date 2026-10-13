@@ -149,7 +149,7 @@
   dialog { border: 0; border-radius: 14px; padding: 0; width: min(900px, 96vw); max-height: 92vh; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
   .vw-note { margin-top: 12px; padding: 8px 12px; border-radius: 10px; background: var(--brand-soft); color: var(--brand); font-weight: 600; font-size: 14px; }
   #viewer .dlg-foot { flex-wrap: wrap; }
-  #viewer[open] { display: flex; flex-direction: column; } #viewer .dlg-body { overflow-y: auto; min-height: 0; flex: 1; }
+  #viewer[open] { display: flex; flex-direction: column; } #viewer .dlg-body { overflow-y: auto; min-height: 0; flex: 1 1 auto; }  /* not flex: 1, which Safari collapses to nothing */
   .vw-actions { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-right: auto; }
   dialog::backdrop { background: rgba(20,35,45,.45); }
   .dlg-head, .dlg-foot { padding: 14px 22px; display: flex; align-items: center; gap: 10px; }
