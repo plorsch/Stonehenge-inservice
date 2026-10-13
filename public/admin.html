@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>In-Service Admin</title>
+<link rel="manifest" href="/admin.webmanifest">
+<meta name="theme-color" content="#1f5f7a">
+<link rel="apple-touch-icon" href="/admin-apple-icon.png">
+<link rel="icon" href="/admin-icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="In-Service">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
   :root {
     --bg: #f3f6f8; --card: #fff; --ink: #1d2b36; --muted: #5b6b78; --line: #dbe3e9;
@@ -153,6 +161,8 @@
 
   /* ----- Today dashboard ----- */
   .hello { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; margin: 4px 2px 16px; }
+  .install-steps ol { margin: 6px 0 0; padding-left: 22px; } .install-steps li { margin: 6px 0; font-size: 15px; }
+  .install-btn { margin-left: auto; }
   .hello h1 { font-size: 26px; margin: 0; color: #17485d; } .hello .muted { font-size: 15px; }
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 18px; }
   .tile { display: block; text-align: left; background: #fff; border: 0; border-radius: 16px; padding: 16px 18px 14px; font: inherit; color: var(--ink); cursor: pointer;
@@ -424,7 +434,13 @@ table.la tr:hover td { background: transparent; }
   <div class="alert" id="kiosk-alert" hidden></div>
   <!-- Today -->
   <section class="tab on" id="tab-today">
-    <div class="hello"><h1 id="hello-title">Hello!</h1><div class="muted" id="hello-date"></div></div>
+    <div class="hello"><h1 id="hello-title">Hello!</h1><div class="muted" id="hello-date"></div>
+      <button class="btn ghost small install-btn" id="install-app" hidden>📲 Add to your home screen</button></div>
+    <dialog id="install-dlg" style="width:min(480px,96vw)">
+      <div class="dlg-head"><h2 style="margin:0">📲 Use the admin site like an app</h2></div>
+      <div class="dlg-body"><div id="install-steps" class="install-steps"></div>
+        <div class="muted small" style="margin-top:10px">It gets its own icon and opens full screen, without the browser bars. Sign in with your admin login the first time. It always shows the latest version.</div>
+        <div style="text-align:right;margin-top:14px"><button class="btn" id="install-close">Got it</button></div></div></dialog>
     <div class="tiles">
       <button class="tile t-blue" data-go="today-all"><div class="ico">✅</div><div class="num" id="stat-today">0</div><div class="lbl">completed today</div><div class="go">See who →</div></button>
       <button class="tile t-green" data-go="today-all"><div class="ico">🎯</div><div class="num" id="stat-rate">–</div><div class="lbl">right on the first try today</div><div class="go">See responses →</div></button>

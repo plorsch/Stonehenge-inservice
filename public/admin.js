@@ -263,12 +263,32 @@
     renderToday(); renderSchedule(); renderRequired(); renderStarter(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters(); renderReportFilters(); setTimeout(() => fitAllText(), 30); layouts.forEach(l => l.apply());
   }
 
+  // ---------- add to home screen ----------
+  // Chrome and Edge offer a real install prompt; Safari needs the Share menu, so we show the steps.
+  let installPrompt = null;
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  $('install-app').hidden = !!standalone;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; });
+  window.addEventListener('appinstalled', () => { $('install-app').hidden = true; toast('Added. Look for the In-Service icon.'); });
+  $('install-app').addEventListener('click', async () => {
+    if (installPrompt) { installPrompt.prompt(); const c = await installPrompt.userChoice; installPrompt = null; if (c.outcome === 'accepted') $('install-app').hidden = true; return; }
+    const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    const safariMac = /Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|Edg/.test(ua), android = /Android/.test(ua);
+    $('install-steps').innerHTML = ios ? '<b>On iPhone or iPad (Safari)</b><ol><li>Tap the <b>Share</b> button (the square with the arrow).</li><li>Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>.</li></ol>'
+      : android ? '<b>On Android (Chrome)</b><ol><li>Tap the <b>⋮</b> menu at the top right.</li><li>Tap <b>Add to Home screen</b> or <b>Install app</b>.</li></ol>'
+      : safariMac ? '<b>On a Mac (Safari)</b><ol><li>Click <b>File</b> in the menu bar.</li><li>Click <b>Add to Dock</b>.</li></ol>'
+      : '<b>On a computer (Chrome or Edge)</b><ol><li>Click the <b>install</b> icon at the right end of the address bar, or the <b>⋮</b> / <b>…</b> menu.</li><li>Choose <b>Install In-Service</b> (in Edge: <b>Apps → Install this site as an app</b>).</li></ol>';
+    $('install-dlg').showModal();
+  });
+  $('install-close').addEventListener('click', () => $('install-dlg').close());
+
   // ---------- today ----------
   function renderToday() {
     $('stat-today').textContent = state.responseCountToday;
     $('stat-missed').textContent = state.missedToday;
     const h = new Date().getHours();
-    const who = state.me && state.me !== 'admin' ? ', ' + state.me.charAt(0).toUpperCase() + state.me.slice(1) : '';
+    const nm = state.meName || (state.me && state.me !== 'admin' ? state.me : '');
+    const who = nm ? ', ' + nm.charAt(0).toUpperCase() + nm.slice(1) : '';
     $('hello-title').textContent = (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + who + ' 👋';
     $('hello-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     loadDashboard();

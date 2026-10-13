@@ -116,6 +116,7 @@ function defaultDecor() {
 function defaultSettings() {
   return {
     facilityName: 'Stonehenge',
+    adminName: 'Patrick',     // the main admin login's first name, for the Today greeting
     // When no schedule covers someone: 'weekly' = one topic per department per week (changes Monday),
     // 'daily' = one per department per day, 'random' = per person.
     fallbackMode: 'weekly',
@@ -785,7 +786,7 @@ function shortName(name) {
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp'
 };
 
@@ -1438,7 +1439,9 @@ async function adminRoutes(req, res, p, m, url) {
       newHires: newHireList(),
       streakTop: (() => { const st = streakStats(); return db.employees.filter(e => e.active && st[e.id] && st[e.id].streak >= STREAK_LEADER_MIN)
         .sort((a, b) => st[b.id].streak - st[a.id].streak).slice(0, 5).map(e => ({ id: e.id, name: e.name, department: e.department, streak: st[e.id].streak })); })(),
-      kioskUrls: kioskUrls(), passwordFromEnv, me: req.adminUser, isMainAdmin: req.adminUser === config.adminUser,
+      kioskUrls: kioskUrls(), passwordFromEnv, me: req.adminUser,
+      meName: req.adminUser === config.adminUser ? db.settings.adminName : ((db.admins.find(a => a.username === req.adminUser) || {}).name || req.adminUser).split(' ')[0],
+      isMainAdmin: req.adminUser === config.adminUser,
       layouts: (db.layouts || {})[req.adminUser] || {}
     });
   }
@@ -2181,7 +2184,9 @@ async function handle(req, res) {
     if ((await kioskRoutes(req, res, p, m)) !== false) return;
     return send(res, 404, { error: 'Not found' });
   }
-  if (m === 'GET' && /^\/[\w.-]+\.(js|css|png|svg|ico)$/.test(p) && !p.startsWith('/admin')) return serveStatic(res, p.slice(1));
+  if (m === 'GET' && /^\/[\w.-]+\.(js|css|png|svg|ico)$/.test(p) && !p.startsWith('/admin.js')) return serveStatic(res, p.slice(1));
+  // The admin site as a home-screen app. Browsers fetch this without the password, so it stays public (nothing private in it).
+  if (m === 'GET' && p === '/admin.webmanifest') return serveStatic(res, 'admin.webmanifest');
   const sample = m === 'GET' && p.match(/^\/samples\/([\w-]+\.gif)$/i);
   if (sample) return serveStatic(res, 'samples/' + sample[1]);
   const media = m === 'GET' && p.match(/^\/media\/([\w-]+\.(png|jpe?g|gif|webp))$/i);
