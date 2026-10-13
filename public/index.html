@@ -58,6 +58,7 @@
   }
   .screen { width: 100%; max-width: 760px; display: none; animation: fade .2s ease; }
   .screen.active { display: block; }
+  #s-home.screen.active { margin: auto 0; }   /* the keypad sits in the middle of the iPad */
   @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px 32px; }
   h1 { font-size: 32px; line-height: 1.2; margin: 0 0 10px; }
@@ -119,12 +120,6 @@
   .news-list div { font-size: 17px; padding: 6px 0; line-height: 1.35; }
   .news-list div + div { border-top: 1px dashed var(--line); }
   .extras .leaders { margin: 0; max-width: none; background: none; border: 0; border-radius: 0; padding: 12px 0; }
-  .end-actions { display: flex; align-items: center; gap: 12px; margin-top: 22px; }
-  .end-actions .btn { flex: 1; }
-  .end-actions .helpful { margin: 0; flex-direction: column; gap: 4px; }
-  .end-actions .helpful > span { font-size: 13px; }
-  .end-actions .helpful .chip { min-height: 52px; min-width: 56px; font-size: 22px; }
-  .end-actions .thumbs { display: flex; gap: 6px; }
 
   /* Seasonal decor (home screen only) */
   #decor { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; display: none; }
@@ -421,11 +416,11 @@
           <div class="news-list" id="result-news" hidden></div>
           <div class="leaders" id="result-leaders" hidden></div>
         </div>
-        <div class="end-actions"><button class="btn" id="result-next">Done</button>
-          <div class="helpful" id="helpful" hidden><span id="helpful-q"></span><div class="thumbs">
-            <button class="chip" data-helpful="1" aria-label="Helpful">👍</button><button class="chip" data-helpful="0" aria-label="Not helpful">👎</button></div></div>
-          <div class="helpful" id="helpful-thanks" hidden></div></div>
+        <div class="row"><button class="btn wide" id="result-next">Done</button></div>
         <div class="countdown muted" id="countdown"></div>
+        <div class="helpful" id="helpful" hidden><span id="helpful-q"></span>
+          <button class="chip" data-helpful="1" aria-label="Helpful">👍</button><button class="chip" data-helpful="0" aria-label="Not helpful">👎</button></div>
+        <div class="helpful" id="helpful-thanks" hidden></div>
       </div>
     </section>
 
@@ -1048,7 +1043,7 @@
     $('result-cheer').hidden = !cheer;
     // "Was this helpful?" needs the saved record, so it's skipped for answers saved offline.
     s.feedbackFor = r.offline ? null : r.responseId;
-    $('helpful-q').textContent = T('Helpful?', '¿Le sirvió?');
+    $('helpful-q').textContent = T('Was this lesson helpful?', '¿Le sirvió esta lección?');
     $('helpful').hidden = !s.feedbackFor;
     $('helpful-thanks').hidden = true;
     $('result-closing').hidden = more;
@@ -1091,7 +1086,7 @@
     api('/api/kiosk/feedback', { responseId: s.feedbackFor, helpful: b.dataset.helpful === '1' }).catch(() => {});
     s.feedbackFor = null;
     $('helpful').hidden = true;
-    $('helpful-thanks').textContent = T('Thanks! 💙', '¡Gracias! 💙');
+    $('helpful-thanks').textContent = T('Thanks for the feedback!', '¡Gracias por su opinión!');
     $('helpful-thanks').hidden = false;
   });
   $('result-next').addEventListener('click', () => {

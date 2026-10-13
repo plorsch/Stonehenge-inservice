@@ -180,6 +180,13 @@
   nav button:hover { background: rgba(255,255,255,.12); color: #fff; }
   nav button.on { background: #fff; color: var(--brand); border-bottom: 0; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
   header nav { margin-top: -4px; }
+  .subnav-wrap { background: #fff; border-bottom: 1px solid var(--line); }
+  nav.subnav { justify-content: safe center; gap: 6px; padding: 10px 12px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  nav.subnav::-webkit-scrollbar { display: none; }
+  nav.subnav button { flex: none; margin: 0; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--brand); font-size: 14px; font-weight: 500; white-space: nowrap; box-shadow: none; }
+  nav.subnav button:hover { background: var(--brand-soft); color: var(--brand); }
+  nav.subnav button.on { border-color: var(--brand); background: var(--brand-soft); font-weight: 700; box-shadow: none; }
+  nav.subnav button[hidden] { display: none; }
   .gsearch input { background: rgba(255,255,255,.95); border-color: transparent; }
   .card { border: 0; border-radius: 16px; box-shadow: 0 1px 2px rgba(16, 40, 60, .06), 0 6px 20px rgba(16, 40, 60, .06); }
   h2 { font-size: 19px; letter-spacing: .1px; }
@@ -422,6 +429,8 @@ table.la tr:hover td { background: transparent; }
     .gsearch { order: 1; flex-basis: 100%; width: 100%; margin: 0; padding: 0 0 6px; } .gsearch input { width: 100%; max-width: none; box-sizing: border-box; padding: 7px 12px; } .gsearch .clearwrap { display: block; }
     header nav { order: 2; flex-wrap: nowrap; overflow-x: auto; margin: 0 -12px; padding: 0 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
     header nav::-webkit-scrollbar { display: none; }
+    header nav { gap: 0; justify-content: space-between; } header nav button { padding: 6px 7px; font-size: 14px; }
+    nav.subnav { padding: 8px 8px; gap: 4px; } nav.subnav button { padding: 5px 10px; font-size: 13px; }
     nav button { flex: none; white-space: nowrap; margin: 2px 0 8px; padding: 7px 12px; scroll-snap-align: center; }
     main { padding: 14px 10px 64px; }
     .card { padding: 16px 14px; border-radius: 14px; }
@@ -456,21 +465,31 @@ table.la tr:hover td { background: transparent; }
 <body>
 <header>
   <div class="brand"><img src="/logo.png" alt="">In-Service Admin</div>
-  <nav id="nav">
-    <button data-tab="today" class="on">Today</button>
-    <button data-tab="schedule">Schedule</button>
-    <button data-tab="required">Required education</button>
-    <button data-tab="announcements">Announcements</button>
-    <button data-tab="topics">Topic library</button>
-    <button data-tab="staff">Staff</button>
-    <button data-tab="responses">Responses</button>
-    <button data-tab="clockcheck">Clock-in check</button>
-    <button data-tab="reports">Reports</button>
-    <button data-tab="history">Usage history</button>
-    <button data-tab="settings">Settings</button>
+  <nav id="groups">
+    <button data-group="today" class="on">Today</button>
+    <button data-group="plan">Plan</button>
+    <button data-group="topics">Topics</button>
+    <button data-group="people">People</button>
+    <button data-group="results">Results</button>
+    <button data-group="settings">Settings</button>
   </nav>
   <div class="gsearch"><input type="search" id="gsearch" placeholder="🔍 Search topics, staff, settings…" autocomplete="off" aria-label="Search the admin site"><div class="gsearch-results" id="gsearch-results" hidden></div></div>
 </header>
+<!-- The pages inside the chosen group, as small buttons under the header -->
+<div class="subnav-wrap" id="subnav-wrap" hidden>
+  <nav id="nav" class="subnav">
+    <button data-tab="today" data-group="today" class="on">Today</button>
+    <button data-tab="schedule" data-group="plan">Schedule</button>
+    <button data-tab="required" data-group="plan">Required education</button>
+    <button data-tab="announcements" data-group="plan">Announcements</button>
+    <button data-tab="topics" data-group="topics">Topic library</button>
+    <button data-tab="staff" data-group="people">Staff</button>
+    <button data-tab="clockcheck" data-group="people">Clock-in check</button>
+    <button data-tab="responses" data-group="results">Responses</button>
+    <button data-tab="reports" data-group="results">Reports</button>
+    <button data-tab="settings" data-group="settings">Settings</button>
+  </nav>
+</div>
 <main>
   <div class="alert" id="kiosk-alert" hidden></div>
   <!-- Today -->
@@ -805,6 +824,14 @@ table.la tr:hover td { background: transparent; }
       </table></div>
       <div style="text-align:center;margin-top:12px"><button class="btn ghost" id="resp-more" hidden>Show more</button></div>
     </div>
+    <div class="card" style="margin-top:18px">
+      <h2>Usage history</h2>
+      <div class="muted small" style="margin-bottom:10px">Each row is a day a topic was used on the iPad.</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Topic</th><th>Responses that day</th></tr></thead>
+        <tbody id="usage-rows"></tbody>
+      </table></div>
+    </div>
   </section>
 
   <!-- Clock-in check -->
@@ -914,18 +941,6 @@ table.la tr:hover td { background: transparent; }
       <div class="table-wrap"><table>
         <thead><tr><th>Topic</th><th>Who</th><th>Up to date</th><th>Due in 30 days</th><th>Overdue</th><th>Never done</th><th></th></tr></thead>
         <tbody id="yr-rows"></tbody>
-      </table></div>
-    </div>
-  </section>
-
-  <!-- History -->
-  <section class="tab" id="tab-history">
-    <div class="card">
-      <h2>Usage history</h2>
-      <div class="muted small" style="margin-bottom:10px">Each row is a day a topic was used on the iPad.</div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Date</th><th>Topic</th><th>Responses that day</th></tr></thead>
-        <tbody id="usage-rows"></tbody>
       </table></div>
     </div>
   </section>

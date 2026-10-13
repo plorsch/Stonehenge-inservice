@@ -126,10 +126,30 @@
     if (!b) return;
     document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x === b));
     document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.id === 'tab-' + b.dataset.tab));
-    if (b.dataset.tab === 'responses') loadResponses();
-    if (b.dataset.tab === 'history') loadUsage();
+    syncGroups(b);
+    if (b.dataset.tab === 'responses') { loadResponses(); loadUsage(); }
     if (b.dataset.tab === 'settings') renderSettings();
     if (b.dataset.tab === 'reports') { loadFollowups(); loadMissed(); loadAnnual(); loadReviews(); }
+  });
+
+  // Six groups across the top; the pages in the chosen group show as small buttons under the header.
+  // A group opens the page you were last on in it.
+  const lastInGroup = {};
+  function syncGroups(b) {
+    const g = b.dataset.group;
+    lastInGroup[g] = b.dataset.tab;
+    document.querySelectorAll('#groups button').forEach(x => x.classList.toggle('on', x.dataset.group === g));
+    const pages = [...document.querySelectorAll('#nav button')];
+    pages.forEach(x => { x.hidden = x.dataset.group !== g; });
+    $('subnav-wrap').hidden = pages.filter(x => !x.hidden).length < 2;
+  }
+  $('groups').addEventListener('click', e => {
+    const gb = e.target.closest('button[data-group]');
+    if (!gb) return;
+    const g = gb.dataset.group;
+    const b = document.querySelector(`#nav button[data-tab="${lastInGroup[g] || ''}"]`) || document.querySelector(`#nav button[data-group="${g}"]`);
+    if (b) b.click();
+    if (matchMedia('(max-width: 700px)').matches) gb.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   });
 
   // ---------- click a column heading to sort ----------
