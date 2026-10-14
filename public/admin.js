@@ -1784,6 +1784,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     if (!a) return;
     vwPush(() => showSeen(a));
     $('vw-title').textContent = a.title || 'Pop-up announcement';
+    $('vw-actions').innerHTML = `<a class="btn ghost" href="/api/admin/announcements/${encodeURIComponent(a.id)}/seen.csv" title="One row per person with their answer, for Excel">⬇ Download spreadsheet</a>`;
     $('vw-body').innerHTML = '<p class="muted">Loading…</p>';
     openViewer();
     try {

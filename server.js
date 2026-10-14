@@ -1724,7 +1724,7 @@ async function adminRoutes(req, res, p, m, url) {
   }
   // Who has seen a pop-up: everyone who tapped "Got it", plus people it was meant for who came in
   // since it started but haven't seen it, and people who haven't been in yet.
-  mt = p.match(/^\/api\/admin\/announcements\/(\w+)\/seen$/);
+  mt = p.match(/^\/api\/admin\/announcements\/(\w+)\/seen(\.csv)?$/);
   if (mt && m === 'GET') {
     const a = db.announcements.find(x => x.id === mt[1] && x.popup);
     if (!a) return send(res, 404, { error: 'Not found.' });
@@ -1736,6 +1736,20 @@ async function adminRoutes(req, res, p, m, url) {
     const seen = [...seenBy].map(([id, x]) => { const e = findEmployee(id); return e && Object.assign(person(e), { at: x.at }, x.choice ? { choice: x.choice } : {}); }).filter(Boolean).sort((x, y) => y.at.localeCompare(x.at));
     const missed = meantFor.filter(e => !seenBy.has(e.id) && lastIn[e.id]).map(e => Object.assign(person(e), { lastIn: lastIn[e.id] })).sort((x, y) => y.lastIn.localeCompare(x.lastIn));
     const notIn = meantFor.filter(e => !seenBy.has(e.id) && !lastIn[e.id]).map(person).sort((x, y) => x.name.localeCompare(y.name));
+    if (mt[2]) {
+      // Spreadsheet: one row per person the pop-up was meant for (plus anyone else who answered), with their answer.
+      const wd = id => (findEmployee(id) || {}).last4 || '';
+      const at = iso => iso ? new Date(iso).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+      const rows = [
+        ...seen.map(x => [x.name, wd(x.id), x.department, x.choice || 'Got it', at(x.at), 'Answered']),
+        ...missed.map(x => [x.name, wd(x.id), x.department, '', at(x.lastIn), "Came in but didn't answer"]),
+        ...notIn.map(x => [x.name, wd(x.id), x.department, '', '', "Hasn't been in since it started"])
+      ];
+      const head = ['Name', 'Workday last 4', 'Department', 'Answer', 'When', 'Status'];
+      const safe = String(a.title || 'pop-up').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'pop-up';
+      return send(res, 200, '\ufeff' + [head.join(','), ...rows.map(r => r.map(csvCell).join(','))].join('\r\n'), 'text/csv; charset=utf-8',
+        { 'Content-Disposition': `attachment; filename="${safe}-answers-${today()}.csv"` });
+    }
     return send(res, 200, { seen, missed, notIn, buttons: a.buttons || [] });
   }
   mt = p.match(/^\/api\/admin\/announcements\/(\w+)$/);
