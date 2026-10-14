@@ -189,7 +189,7 @@ function upgradeDb(d) {
   d.schedules = Array.isArray(d.schedules) ? d.schedules : [];
   d.required = Array.isArray(d.required) ? d.required : [];
   d.announcements = Array.isArray(d.announcements) ? d.announcements : [];
-  d.popupSeen = Array.isArray(d.popupSeen) ? d.popupSeen : [];   // [{ id, employeeId, at }] who tapped "Got it" on a pop-up announcement
+  d.popupSeen = Array.isArray(d.popupSeen) ? d.popupSeen : [];   // [{ id, employeeId, at, choice? }] who tapped "Got it" (or a custom button like "RSVP Yes") on a pop-up
   d.followups = Array.isArray(d.followups) ? d.followups : [];
   d.emailLog = Array.isArray(d.emailLog) ? d.emailLog : [];
   d.admins = Array.isArray(d.admins) ? d.admins : [];
@@ -913,7 +913,7 @@ function popupsFor(who) {
   return db.announcements.filter(a => a.popup && a.startDate <= d && (!a.endDate || a.endDate >= d))
     .filter(a => !a.departments.length || a.departments.includes(who.department))
     .filter(a => a.everyTime || !who.employeeId || !db.popupSeen.some(x => x.id === a.id && x.employeeId === who.employeeId))
-    .map(a => ({ id: a.id, title: a.title, text: a.text, image: a.image }));
+    .map(a => ({ id: a.id, title: a.title, text: a.text, image: a.image, buttons: a.buttons || [], confirm: !!a.confirm }));
 }
 // Birthdays and work anniversaries for a day ("MM-DD"). Feb 29 birthdays show on Feb 28 in other years.
 function celebrationsOn(date) {
@@ -1170,12 +1170,17 @@ async function kioskRoutes(req, res, p, m) {
     return send(res, 200, { who: Object.assign(who, { firstName: who.name.split(' ')[0] }), items, popups: popupsFor(who) });
   }
 
-  // "Got it" on a pop-up announcement.
+  // "Got it" on a pop-up announcement, or the button they picked (like "RSVP Yes"). A new pick replaces the old one.
   if (m === 'POST' && p === '/api/kiosk/popup-seen') {
     const b = await readBody(req);
     const a = db.announcements.find(x => x.id === String(b.id || '') && x.popup);
     const e = b.employeeId && findEmployee(String(b.employeeId));
-    if (a && e && !db.popupSeen.some(x => x.id === a.id && x.employeeId === e.id)) { db.popupSeen.push({ id: a.id, employeeId: e.id, at: nowIso() }); saveDb(); }
+    if (a && e) {
+      const choice = (a.buttons || []).includes(b.choice) ? b.choice : undefined;
+      const had = db.popupSeen.find(x => x.id === a.id && x.employeeId === e.id);
+      if (!had) { db.popupSeen.push(Object.assign({ id: a.id, employeeId: e.id, at: nowIso() }, choice ? { choice } : {})); saveDb(); }
+      else if (choice && had.choice !== choice) { had.choice = choice; had.at = nowIso(); saveDb(); }
+    }
     return send(res, 200, { ok: true });
   }
 
@@ -1458,7 +1463,8 @@ async function adminRoutes(req, res, p, m, url) {
     return send(res, 200, {
       topics: db.topics.map(t => t.status === 'draft' ? Object.assign({}, t, { problems: topicProblems(t) }) : t),
       employees: db.employees, schedules: db.schedules, settings: db.settings,
-      announcements: db.announcements.map(a => a.popup ? Object.assign({}, a, { seen: db.popupSeen.filter(x => x.id === a.id).length }) : a),
+      announcements: db.announcements.map(a => a.popup ? Object.assign({}, a, { seen: db.popupSeen.filter(x => x.id === a.id).length,
+        picks: (a.buttons || []).map(label => db.popupSeen.filter(x => x.id === a.id && x.choice === label).length) }) : a),
       upcomingCelebrations: Array.from({ length: 31 }, (_, i) => addDays(today(), i)).flatMap(d => celebrationsOn(d).map(c => Object.assign(c, { date: d }))),
       required: db.required.map(q => { const pr = requiredProgress(q); return Object.assign({}, q, { doneCount: pr.done.length, pendingCount: pr.pending.length }); }),
       today: todayOverview(), todayDate: today(), topicStats,
@@ -1681,20 +1687,29 @@ async function adminRoutes(req, res, p, m, url) {
   }
 
   // Announcements (no question; shown on the kiosk's home and end screens)
-  if (m === 'POST' && p === '/api/admin/announcements') {
-    const b = await readBody(req);
+  // Adding (POST) and editing (PUT .../:id) check the same things.
+  function announcementFrom(b) {
     const img = cleanText(b.image, 500);
     const a = {
-      id: newId(), text: cleanText(b.text, b.popup ? 400 : 200).replace(/\s+/g, ' '), departments: cleanList(b.departments),
-      startDate: cleanDate(b.startDate), endDate: cleanDate(b.endDate), createdAt: nowIso()
+      text: cleanText(b.text, b.popup ? 400 : 200).replace(/\s+/g, ' '), departments: cleanList(b.departments),
+      startDate: cleanDate(b.startDate), endDate: cleanDate(b.endDate)
     };
     // A pop-up: a big screen after they pick their name, with a title and a picture (like an RSVP QR code).
+    // Its buttons can be custom (like "RSVP Yes" / "RSVP No"); what each person picks is kept. Blank means one "Got it" button.
     if (b.popup) Object.assign(a, { popup: true, title: cleanText(b.title, 80), everyTime: !!b.everyTime,
-      image: /^\/media\/[\w-]+\.(png|jpe?g|gif|webp)$/i.test(img) ? img : '' });
-    if (a.popup && !a.title && !a.image) return send(res, 400, { error: 'Give the pop-up a title or a picture.' });
-    if (!a.text && !a.popup) return send(res, 400, { error: 'Write the announcement.' });
-    if (!a.startDate) return send(res, 400, { error: 'Choose a start date.' });
-    if (a.endDate && a.endDate < a.startDate) return send(res, 400, { error: 'The end date is before the start date.' });
+      image: /^\/media\/[\w-]+\.(png|jpe?g|gif|webp)$/i.test(img) ? img : '',
+      buttons: [...new Set((Array.isArray(b.buttons) ? b.buttons : []).map(x => cleanText(x, 30)).filter(Boolean))].slice(0, 4) });
+    if (a.popup) a.confirm = a.buttons.length > 0 && !!b.confirm;
+    if (a.popup && !a.title && !a.image) return { error: 'Give the pop-up a title or a picture.' };
+    if (!a.text && !a.popup) return { error: 'Write the announcement.' };
+    if (!a.startDate) return { error: 'Choose a start date.' };
+    if (a.endDate && a.endDate < a.startDate) return { error: 'The end date is before the start date.' };
+    return { a };
+  }
+  if (m === 'POST' && p === '/api/admin/announcements') {
+    const { a, error } = announcementFrom(await readBody(req));
+    if (error) return send(res, 400, { error });
+    Object.assign(a, { id: newId(), createdAt: nowIso() });
     db.announcements.push(a);
     saveDb();
     return send(res, 200, { announcement: a });
@@ -1706,16 +1721,36 @@ async function adminRoutes(req, res, p, m, url) {
     const a = db.announcements.find(x => x.id === mt[1] && x.popup);
     if (!a) return send(res, 404, { error: 'Not found.' });
     const person = e => ({ id: e.id, name: e.name, department: e.department });
-    const seenBy = new Map(db.popupSeen.filter(x => x.id === a.id).map(x => [x.employeeId, x.at]));
+    const seenBy = new Map(db.popupSeen.filter(x => x.id === a.id).map(x => [x.employeeId, x]));
     const meantFor = db.employees.filter(e => e.active && (!a.departments.length || a.departments.includes(e.department)));
     const lastIn = {};
     for (const r of db.responses) if (r.employeeId && r.date >= a.startDate && !(lastIn[r.employeeId] >= r.submittedAt)) lastIn[r.employeeId] = r.submittedAt;
-    const seen = [...seenBy].map(([id, at]) => { const e = findEmployee(id); return e && Object.assign(person(e), { at }); }).filter(Boolean).sort((x, y) => y.at.localeCompare(x.at));
+    const seen = [...seenBy].map(([id, x]) => { const e = findEmployee(id); return e && Object.assign(person(e), { at: x.at }, x.choice ? { choice: x.choice } : {}); }).filter(Boolean).sort((x, y) => y.at.localeCompare(x.at));
     const missed = meantFor.filter(e => !seenBy.has(e.id) && lastIn[e.id]).map(e => Object.assign(person(e), { lastIn: lastIn[e.id] })).sort((x, y) => y.lastIn.localeCompare(x.lastIn));
     const notIn = meantFor.filter(e => !seenBy.has(e.id) && !lastIn[e.id]).map(person).sort((x, y) => x.name.localeCompare(y.name));
-    return send(res, 200, { seen, missed, notIn });
+    return send(res, 200, { seen, missed, notIn, buttons: a.buttons || [] });
   }
   mt = p.match(/^\/api\/admin\/announcements\/(\w+)$/);
+  if (mt && m === 'PUT') {
+    const old = db.announcements.find(a => a.id === mt[1]);
+    if (!old) return send(res, 404, { error: 'Not found.' });
+    const { a, error } = announcementFrom(await readBody(req));
+    if (error) return send(res, 400, { error });
+    const was = old.buttons || [];
+    for (const k of ['popup', 'title', 'everyTime', 'image', 'buttons', 'confirm']) delete old[k];
+    Object.assign(old, a, { updatedAt: nowIso() });
+    // A renamed button keeps its picks (matched by position). Picks for a removed button no longer count; those people see it again.
+    const now = old.buttons || [];
+    db.popupSeen = db.popupSeen.filter(x => {
+      if (x.id !== old.id || !x.choice) return true;
+      const n = was.indexOf(x.choice);
+      if (now.includes(x.choice)) return true;
+      if (n >= 0 && now[n]) { x.choice = now[n]; return true; }
+      return false;
+    });
+    saveDb();
+    return send(res, 200, { announcement: old });
+  }
   if (mt && m === 'DELETE') {
     const i = db.announcements.findIndex(a => a.id === mt[1]);
     if (i < 0) return send(res, 404, { error: 'Not found.' });
@@ -1726,20 +1761,31 @@ async function adminRoutes(req, res, p, m, url) {
   }
 
   // Schedules (topic of the week, department topics)
+  function scheduleFrom(b) {
+    const s = { topicId: cleanText(b.topicId, 20), departments: cleanList(b.departments), startDate: cleanDate(b.startDate), endDate: cleanDate(b.endDate), note: cleanText(b.note, 200) };
+    if (!isLive(findTopic(s.topicId))) return { error: 'Choose an active topic.' };
+    if (!s.startDate) return { error: 'Choose a start date.' };
+    if (s.endDate && s.endDate < s.startDate) return { error: 'The end date is before the start date.' };
+    return { s };
+  }
   if (m === 'POST' && p === '/api/admin/schedules') {
-    const b = await readBody(req);
-    const s = {
-      id: newId(), topicId: cleanText(b.topicId, 20), departments: cleanList(b.departments),
-      startDate: cleanDate(b.startDate), endDate: cleanDate(b.endDate), note: cleanText(b.note, 200), createdAt: nowIso()
-    };
-    if (!isLive(findTopic(s.topicId))) return send(res, 400, { error: 'Choose an active topic.' });
-    if (!s.startDate) return send(res, 400, { error: 'Choose a start date.' });
-    if (s.endDate && s.endDate < s.startDate) return send(res, 400, { error: 'The end date is before the start date.' });
+    const { s, error } = scheduleFrom(await readBody(req));
+    if (error) return send(res, 400, { error });
+    Object.assign(s, { id: newId(), createdAt: nowIso() });
     db.schedules.push(s);
     saveDb();
     return send(res, 200, { schedule: s });
   }
   mt = p.match(/^\/api\/admin\/schedules\/(\w+)$/);
+  if (mt && m === 'PUT') {
+    const old = db.schedules.find(x => x.id === mt[1]);
+    if (!old) return send(res, 404, { error: 'Not found.' });
+    const { s, error } = scheduleFrom(await readBody(req));
+    if (error) return send(res, 400, { error });
+    Object.assign(old, s, { updatedAt: nowIso() });
+    saveDb();
+    return send(res, 200, { schedule: old });
+  }
   if (mt && m === 'DELETE') {
     const i = db.schedules.findIndex(s => s.id === mt[1]);
     if (i < 0) return send(res, 404, { error: 'Not found.' });
@@ -1763,6 +1809,15 @@ async function adminRoutes(req, res, p, m, url) {
     const q = db.required.find(x => x.id === mt[1]);
     if (!q) return send(res, 404, { error: 'Not found.' });
     if (m === 'GET' && mt[2] === 'progress') return send(res, 200, requiredProgress(q));
+    // Edit: who it's for, the reason and the end date. The topic stays, since who's done is counted against it.
+    if (m === 'PUT' && !mt[2]) {
+      const b = await readBody(req);
+      const endDate = cleanDate(b.endDate);
+      if (endDate && endDate < today() && endDate !== q.endDate) return send(res, 400, { error: 'The "show until" date has already passed.' });
+      Object.assign(q, { departments: cleanList(b.departments), reason: cleanText(b.reason, 300), endDate, updatedAt: nowIso() });
+      saveDb();
+      return send(res, 200, { required: q });
+    }
     if (m === 'POST' && (mt[2] === 'close' || mt[2] === 'reopen')) {
       q.active = mt[2] === 'reopen';
       q.closedAt = q.active ? null : nowIso();

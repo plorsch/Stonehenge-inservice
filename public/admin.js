@@ -92,6 +92,24 @@
       || '<span class="muted small">Add departments on the Settings tab.</span>';
   }
   const checked = el => [...el.querySelectorAll('input:checked')].map(i => i.value);
+  // Edit reuses the add form above a list: it fills in, the heading and button change, and Cancel puts it back.
+  function formEditor(addBtn, clear) {
+    const card = addBtn.closest('.card'), h2 = card.querySelector('h2');
+    const addLabel = addBtn.textContent, heading = h2.textContent;
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'btn ghost'; cancel.textContent = 'Cancel'; cancel.hidden = true;
+    addBtn.after(' ', cancel);
+    const ed = {
+      id: null,
+      start(id, title) {
+        ed.id = id; addBtn.textContent = 'Save changes'; cancel.hidden = false; h2.textContent = title;
+        card.classList.add('editing'); card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+      stop() { ed.id = null; addBtn.textContent = addLabel; cancel.hidden = true; h2.textContent = heading; card.classList.remove('editing'); clear(); }
+    };
+    cancel.addEventListener('click', () => ed.stop());
+    return ed;
+  }
 
   function topicOptions(sel, { includeBlank = true } = {}) {
     const live = state.topics.filter(t => t.status === 'active').sort((a, b) => a.title.localeCompare(b.title));
@@ -128,6 +146,7 @@
     document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x === b));
     document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.id === 'tab-' + b.dataset.tab));
     syncGroups(b);
+    try { localStorage.setItem('adminTab', b.dataset.tab); } catch { /* private window */ }
     if (b.dataset.tab === 'responses') { loadResponses(); loadUsage(); }
     if (b.dataset.tab === 'settings') renderSettings();
     if (b.dataset.tab === 'reports') { loadFollowups(); loadMissed(); loadAnnual(); loadReviews(); }
@@ -594,7 +613,7 @@
         <td>${whoLabel(s.departments)}</td>
         <td style="white-space:nowrap">${fmtDate(s.startDate)} – ${s.endDate ? fmtDate(s.endDate) : 'until removed'}</td>
         <td>${t ? t.questions.length : ''}</td>
-        <td><button class="btn subtle danger" data-del-sched="${s.id}">Remove</button></td></tr>`;
+        <td style="white-space:nowrap"><button class="btn subtle" data-edit-sched="${s.id}">✏️ Edit</button> <button class="btn subtle danger" data-del-sched="${s.id}">Remove</button></td></tr>`;
     }).join('') || '<tr><td colspan="5" class="muted">Nothing scheduled. Staff get topics from the rotation.</td></tr>';
   }
   // ---------- look ahead ----------
@@ -705,16 +724,26 @@
   }
   document.querySelectorAll('[data-week]').forEach(b => b.addEventListener('click', () => setWeek(Number(b.dataset.week))));
   $('sc-show-past').addEventListener('change', renderSchedule);
+  const scEdit = formEditor($('sc-add'), () => { $('sc-note').value = ''; renderChecks($('sc-depts'), []); setWeek(0); $('sc-error').textContent = ''; });
   $('sc-add').addEventListener('click', async () => {
     $('sc-error').textContent = '';
     try {
-      await post('/api/admin/schedules', { topicId: $('sc-topic').value, departments: checked($('sc-depts')), startDate: $('sc-start').value, endDate: $('sc-end').value, note: $('sc-note').value });
-      $('sc-note').value = '';
-      toast('Scheduled');
+      const body = JSON.stringify({ topicId: $('sc-topic').value, departments: checked($('sc-depts')), startDate: $('sc-start').value, endDate: $('sc-end').value, note: $('sc-note').value });
+      if (scEdit.id) await api('/api/admin/schedules/' + scEdit.id, { method: 'PUT', body }); else await api('/api/admin/schedules', { method: 'POST', body });
+      toast(scEdit.id ? 'Saved' : 'Scheduled');
+      if (scEdit.id) scEdit.stop(); else $('sc-note').value = '';
       await refresh();
     } catch (err) { $('sc-error').textContent = err.message; }
   });
   $('sc-rows').addEventListener('click', async e => {
+    const ed = e.target.closest('[data-edit-sched]');
+    if (ed) {
+      const s = state.schedules.find(x => x.id === ed.dataset.editSched);
+      if (!s) return;
+      $('sc-topic').value = s.topicId; renderChecks($('sc-depts'), s.departments);
+      $('sc-start').value = s.startDate; $('sc-end').value = s.endDate || ''; $('sc-note').value = s.note || '';
+      return scEdit.start(s.id, 'Edit scheduled topic');
+    }
     const b = e.target.closest('[data-del-sched]');
     if (!b || !confirm('Remove this from the schedule? Responses already recorded are kept.')) return;
     try { await api('/api/admin/schedules/' + b.dataset.delSched, { method: 'DELETE' }); toast('Removed'); await refresh(); }
@@ -747,13 +776,22 @@
         <td><div class="progress-bar"><span style="width:${pct}%"></span></div><div class="small">${q.doneCount} of ${total} done</div></td>
         <td style="white-space:nowrap">
           <button class="btn subtle" data-rq-view="${q.id}">Who's done</button>
+          <button class="btn subtle" data-rq-edit="${q.id}">✏️ Edit</button>
           <button class="btn subtle${q.active ? ' danger' : ''}" data-rq-toggle="${q.id}" data-active="${q.active ? 1 : 0}">${q.active ? 'Close' : 'Reopen'}</button>
         </td></tr>`;
     }).join('') || '<tr><td colspan="5" class="muted">No required education yet.</td></tr>';
   }
+  const rqEdit = formEditor($('rq-add'), () => { $('rq-reason').value = ''; $('rq-end').value = ''; $('rq-topic').disabled = false; renderChecks($('rq-depts'), []); $('rq-error').textContent = ''; });
   $('rq-add').addEventListener('click', async () => {
     $('rq-error').textContent = '';
     const d = checked($('rq-depts'));
+    if (rqEdit.id) {
+      try {
+        await api('/api/admin/required/' + rqEdit.id, { method: 'PUT', body: JSON.stringify({ departments: d, reason: $('rq-reason').value, endDate: $('rq-end').value || null }) });
+        toast('Saved'); rqEdit.stop(); await refresh();
+      } catch (err) { $('rq-error').textContent = err.message; }
+      return;
+    }
     const t = topicById($('rq-topic').value);
     if (t && !confirm(`Require "${t.title}" for ${d.length ? d.join(', ') : 'all staff'}? Each person will get it the next time they clock in.`)) return;
     try {
@@ -764,6 +802,15 @@
     } catch (err) { $('rq-error').textContent = err.message; }
   });
   $('rq-rows').addEventListener('click', async e => {
+    const ed = e.target.closest('[data-rq-edit]');
+    if (ed) {
+      const q = state.required.find(x => x.id === ed.dataset.rqEdit);
+      if (!q) return;
+      // The topic can't change, since who's done is counted against it. To switch topics, close this one and add a new one.
+      $('rq-topic').value = q.topicId; $('rq-topic').disabled = true;
+      renderChecks($('rq-depts'), q.departments); $('rq-reason').value = q.reason || ''; $('rq-end').value = q.endDate || '';
+      return rqEdit.start(q.id, 'Edit required education');
+    }
     const tg = e.target.closest('[data-rq-toggle]');
     const vw = e.target.closest('[data-rq-view]');
     try {
@@ -1593,11 +1640,13 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('vw-body').innerHTML = '<p class="muted">Loading…</p>';
     if (!$('viewer').open) $('viewer').showModal();
     try {
-      const { seen, missed, notIn } = await api(`/api/admin/announcements/${a.id}/seen`);
+      const { seen, missed, notIn, buttons } = await api(`/api/admin/announcements/${a.id}/seen`);
       const list = (rows, when) => rows.length ? `<ul class="pv-list">${rows.map(p => `<li>${personLink(p.id, p.name)} <span class="muted small">${escapeHtml(p.department || '')}${when(p) ? ' · ' + when(p) : ''}</span></li>`).join('')}</ul>` : '';
-      $('vw-body').innerHTML = `<div class="muted small" style="margin-top:6px">Showing ${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'} · ${a.departments.length ? escapeHtml(a.departments.join(', ')) : 'All staff'}. "Seen" means they tapped Got it on the iPad.</div>
-        <div class="pv-stats"><div><b>${seen.length}</b><span>saw it</span></div><div><b>${missed.length}</b><span>came in but didn't see it</span></div><div><b>${notIn.length}</b><span>haven't been in since it started</span></div></div>
-        <h3 style="margin-top:16px">✅ Saw it (${seen.length})</h3>${list(seen, p => 'tapped Got it ' + fmtWhen(p.at)) || '<p class="muted">No one yet.</p>'}
+      $('vw-body').innerHTML = `<div class="muted small" style="margin-top:6px">Showing ${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'} · ${a.departments.length ? escapeHtml(a.departments.join(', ')) : 'All staff'}. "Seen" means they tapped ${buttons.length ? 'a button' : 'Got it'} on the iPad.</div>
+        <div class="pv-stats"><div><b>${seen.length}</b><span>${buttons.length ? 'answered' : 'saw it'}</span></div><div><b>${missed.length}</b><span>came in but didn't see it</span></div><div><b>${notIn.length}</b><span>haven't been in since it started</span></div></div>
+        ${buttons.length ? `<h3 style="margin-top:16px">Answers</h3><div class="pick-bars">${buttons.map(b => { const n = seen.filter(p => p.choice === b).length;
+          return `<div><span>${escapeHtml(b)}</span><i style="width:${seen.length ? Math.round(100 * n / seen.length) : 0}%"></i><b>${n}</b></div>`; }).join('')}</div>` : ''}
+        <h3 style="margin-top:16px">✅ ${buttons.length ? 'Answered' : 'Saw it'} (${seen.length})</h3>${list(seen, p => (p.choice ? `<b>${escapeHtml(p.choice)}</b> ` : 'tapped Got it ') + fmtWhen(p.at)) || '<p class="muted">No one yet.</p>'}
         ${missed.length ? `<h3 style="margin-top:16px">⚠️ Came in but didn't see it (${missed.length})</h3><div class="muted small">They did an in-service after it started but never tapped Got it. They may have walked away, or the iPad lost its connection right then.</div>${list(missed, p => 'last in ' + fmtWhen(p.lastIn))}` : ''}
         ${notIn.length ? `<details style="margin-top:16px"><summary><b>Haven't been in since it started (${notIn.length})</b></summary>${list(notIn, () => '')}</details>` : ''}`;
     } catch (err) { $('vw-body').innerHTML = `<p class="err">${escapeHtml(err.message)}</p>`; }
@@ -1640,6 +1689,9 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
           : '<p class="muted">No in-services yet.</p>'}`;
     } catch (err) { $('vw-body').innerHTML = `<p class="err">${escapeHtml(err.message)}</p>`; }
   }
+  // Pages opened in their own window (printouts, previews) get a "← Back" button. On the iPhone home-screen app
+  // a new window has no back button of its own, so if closing doesn't work it goes back to the admin page.
+  const backBtn = style => `<button onclick="try{window.close()}catch(e){}setTimeout(function(){location.href='${location.origin}/admin'},300)" style="${style}">← Back</button>`;
   // A printable training record for one person, for their HR file.
   async function printRecord(emp) {
     const win = window.open('', '_blank');
@@ -1684,12 +1736,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         .pill.bad { color: #a4521b; background: #fbeee2; border-color: #f0cfb4; } .pill.plain { color: #1f5f7a; background: #e4f0f5; border-color: #c4dde8; }
         .sign { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-top: 34px; } .sign div { border-top: 1px solid #1d2b36; padding-top: 4px; font-size: 11px; color: #5b6b78; }
         .foot { margin-top: 18px; color: #8796a1; font-size: 10.5px; display: flex; justify-content: space-between; }
-        .noprint { max-width: 8.5in; margin: 18px auto 0; text-align: right; }
+        .noprint { max-width: 8.5in; margin: 18px auto 0; display: flex; justify-content: space-between; gap: 10px; }
         .noprint button { font: 600 14px -apple-system, "Segoe UI", Roboto, Arial, sans-serif; padding: 9px 18px; border: 0; border-radius: 10px; background: #1f6f8b; color: #fff; cursor: pointer; }
         @media print { body { background: #fff; } .noprint { display: none; } .page { margin: 0; padding: 0; box-shadow: none; border-radius: 0; max-width: none; }
           @page { margin: 0.5in; } tr, .stat, .sign { break-inside: avoid; } thead { display: table-header-group; } }
       </style></head><body>
-        <div class="noprint"><button onclick="print()">🖨 Print or save as PDF</button></div>
+        <div class="noprint">${backBtn('background:#fff;color:#1f6f8b;border:1px solid #1f6f8b')}<button onclick="print()">🖨 Print or save as PDF</button></div>
         <div class="page">
         <div class="top"><img src="${location.origin}/logo.png" alt="${escapeHtml(state.settings.facilityName || '')}"><div class="doc"><b>In-Service Training Record</b>${escapeHtml(state.settings.facilityName || '')}<br>As of ${fmtDate(state.todayDate)}</div></div>
         <div class="who"><div><small>Employee</small><strong>${escapeHtml(emp.name)}</strong></div><div><small>Department</small><strong>${escapeHtml(emp.department || '—')}</strong></div>
@@ -2271,7 +2323,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         .sign { margin-top: 28px; display: flex; gap: 28px; } .sign div { flex: 1; border-top: 1px solid #333; padding-top: 4px; font-size: 12px; }
         .noprint { margin-bottom: 14px; } @media print { .noprint { display: none; } body { margin: 0.4in; } tr { break-inside: avoid; } }
       </style></head><body>
-        <div class="noprint"><button onclick="print()" style="font-size:15px;padding:6px 14px">Print or save as PDF</button></div>
+        <div class="noprint" style="display:flex;gap:10px">${backBtn('font-size:15px;padding:6px 14px')}<button onclick="print()" style="font-size:15px;padding:6px 14px">Print or save as PDF</button></div>
         <h1>${escapeHtml(state.settings.facilityName || '')} In-Service Sign-In Sheet</h1>
         <div class="meta"><strong>Topic:</strong> ${escapeHtml(t.title)}${t.category ? ` (${escapeHtml(t.category)})` : ''}<br>
           <strong>Dates:</strong> ${range} &nbsp; <strong>Staff:</strong> ${dept ? escapeHtml(dept) : whoLabel(t.departments)}<br>
@@ -2913,10 +2965,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const live = a.startDate <= state.todayDate && (!a.endDate || a.endDate >= state.todayDate);
       const status = live ? ' <span class="pill good">Showing now</span>' : a.startDate > state.todayDate ? ' <span class="pill">Upcoming</span>' : ' <span class="pill">Ended</span>';
       const what = a.popup ? `${a.image ? `<img class="an-thumb" src="${escapeHtml(a.image)}" alt="">` : ''}<span class="pill">📲 Pop-up</span> <b>${escapeHtml(a.title || '')}</b>${a.text ? `<div class="small">${formatInline(a.text)}</div>` : ''}
-        <div class="small muted">${a.everyTime ? 'Every clock-in' : 'Once per person'} · <a href="#" data-ann-seen="${a.id}">seen by ${a.seen || 0} · who?</a></div>` : formatInline(a.text);
+        <div class="small muted">${a.everyTime ? 'Every clock-in' : 'Once per person'} · <a href="#" data-ann-seen="${a.id}">${(a.buttons || []).length
+          ? a.buttons.map((b, i) => `${escapeHtml(b)}: ${(a.picks || [])[i] || 0}`).join(' · ') + ' · who?' : `seen by ${a.seen || 0} · who?`}</a></div>` : formatInline(a.text);
       return `<tr class="${!live && a.startDate < state.todayDate ? 'dim' : ''}"><td>${what}${status}</td><td>${whoLabel(a.departments)}</td>
         <td style="white-space:nowrap">${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'}</td>
-        <td style="white-space:nowrap"><button class="btn subtle" data-prev-ann="${a.id}">👁 Preview</button> <button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
+        <td style="white-space:nowrap"><button class="btn subtle" data-prev-ann="${a.id}">👁 Preview</button> <button class="btn subtle" data-edit-ann="${a.id}">✏️ Edit</button> <button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
     }).join('') || '<tr><td colspan="4" class="muted">No announcements yet.</td></tr>';
     $('an-celebrate').checked = state.settings.celebrations !== false;
     renderStreakSettings();
@@ -2966,7 +3019,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('an-text-label').textContent = on ? 'Message under the picture (optional)' : 'Announcement';
     $('an-text').maxLength = on ? 400 : 200;
     $('an-text').placeholder = on ? 'Scan the code with your phone camera to RSVP by Dec 1.' : '📅 All-staff meeting Thursday at 2 pm in the dining room';
+    const custom = annButtons().length > 0;
+    $('an-confirm').disabled = !custom; $('an-confirm-wrap').classList.toggle('muted', !custom);
   }
+  const annButtons = () => [...$('an-buttons').querySelectorAll('input')].map(i => i.value.trim()).filter(Boolean);
+  const setAnnButtons = list => $('an-buttons').querySelectorAll('input').forEach((i, n) => { i.value = (list || [])[n] || ''; });
+  $('an-buttons').addEventListener('input', popupForm);
   function popupImage(url) {
     $('an-image').value = url || '';
     $('an-image-preview').hidden = !url;
@@ -2990,23 +3048,45 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   // Preview an announcement on the real iPad screens: a pop-up as staff see it after picking their name,
   // a regular one on the last screen (where it's listed after an in-service).
   function previewAnnouncement(a) {
-    try { localStorage.setItem('previewDraft', JSON.stringify(a.popup ? { popup: { title: a.title, text: a.text, image: a.image } } : { news: a.text })); } catch { /* private window */ }
+    try { localStorage.setItem('previewDraft', JSON.stringify(a.popup ? { popup: { title: a.title, text: a.text, image: a.image, buttons: a.buttons || [], confirm: !!a.confirm } } : { news: a.text })); } catch { /* private window */ }
     const w = window.open('/admin/preview?show=' + (a.popup ? 'popup' : 'news'), 'inservice-preview', 'width=820,height=1080');
     if (w) w.focus();
   }
-  $('an-popup-preview').addEventListener('click', () => previewAnnouncement({ popup: $('an-popup').checked, title: $('an-title').value, text: $('an-text').value, image: $('an-image').value }));
+  $('an-popup-preview').addEventListener('click', () => previewAnnouncement({ popup: $('an-popup').checked, title: $('an-title').value, text: $('an-text').value, image: $('an-image').value,
+    buttons: annButtons(), confirm: $('an-confirm').checked }));
+  function clearAnnForm() {
+    $('an-text').value = ''; $('an-end').value = ''; $('an-start').value = state.todayDate; renderChecks($('an-depts'), []);
+    $('an-popup').checked = false; $('an-title').value = ''; $('an-everytime').checked = false; popupImage(''); $('an-image-file').value = '';
+    setAnnButtons([]); $('an-confirm').checked = false; $('an-error').textContent = ''; popupForm();
+  }
+  const anEdit = formEditor($('an-add'), clearAnnForm);
   $('an-add').addEventListener('click', async () => {
     $('an-error').textContent = '';
     try {
-      await post('/api/admin/announcements', { text: $('an-text').value, departments: checked($('an-depts')), startDate: $('an-start').value, endDate: $('an-end').value,
-        popup: $('an-popup').checked, title: $('an-title').value, image: $('an-image').value, everyTime: $('an-everytime').checked });
-      $('an-text').value = ''; $('an-end').value = ''; $('an-depts').dataset.init = '';
-      $('an-popup').checked = false; $('an-title').value = ''; $('an-everytime').checked = false; popupImage(''); $('an-image-file').value = ''; popupForm();
-      toast('Announcement added. The iPad shows it within a minute.');
+      const a = state.announcements.find(x => x.id === anEdit.id);
+      const lost = a && a.popup ? (a.buttons || []).filter((b, i) => (a.picks || [])[i] && !annButtons().includes(b) && !annButtons()[i]) : [];
+      if (lost.length && !confirm(`People already picked "${lost.join('", "')}". If you remove it, their answers are cleared and they'll see the pop-up again. Save anyway?`)) return;
+      const body = JSON.stringify({ text: $('an-text').value, departments: checked($('an-depts')), startDate: $('an-start').value, endDate: $('an-end').value,
+        popup: $('an-popup').checked, title: $('an-title').value, image: $('an-image').value, everyTime: $('an-everytime').checked,
+        buttons: annButtons(), confirm: $('an-confirm').checked });
+      if (anEdit.id) await api('/api/admin/announcements/' + anEdit.id, { method: 'PUT', body }); else await api('/api/admin/announcements', { method: 'POST', body });
+      toast(anEdit.id ? 'Saved. The iPad shows the change within a minute.' : 'Announcement added. The iPad shows it within a minute.');
+      if (anEdit.id) anEdit.stop(); else clearAnnForm();
       await refresh();
     } catch (err) { $('an-error').textContent = err.message; }
   });
   $('an-rows').addEventListener('click', async e => {
+    const ed = e.target.closest('[data-edit-ann]');
+    if (ed) {
+      const a = state.announcements.find(x => x.id === ed.dataset.editAnn);
+      if (!a) return;
+      $('an-popup').checked = !!a.popup; $('an-title').value = a.title || ''; $('an-text').value = a.text || '';
+      popupImage(a.image || ''); $('an-image-file').value = ''; $('an-everytime').checked = !!a.everyTime;
+      setAnnButtons(a.buttons); $('an-confirm').checked = !!a.confirm;
+      $('an-start').value = a.startDate; $('an-end').value = a.endDate || ''; renderChecks($('an-depts'), a.departments);
+      popupForm();
+      return anEdit.start(a.id, a.popup ? 'Edit pop-up' : 'Edit announcement');
+    }
     const sn = e.target.closest('[data-ann-seen]');
     if (sn) { e.preventDefault(); return showSeen(state.announcements.find(x => x.id === sn.dataset.annSeen)); }
     const pv = e.target.closest('[data-prev-ann]');
@@ -3076,7 +3156,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <td><input type="text" data-decor="emoji" value="${escapeHtml(x.emoji || '')}" style="width:150px;font-size:20px"></td>
         <td><input type="text" data-decor="message" value="${escapeHtml(x.message || '')}" style="width:100%;min-width:220px"></td>
         <td><select data-decor="color">${DECOR_COLORS.map(c => `<option${c === (x.color || 'none') ? ' selected' : ''}>${c}</option>`).join('')}</select></td>
-        <td><a href="/?month=${i + 1}" target="_blank" rel="noopener">Preview</a></td></tr>`;
+        <td><a href="/admin/preview?month=${i + 1}" target="_blank" rel="noopener">Preview</a></td></tr>`;
     }).join('');
   }
   autoSave($('save-decor').closest('.card'), async () => {
@@ -3253,5 +3333,9 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('resp-from').defaultValue = iso(m); $('resp-to').defaultValue = iso(t);
     const pick = $('resp-from').closest('label').previousElementSibling;
     pick.querySelector('[value=week]').defaultSelected = true; pick.value = 'week';
+    // Come back to the page you were on (for example after "← Back" from a printout on the iPhone app).
+    let tab = ''; try { tab = localStorage.getItem('adminTab') || ''; } catch { /* none */ }
+    const tb = tab && document.querySelector(`#nav button[data-tab="${tab}"]`);
+    if (tb && !tb.classList.contains('on')) tb.click();
   }).catch(fail);
 })();

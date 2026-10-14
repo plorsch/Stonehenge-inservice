@@ -412,6 +412,10 @@ table.la tr:hover td { background: transparent; }
   .clear-filters { color: var(--warn) !important; }
   .drop-zone { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; box-sizing: border-box; padding: 20px 16px; border: 2px dashed #b9d0db; border-radius: 14px; background: #f7fbfd; cursor: pointer; text-align: center; transition: background .15s, border-color .15s; }
   .an-img-prev { display: flex; align-items: center; gap: 12px; margin-top: 8px; } .an-img-prev img { max-width: 120px; max-height: 120px; border-radius: 8px; border: 1px solid var(--line); }
+  .an-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .an-btns input { width: 100%; }
+  .card.editing { outline: 3px solid var(--brand); outline-offset: -1px; }
+  .pick-bars { margin: 10px 0 4px; display: grid; gap: 6px; } .pick-bars div { display: grid; grid-template-columns: minmax(90px, auto) 1fr 40px; gap: 10px; align-items: center; font-size: 14px; }
+  .pick-bars i { display: block; height: 12px; border-radius: 0 4px 4px 0; background: var(--brand); min-width: 2px; }
   .an-thumb { width: 44px; height: 44px; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); vertical-align: middle; margin-right: 8px; }
   .drop-zone:hover { background: var(--brand-soft); border-color: var(--brand); }
   .drop-zone.over { background: #dcefe4; border-color: var(--good); transform: scale(1.01); }
@@ -551,7 +555,7 @@ table.la tr:hover td { background: transparent; }
   <section class="tab" id="tab-announcements">
     <div class="card">
       <h2>Add an announcement</h2>
-      <div class="muted small">A regular announcement is one short line. It shows above the keypad and on the last screen after an in-service. For something everyone must see, like an RSVP QR code, make it a pop-up: it fills the screen after they tap their name, and they tap Got it.</div>
+      <div class="muted small">A regular announcement is one short line. It shows above the keypad and on the last screen after an in-service. For something everyone must see, like an RSVP, make it a pop-up: it fills the screen after they tap their name, and they tap Got it, or buttons you name, like RSVP Yes and RSVP No.</div>
       <div class="grid" style="margin-top:6px">
         <div>
           <label style="display:block;margin:4px 0 6px"><input type="checkbox" id="an-popup"> <b>📲 Make it a pop-up</b> <span class="hint">a big screen right after they pick their name, with a picture like an RSVP QR code</span></label>
@@ -563,7 +567,13 @@ table.la tr:hover td { background: transparent; }
             <input type="hidden" id="an-image">
             <div id="an-image-preview" class="an-img-prev" hidden><img alt=""><button class="btn subtle danger" id="an-image-clear" type="button">Remove picture</button></div>
             <div class="small muted" id="an-image-status"></div>
-            <label style="display:block;margin-top:8px"><input type="checkbox" id="an-everytime"> Show it every time they clock in <span class="hint">otherwise once per person, after they tap "Got it"</span></label>
+            <label class="block">Buttons <span class="hint">leave blank for one "Got it 👍" button, or make your own, like RSVP Yes and RSVP No</span></label>
+            <div class="an-btns" id="an-buttons">
+              <input type="text" maxlength="30" placeholder="e.g. ✅ RSVP Yes"><input type="text" maxlength="30" placeholder="e.g. ❌ RSVP No">
+              <input type="text" maxlength="30" placeholder="(optional)"><input type="text" maxlength="30" placeholder="(optional)">
+            </div>
+            <label style="display:block;margin-top:6px" id="an-confirm-wrap"><input type="checkbox" id="an-confirm"> Double-check their answer <span class="hint">shows "You picked RSVP Yes. Is that right?" before it counts</span></label>
+            <label style="display:block;margin-top:8px"><input type="checkbox" id="an-everytime"> Show it every time they clock in <span class="hint">otherwise once per person, after they tap a button</span></label>
           </div>
           <label class="block" for="an-text" id="an-text-label">Announcement</label>
           <input type="text" id="an-text" maxlength="200" style="width:100%" placeholder="📅 All-staff meeting Thursday at 2 pm in the dining room">
