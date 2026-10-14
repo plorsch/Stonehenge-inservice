@@ -3192,7 +3192,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('an-rows').innerHTML = rows.map(a => {
       const live = a.startDate <= state.todayDate && (!a.endDate || a.endDate >= state.todayDate);
       const status = live ? ' <span class="pill good">Showing now</span>' : a.startDate > state.todayDate ? ' <span class="pill">Upcoming</span>' : ' <span class="pill">Ended</span>';
-      const what = a.popup ? `${a.image ? `<img class="an-thumb" src="${escapeHtml(a.image)}" alt="">` : ''}<span class="pill">📲 Pop-up</span> <b>${escapeHtml(a.title || '')}</b>${a.text ? `<div class="small">${formatInline(a.text)}</div>` : ''}
+      const what = a.popup ? `${a.image ? `<img class="an-thumb" src="${escapeHtml(a.image)}" alt="">` : ''}<span class="pill">📲 Pop-up</span> <b>${escapeHtml(a.title || '')}</b>${a.text ? `<div class="small">${formatMessage(a.text)}</div>` : ''}
         <div class="small muted">${a.everyTime ? 'Every clock-in' : 'Once per person'} · <a href="#" data-ann-seen="${a.id}">${(a.buttons || []).length
           ? a.buttons.map((b, i) => `${escapeHtml(b)}${(a.repeat || []).includes(b) ? ' ↻' : ''}: ${(a.picks || [])[i] || 0}`).join(' · ') + ' · who?' : `seen by ${a.seen || 0} · who?`}</a></div>` : formatInline(a.text);
       return `<tr class="${!live && a.startDate < state.todayDate ? 'dim' : ''}"><td>${what}${status}</td><td>${whoLabel(a.departments)}</td>
@@ -3245,7 +3245,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const on = $('an-popup').checked;
     $('an-popup-fields').hidden = !on;
     $('an-text-label').textContent = on ? 'Message under the picture (optional)' : 'Announcement';
-    $('an-text').maxLength = on ? 400 : 200;
+    $('an-text').maxLength = on ? 400 : 200; $('an-text').rows = on ? 3 : 1;
     $('an-text').placeholder = on ? 'Scan the code with your phone camera to RSVP by Dec 1.' : '📅 All-staff meeting Thursday at 2 pm in the dining room';
     const custom = annButtons().length > 0;
     $('an-confirm').disabled = !custom; $('an-confirm-wrap').classList.toggle('muted', !custom);

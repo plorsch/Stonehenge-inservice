@@ -813,7 +813,7 @@
     $('pp-title').hidden = !p.title;
     $('pp-img').hidden = !p.image;
     if (p.image) $('pp-img').src = p.image; else $('pp-img').removeAttribute('src');
-    $('pp-text').innerHTML = formatInline(p.text || '');
+    $('pp-text').innerHTML = formatMessage(p.text || '');
     $('pp-count').textContent = popupList.length > 1 ? `${popupList.length - 1} more after this` : '';
     popupButtons(p);
     $('popup').hidden = false;

@@ -1700,7 +1700,8 @@ async function adminRoutes(req, res, p, m, url) {
   function announcementFrom(b) {
     const img = cleanText(b.image, 500);
     const a = {
-      text: cleanText(b.text, b.popup ? 400 : 200).replace(/\s+/g, ' '), departments: cleanList(b.departments),
+      text: b.popup ? cleanText(b.text, 400).split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 6).join('\n')
+        : cleanText(b.text, 200).replace(/\s+/g, ' '), departments: cleanList(b.departments),
       startDate: cleanDate(b.startDate), endDate: cleanDate(b.endDate)
     };
     // A pop-up: a big screen after they pick their name, with a title and a picture (like an RSVP QR code).
