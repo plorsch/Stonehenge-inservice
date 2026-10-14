@@ -113,8 +113,11 @@
   .popup-card h2 { font-size: 30px; margin: 6px 0 12px; line-height: 1.2; }
   .popup-card img { display: block; margin: 0 auto 14px; max-width: 100%; max-height: 46vh; border-radius: 12px; }
   .popup-card .pp-text { font-size: 19px; line-height: 1.4; margin-bottom: 18px; }
-  .pp-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-  .pp-btns .pp-ask { grid-column: 1 / -1; font-size: 22px; margin: 2px 0 4px; }
+  .pp-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+  .pp-btns > .btn { flex: 1 1 200px; }
+  /* An odd button out (3rd of 3) sits centered on its own row instead of hugging the left. */
+  .pp-btns > .btn:nth-child(3):last-child { flex: 0 1 calc(50% - 6px); min-width: 200px; }
+  .pp-btns .pp-ask { flex-basis: 100%; font-size: 22px; margin: 2px 0 4px; }
   .popup-card .pp-count { font-size: 14px; color: var(--muted); margin-top: 10px; }
   .extras { margin: 20px auto 0; max-width: 460px; background: var(--bg); border-radius: 14px; padding: 4px 18px; }
   .extras[hidden] { display: none; }
