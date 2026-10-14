@@ -104,6 +104,9 @@
   /* Announcements: one rotating line on the home screen, a short list on the end screen */
   .news { margin-bottom: 14px; background: var(--brand-soft); border: 1px solid #c9dfe8; color: var(--brand-dark); border-radius: 14px; padding: 14px 20px; font-size: 19px; font-weight: 600; text-align: center; transition: opacity .4s; }
   .news.fade { opacity: 0; }
+  /* On a birthday line the emoji gently crossfades to a new one every few seconds while the name stays put. */
+  .bday-emoji { display: inline-block; transition: opacity .6s; }
+  .bday-emoji.out { opacity: 0; }
   /* Pop-up announcement (an RSVP QR code, say) after they pick their name */
   .popup-ov { position: fixed; inset: 0; z-index: 60; background: rgba(20, 35, 45, .55); display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .25s; }
   .popup-ov[hidden] { display: none; }
@@ -690,8 +693,15 @@
     const text = items[newsIdx++ % items.length];
     if (el.dataset.text === text) return;
     el.classList.add('fade');
-    setTimeout(() => { el.innerHTML = formatInline(text); el.dataset.text = text; el.classList.remove('fade'); }, el.dataset.text ? 400 : 0);
+    setTimeout(() => { el.innerHTML = withBdayEmoji(formatInline(text)); el.dataset.text = text; el.classList.remove('fade'); }, el.dataset.text ? 400 : 0);
   }
+  // Wrap a leading birthday emoji so it can crossfade on its own.
+  const withBdayEmoji = html => { for (const e of BDAY) if (html.startsWith(e + ' ')) return `<span class="bday-emoji">${e}</span>` + html.slice(e.length); return html; };
+  setInterval(() => document.querySelectorAll('#news-home .bday-emoji').forEach(sp => {
+    const next = BDAY[(BDAY.indexOf(sp.textContent) + 1 + Math.floor(Math.random() * (BDAY.length - 1))) % BDAY.length];
+    sp.classList.add('out');
+    setTimeout(() => { sp.textContent = next; sp.classList.remove('out'); }, 600);
+  }), 3500);
   // Restarts whenever the seconds setting changes.
   let newsTimer = null, newsEvery = 0;
   function scheduleNews() {
