@@ -279,10 +279,10 @@ table.la th { font-size: 12px; text-transform: none; letter-spacing: 0; color: #
 table.la th.today { color: #1f6f8b; }
 table.la th.today span { background: #1f6f8b; color: #fff; border-radius: 999px; padding: 1px 8px; }
 table.la th.dept { text-align: left; width: 130px; }
-table.la td { padding: 0; border: 0; vertical-align: stretch; }
+table.la td { padding: 0; border: 0; vertical-align: stretch; height: 1px; } /* 1px lets the button's height: 100% fill the row, so every box in a row is the same height */
 table.la td.dept { vertical-align: middle; font-weight: 600; font-size: 13px; padding-right: 6px; }
 table.la tr:hover td { background: transparent; }
-.la-cell { display: block; width: 100%; height: 100%; min-height: 54px; text-align: left; border-radius: 10px; padding: 7px 9px; font: inherit; font-size: 13px; cursor: pointer; line-height: 1.25; }
+.la-cell { display: flex; flex-direction: column; justify-content: center; width: 100%; height: 100%; min-height: 54px; text-align: left; border-radius: 10px; padding: 7px 9px; font: inherit; font-size: 13px; cursor: pointer; line-height: 1.25; }
 .la-cell small { display: block; font-size: 11px; opacity: .8; margin-top: 3px; }
 .la-cell.sched { background: #1f6f8b; color: #fff; border: 2px solid #1f6f8b; }
 .la-cell.auto { background: #f4f9fb; color: #17485d; border: 2px dashed #8fb3c2; }
