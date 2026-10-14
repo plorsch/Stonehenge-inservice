@@ -52,9 +52,6 @@
   .trophy .t-label { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
   @keyframes lb-glow { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .trophy::after { animation: none; } }
-  /* Rest mode: after a few quiet minutes on the home screen, stop everything that moves to save battery. A touch wakes it. */
-  body.on-home.resting #decor { display: none; }
-  body.resting *, body.resting *::before, body.resting *::after { animation-play-state: paused !important; }
   body:not(.on-home) .trophy { display: none; }
   main {
     flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
@@ -448,8 +445,6 @@
 <script>
 (() => {
   const IDLE_RESET_MS = 60000;          // back to the keypad after 1 minute without a touch
-  const REST_AFTER_MS = 2 * 60000;      // home screen stops its animations after 2 quiet minutes (battery)
-  let restTimer = null;
   const RESULT_RESET_S = 15;            // final screen returns to the keypad after this many seconds
   const RELOAD_EVERY_MS = 6 * 3600000;  // refresh the page every 6 hours while idle
 
@@ -473,10 +468,8 @@
     bumpIdle();
   }
   function bumpIdle() {
-    clearTimeout(idleTimer); clearTimeout(restTimer);
-    document.body.classList.remove('resting');
+    clearTimeout(idleTimer);
     if (!$('s-home').classList.contains('active')) idleTimer = setTimeout(goHome, IDLE_RESET_MS);
-    else restTimer = setTimeout(() => document.body.classList.add('resting'), REST_AFTER_MS);
   }
   function goHome() {
     Object.assign(s, { pin: '', dept: '', who: null, items: [], idx: 0, answers: [], choice: null, responseId: null, lang: 'en', hint: null, offlineRec: null });
@@ -560,6 +553,7 @@
       $('unlisted-link').hidden = !s.config.allowUnlisted;
       renderDepts();
       renderDecor(s.config.decor);
+      preloadClosingGifs();
       rotateNews(); scheduleNews();
       $('trophy').hidden = !st(s.config).button;
     } catch { /* keep last known config */ }
@@ -952,6 +946,16 @@
     } finally { s.busy = false; }
   });
 
+  // Fetch the end-screen GIFs while the iPad sits on the home screen, so they show at once on the last screen.
+  const preloaded = new Map();
+  function preloadClosingGifs() {
+    ((s.config && s.config.closingMessages) || []).forEach(m => {
+      const gif = m && typeof m === 'object' && m.gif;
+      if (!gif || preloaded.has(gif)) return;
+      const img = new Image(); img.src = gif; preloaded.set(gif, img);
+    });
+  }
+
   // Pick a sign-off line at random, avoiding the last several shown on this iPad.
   const recentClosings = [];
   function closingLine() {
@@ -1162,7 +1166,6 @@
   $('preview-again').addEventListener('click', () => { if (s.busy) return; clearInterval(countdownTimer); if (previewShow) startShow(); else startPreview(); });
   $('preview-close').addEventListener('click', () => { window.close(); });
   loadConfig().then(() => { if (previewTopic) startPreview(); else if (previewShow) startShow(); });
-  bumpIdle();  // start the rest-mode countdown on first load
   setInterval(() => { if ($('s-home').classList.contains('active')) loadConfig(); }, 60000);
   setInterval(() => { if ($('s-home').classList.contains('active') && Date.now() - loadedAt > RELOAD_EVERY_MS) safeReload(); }, 10 * 60000);
 
@@ -1189,7 +1192,7 @@
     });
   }
   // Values set from code (e.g. opening an editor) don't fire 'input', so check every so often.
-  setInterval(() => document.body.classList.contains('resting') || document.querySelectorAll('.clearwrap').forEach(w => { const i = w.querySelector('input'), b = w.querySelector('.clearbtn'); if (i && b) b.hidden = !i.value; }), 500);
+  setInterval(() => document.querySelectorAll('.clearwrap').forEach(w => { const i = w.querySelector('input'), b = w.querySelector('.clearbtn'); if (i && b) b.hidden = !i.value; }), 500);
   addClearButtons(document);
   new MutationObserver(() => addClearButtons(document)).observe(document.body, { childList: true, subtree: true });
 })();
