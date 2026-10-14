@@ -1699,6 +1699,22 @@ async function adminRoutes(req, res, p, m, url) {
     saveDb();
     return send(res, 200, { announcement: a });
   }
+  // Who has seen a pop-up: everyone who tapped "Got it", plus people it was meant for who came in
+  // since it started but haven't seen it, and people who haven't been in yet.
+  mt = p.match(/^\/api\/admin\/announcements\/(\w+)\/seen$/);
+  if (mt && m === 'GET') {
+    const a = db.announcements.find(x => x.id === mt[1] && x.popup);
+    if (!a) return send(res, 404, { error: 'Not found.' });
+    const person = e => ({ id: e.id, name: e.name, department: e.department });
+    const seenBy = new Map(db.popupSeen.filter(x => x.id === a.id).map(x => [x.employeeId, x.at]));
+    const meantFor = db.employees.filter(e => e.active && (!a.departments.length || a.departments.includes(e.department)));
+    const lastIn = {};
+    for (const r of db.responses) if (r.employeeId && r.date >= a.startDate && !(lastIn[r.employeeId] >= r.submittedAt)) lastIn[r.employeeId] = r.submittedAt;
+    const seen = [...seenBy].map(([id, at]) => { const e = findEmployee(id); return e && Object.assign(person(e), { at }); }).filter(Boolean).sort((x, y) => y.at.localeCompare(x.at));
+    const missed = meantFor.filter(e => !seenBy.has(e.id) && lastIn[e.id]).map(e => Object.assign(person(e), { lastIn: lastIn[e.id] })).sort((x, y) => y.lastIn.localeCompare(x.lastIn));
+    const notIn = meantFor.filter(e => !seenBy.has(e.id) && !lastIn[e.id]).map(person).sort((x, y) => x.name.localeCompare(y.name));
+    return send(res, 200, { seen, missed, notIn });
+  }
   mt = p.match(/^\/api\/admin\/announcements\/(\w+)$/);
   if (mt && m === 'DELETE') {
     const i = db.announcements.findIndex(a => a.id === mt[1]);

@@ -1386,10 +1386,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const miss = $('staff-missing').value;
     // "Hasn't done an in-service": the last finished one is before the start of the chosen period (or there is none).
     const nd = $('staff-notdone').value, since = notDoneSince(nd);
-    const notDoneFor = (e, k, s) => !staffLastDone[e.id] || (k !== 'ever' && staffLastDone[e.id] < s);
+    // "did-" choices are the opposite: their last finished in-service is on or after the start of the period.
+    const notDoneFor = (e, k, s) => k.startsWith('did-') ? !!staffLastDone[e.id] && staffLastDone[e.id] >= s : !staffLastDone[e.id] || (k !== 'ever' && staffLastDone[e.id] < s);
     const notDone = e => staffLastDone && notDoneFor(e, nd, since);
     const no = $('staff-notdone').options;
-    ['', 'today', 'week', 'd30', 'ever'].forEach((k, i) => { if (!i) return; const s = notDoneSince(k); no[i].textContent = no[i].textContent.replace(/ \(\d+\)$/, '') + (staffLastDone ? ` (${inSet.filter(e => notDoneFor(e, k, s)).length})` : ''); });
+    ['', 'today', 'week', 'd30', 'ever', 'did-today', 'did-week', 'did-d30'].forEach((k, i) => { if (!i) return; const s = notDoneSince(k); no[i].textContent = no[i].textContent.replace(/ \(\d+\)$/, '') + (staffLastDone ? ` (${inSet.filter(e => notDoneFor(e, k, s)).length})` : ''); });
     const rows = inSet
       .filter(e => !miss || (miss === 'birthday' ? !e.birthday : !e.hireDate))
       .filter(e => !nd || notDone(e))
@@ -1404,7 +1405,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       <td data-rated="${e.id}" class="small" style="white-space:nowrap"></td>
       <td data-pending="${e.id}"></td>
       <td style="white-space:nowrap"><button class="btn subtle" data-edit-staff="${e.id}">Edit</button><button class="btn subtle" data-record="${e.id}">Training record</button></td></tr>`).join('')
-      || `<tr><td colspan="8" class="muted">${state.employees.length ? (nd ? 'Everyone here has done one. 🎉' : 'No one matches these filters.') : 'No staff yet. Add them one at a time or import your roster from a spreadsheet.'}</td></tr>`;
+      || `<tr><td colspan="8" class="muted">${state.employees.length ? (nd && !nd.startsWith('did-') ? 'Everyone here has done one. 🎉' : 'No one matches these filters.') : 'No staff yet. Add them one at a time or import your roster from a spreadsheet.'}</td></tr>`;
     fillStaffActivity();
     renderBulk();
     const sel = $('st-dept');
@@ -1413,6 +1414,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   let staffLastDone = null;   // employee id -> date of their last finished in-service
   function notDoneSince(k) {
     const t = state.todayDate;
+    k = k.replace(/^did-/, '');
     if (k === 'today') return t;
     if (k === 'week') { const d = new Date(t + 'T12:00:00'); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return isoDay(d); }
     if (k === 'd30') { const d = new Date(t + 'T12:00:00'); d.setDate(d.getDate() - 29); return isoDay(d); }
@@ -1584,6 +1586,22 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     if (t) { e.preventDefault(); showDetails(topicById(t.dataset.topic), { actions: [['▶ Preview', () => showPreview(topicById(t.dataset.topic))], ['✏️ Edit', () => { $('viewer').close(); openEditor(topicById(t.dataset.topic)); }]] }); }
   });
   $('viewer').addEventListener('close', () => { $('vw-actions').innerHTML = ''; });
+  // Who has seen a pop-up announcement (they tapped Got it), who came in and didn't, and who hasn't been in yet.
+  async function showSeen(a) {
+    if (!a) return;
+    $('vw-title').textContent = a.title || 'Pop-up announcement';
+    $('vw-body').innerHTML = '<p class="muted">Loading…</p>';
+    if (!$('viewer').open) $('viewer').showModal();
+    try {
+      const { seen, missed, notIn } = await api(`/api/admin/announcements/${a.id}/seen`);
+      const list = (rows, when) => rows.length ? `<ul class="pv-list">${rows.map(p => `<li>${personLink(p.id, p.name)} <span class="muted small">${escapeHtml(p.department || '')}${when(p) ? ' · ' + when(p) : ''}</span></li>`).join('')}</ul>` : '';
+      $('vw-body').innerHTML = `<div class="muted small" style="margin-top:6px">Showing ${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'} · ${a.departments.length ? escapeHtml(a.departments.join(', ')) : 'All staff'}. "Seen" means they tapped Got it on the iPad.</div>
+        <div class="pv-stats"><div><b>${seen.length}</b><span>saw it</span></div><div><b>${missed.length}</b><span>came in but didn't see it</span></div><div><b>${notIn.length}</b><span>haven't been in since it started</span></div></div>
+        <h3 style="margin-top:16px">✅ Saw it (${seen.length})</h3>${list(seen, p => 'tapped Got it ' + fmtWhen(p.at)) || '<p class="muted">No one yet.</p>'}
+        ${missed.length ? `<h3 style="margin-top:16px">⚠️ Came in but didn't see it (${missed.length})</h3><div class="muted small">They did an in-service after it started but never tapped Got it. They may have walked away, or the iPad lost its connection right then.</div>${list(missed, p => 'last in ' + fmtWhen(p.lastIn))}` : ''}
+        ${notIn.length ? `<details style="margin-top:16px"><summary><b>Haven't been in since it started (${notIn.length})</b></summary>${list(notIn, () => '')}</details>` : ''}`;
+    } catch (err) { $('vw-body').innerHTML = `<p class="err">${escapeHtml(err.message)}</p>`; }
+  }
   // A person at a glance: their numbers, recent answers, reviews and ratings, with Edit and Training record.
   async function showPerson(emp) {
     if (!emp) return;
@@ -2895,7 +2913,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const live = a.startDate <= state.todayDate && (!a.endDate || a.endDate >= state.todayDate);
       const status = live ? ' <span class="pill good">Showing now</span>' : a.startDate > state.todayDate ? ' <span class="pill">Upcoming</span>' : ' <span class="pill">Ended</span>';
       const what = a.popup ? `${a.image ? `<img class="an-thumb" src="${escapeHtml(a.image)}" alt="">` : ''}<span class="pill">📲 Pop-up</span> <b>${escapeHtml(a.title || '')}</b>${a.text ? `<div class="small">${formatInline(a.text)}</div>` : ''}
-        <div class="small muted">${a.everyTime ? 'Every clock-in' : 'Once per person'} · seen by ${a.seen || 0}</div>` : formatInline(a.text);
+        <div class="small muted">${a.everyTime ? 'Every clock-in' : 'Once per person'} · <a href="#" data-ann-seen="${a.id}">seen by ${a.seen || 0} · who?</a></div>` : formatInline(a.text);
       return `<tr class="${!live && a.startDate < state.todayDate ? 'dim' : ''}"><td>${what}${status}</td><td>${whoLabel(a.departments)}</td>
         <td style="white-space:nowrap">${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'}</td>
         <td style="white-space:nowrap"><button class="btn subtle" data-prev-ann="${a.id}">👁 Preview</button> <button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
@@ -2989,6 +3007,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     } catch (err) { $('an-error').textContent = err.message; }
   });
   $('an-rows').addEventListener('click', async e => {
+    const sn = e.target.closest('[data-ann-seen]');
+    if (sn) { e.preventDefault(); return showSeen(state.announcements.find(x => x.id === sn.dataset.annSeen)); }
     const pv = e.target.closest('[data-prev-ann]');
     if (pv) return previewAnnouncement((state.announcements || []).find(a => a.id === pv.dataset.prevAnn) || {});
     const b = e.target.closest('[data-del-ann]');
