@@ -415,6 +415,8 @@ table.la tr:hover td { background: transparent; }
   .clear-filters { color: var(--warn) !important; }
   .drop-zone { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; box-sizing: border-box; padding: 20px 16px; border: 2px dashed #b9d0db; border-radius: 14px; background: #f7fbfd; cursor: pointer; text-align: center; transition: background .15s, border-color .15s; }
   .an-img-prev { display: flex; align-items: center; gap: 12px; margin-top: 8px; } .an-img-prev img { max-width: 120px; max-height: 120px; border-radius: 8px; border: 1px solid var(--line); }
+  .vw-topic { font-size: inherit; font-weight: inherit; color: var(--brand); } .vw-topic:hover { text-decoration: underline; }
+  .vw-edit-hint { font-size: 13px; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; vertical-align: middle; white-space: nowrap; }
   .tr-filter { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 8px; } .tr-filter button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
   .tr-q { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 8px; cursor: pointer; background: #fff; width: 100%; text-align: left; font: inherit; color: inherit; display: block; }
   .tr-q:hover, .tr-q.on { border-color: var(--brand); background: #f3f8fa; }
@@ -833,6 +835,7 @@ table.la tr:hover td { background: transparent; }
         <label><input type="checkbox" id="resp-missed"> Missed first try only</label>
         <select id="resp-kind"><option value="">All types</option><option value="noquiz">In-services only</option><option value="quiz">🧠 Quizzes only</option><option value="review">Spaced reviews only</option><option value="required">Required only</option></select>
         <select id="resp-helpful"><option value="">Any lesson rating</option><option value="any">Rated 👍 or 👎</option><option value="up">👍 Helpful</option><option value="down">👎 Not helpful</option></select>
+        <select id="resp-emp"><option value="">Everyone</option></select>
         <span class="pill" id="resp-person" hidden></span>
         <span class="grow"></span>
         <a class="btn" id="resp-csv" href="/api/admin/responses.csv">Download CSV</a>

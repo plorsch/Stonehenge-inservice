@@ -329,9 +329,18 @@
     if (e.key === '/' && !e.target.closest('input, textarea, select, [contenteditable]') && !document.querySelector('dialog[open]')) { e.preventDefault(); $('gsearch').focus(); }
   });
 
+  // A link that only runs a script ("#") should never jump the page to the top.
+  document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href="#"]'); if (a) e.preventDefault(); });
+  // Redraws every page from fresh data. Keeps you where you were: same scroll spot, and the button you clicked
+  // (when it's still there) stays focused. Some browsers (Safari) jumped to the top when the clicked button was redrawn.
   async function refresh() {
     state = await api('/api/admin/state');
+    const y = window.scrollY, act = document.activeElement;
+    const key = act && act !== document.body && act.closest('main') ? [...act.attributes].filter(x => x.name === 'id' || x.name.startsWith('data-')).map(x => `[${x.name}="${CSS.escape(x.value)}"]`).join('') : '';
     renderToday(); renderSchedule(); renderRequired(); renderStarter(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters(); renderReportFilters(); setTimeout(() => fitAllText(), 30); layouts.forEach(l => l.apply());
+    if (key && !document.contains(act)) { const again = document.querySelector(key); if (again) again.focus({ preventScroll: true }); }
+    if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
+    requestAnimationFrame(() => { if (Math.abs(window.scrollY - y) > 2 && window.scrollY < 5) window.scrollTo(0, y); });
   }
 
   // ---------- add to home screen ----------
@@ -864,7 +873,13 @@
     if (b.dataset.nsUp) swap(Number(b.dataset.nsUp), Number(b.dataset.nsUp) - 1);
     else if (b.dataset.nsDown) swap(Number(b.dataset.nsDown), Number(b.dataset.nsDown) + 1);
     else if (b.dataset.nsDel) nsIds.splice(Number(b.dataset.nsDel), 1);
+    const y = window.scrollY;
     nsDirty = true; renderStarter();
+    // Keep the moved topic's arrow under your finger, and the page where it was.
+    const i = b.dataset.nsUp ? Number(b.dataset.nsUp) - 1 : b.dataset.nsDown ? Number(b.dataset.nsDown) + 1 : -1;
+    const next = i >= 0 && document.querySelector(`[data-ns-${b.dataset.nsUp ? 'up' : 'down'}="${i}"]:not([disabled])`);
+    if (next) next.focus({ preventScroll: true });
+    if (window.scrollY !== y) window.scrollTo(0, y);
   });
   $('ns-add').addEventListener('click', () => {
     const id = $('ns-add-topic').value;
@@ -979,6 +994,15 @@
     if (!w) return alert('Your browser blocked the preview window. Allow pop-ups for this site and try again.');
     w.focus();
   }
+  // A topic's name at the top of a pop-up opens it in the editor.
+  function vwTopicTitle(t) {
+    $('vw-title').innerHTML = `<button type="button" class="linkish vw-topic" data-vw-edit="${escapeHtml(t.id)}" title="Open this topic to edit it">${escapeHtml(t.title)} <span class="vw-edit-hint">✏️ Edit</span></button>`;
+  }
+  $('vw-title').addEventListener('click', e => {
+    const b = e.target.closest('[data-vw-edit]');
+    if (!b) return;
+    $('viewer').close(); openEditor(topicById(b.dataset.vwEdit));
+  });
   const topicActions = t => ({ actions: [['📊 Results', () => showTopicResults(t)], ['▶ Preview', () => showPreview(t)], ['✏️ Edit', () => { $('viewer').close(); openEditor(t); }]] });
   // A topic's results: how it's going overall and per question, and who got it right or missed it, when, and on which question.
   // Everything opens from here: a person, their exact answer, the answer key, the editor.
@@ -986,7 +1010,7 @@
   async function showTopicResults(t, opts = {}) {
     if (!t) return;
     vwPush(() => showTopicResults(t, opts));
-    $('vw-title').textContent = t.title;
+    vwTopicTitle(t);
     $('vw-actions').innerHTML = '<button class="btn ghost" data-tr="key">🔑 Answer key</button><button class="btn ghost" data-tr="preview">▶ Preview</button><button class="btn ghost" data-tr="edit">✏️ Edit</button><button class="btn ghost" data-tr="all">All in Responses</button>';
     $('vw-actions').onclick = e => {
       const b = e.target.closest('[data-tr]'); if (!b) return;
@@ -1068,7 +1092,7 @@
   function showDetails(t, opts = {}) {
     if (!t) return;
     vwPush(() => showDetails(t, opts));
-    $('vw-title').textContent = t.title;
+    vwTopicTitle(t);
     // Every topic view can open the topic's results and the editor.
     const acts = (opts.actions || []).slice();
     if (!acts.some(([l]) => l.includes('Results'))) acts.push(['📊 Results', () => showTopicResults(t)]);
@@ -1995,7 +2019,17 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('resp-topic').innerHTML = '<option value="">All topics</option>' +
       state.topics.slice().sort((a, b) => a.title.localeCompare(b.title)).map(t => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join('');
     $('resp-topic').value = ct;
+    fillRespEmp();
   }
+  // The staff picker on Responses: active staff by name, then inactive ones at the end. Picking someone filters to them.
+  function fillRespEmp() {
+    const sel = $('resp-emp');
+    const people = state.employees.slice().sort((a, b) => (b.active - a.active) || a.name.localeCompare(b.name));
+    sel.innerHTML = '<option value="">Everyone</option>' + people.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}${e.active ? '' : ' (inactive)'}${e.department ? ` · ${escapeHtml(e.department)}` : ''}</option>`).join('');
+    sel.value = respPerson ? respPerson.id : '';
+    if (respPerson && sel.value !== respPerson.id) sel.value = '';
+  }
+  $('resp-emp').addEventListener('change', () => { respPerson = state.employees.find(x => x.id === $('resp-emp').value) || null; loadResponses(); });
   function respQuery() {
     const p = new URLSearchParams();
     if ($('resp-from').value) p.set('from', $('resp-from').value);
@@ -2012,9 +2046,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     starter: '<span class="pill good">New hire</span>', annual: '<span class="pill req">Yearly</span>', review: '<span class="pill brand">Review</span>', quiz: '<span class="pill quiz">🧠 Quiz</span>' };
   async function loadResponses() {
     try {
+      // People not on the roster (typed their name) can't be picked from the dropdown; they show as a removable chip instead.
+      const onList = respPerson && state.employees.some(x => x.id === respPerson.id);
+      $('resp-emp').value = onList ? respPerson.id : '';
       const pc = $('resp-person');
-      pc.hidden = !respPerson;
-      if (respPerson) pc.innerHTML = `${escapeHtml(respPerson.name)} <a href="#" id="resp-person-x" title="Show everyone" style="text-decoration:none">×</a>`;
+      pc.hidden = !respPerson || onList;
+      if (respPerson && !onList) pc.innerHTML = `${escapeHtml(respPerson.name)} <a href="#" id="resp-person-x" title="Show everyone" style="text-decoration:none">×</a>`;
       const { responses } = await api('/api/admin/responses?' + respQuery());
       const first = responses.filter(r => r.firstTryCorrect).length;
       const quizzes = responses.filter(r => r.kind === 'quiz').length;
@@ -2548,7 +2585,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const order = { overdue: 0, never: 1, soon: 2, current: 3 };
     const people = t.people.slice().sort((a, c) => order[a.status] - order[c.status] || (a.due || '').localeCompare(c.due || '') || a.name.localeCompare(c.name));
     vwPush(() => { const x = document.querySelector(`[data-yr-view="${t.id}"]`); if (x) x.click(); });
-    $('vw-title').textContent = t.title;
+    $('vw-title').innerHTML = topicById(t.id) ? topicLink(t.id, t.title) : escapeHtml(t.title);
     $('vw-body').innerHTML = `<table style="margin-top:12px"><thead><tr><th>Name</th><th>Department</th><th>Status</th><th>Last done</th><th>Due</th></tr></thead><tbody>
       ${people.map(p => `<tr><td>${personLink(p.id, p.name)}</td><td>${escapeHtml(p.department || '')}</td><td>${yrLabel[p.status]}</td><td>${p.last ? fmtDate(p.last) : ''}</td><td>${p.due ? fmtDate(p.due) : 'Now'}</td></tr>`).join('')
         || '<tr><td colspan="5" class="muted">No active staff in these departments.</td></tr>'}</tbody></table>`;
@@ -2589,6 +2626,15 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const saved = (state.layouts && state.layouts[page]) || [];
       const order = saved.length ? saved.map(t => [t.id, t.span, t.h]) : defaults;
       const byId = Object.fromEntries(tiles().map(t => [t.dataset.tile, t]));
+      // Already in this order? Then only sizes change. Moving tiles around blurs whatever you just clicked.
+      const want = [...order.map(o => o[0]).filter(id => byId[id]), ...defaults.map(d => d[0]).filter(id => byId[id] && !order.some(o => o[0] === id))];
+      const same = want.join('|') === tiles().map(t => t.dataset.tile).join('|');
+      if (same) {
+        const sizes = Object.fromEntries([...defaults.map(([id, span]) => [id, [span, 0]]), ...order.map(([id, span, h]) => [id, [span, h]])]);
+        for (const id of want) { byId[id].style.setProperty('--span', sizes[id][0]); setTileHeight(byId[id], sizes[id][1] || 0); }
+        tiles().forEach(markWidth);
+        return;
+      }
       const placed = new Set();
       for (const [id, span, h] of order) {
         const t = byId[id];
