@@ -442,7 +442,8 @@ table.la tr:hover td { background: transparent; }
   .an-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; } .an-btns input[type=text] { width: 100%; }
   .an-rep { display: block; color: var(--muted); margin-top: 2px; } .an-rep.on { color: var(--brand); } .an-btns div:has(input[type=text]:placeholder-shown) .an-rep { visibility: hidden; }
   .card.editing { outline: 3px solid var(--brand); outline-offset: -1px; }
-  .pick-bars { margin: 10px 0 4px; display: grid; gap: 6px; } .pick-bars div { display: grid; grid-template-columns: minmax(90px, auto) 1fr 40px; gap: 10px; align-items: center; font-size: 14px; }
+  .pick-bars { margin: 10px 0 4px; display: grid; gap: 6px; } .pick-bars button { display: grid; grid-template-columns: minmax(90px, auto) 1fr 40px; gap: 10px; align-items: center; font: inherit; font-size: 14px; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 4px 6px; cursor: pointer; color: inherit; }
+  .pick-bars button:hover { background: var(--bg); } .pick-bars button.on { background: var(--brand-soft, #eaf3f7); border-color: var(--brand); } .pick-bars button.on span { font-weight: 700; color: var(--brand); }
   .pick-bars i { display: block; height: 12px; border-radius: 0 4px 4px 0; background: var(--brand); min-width: 2px; }
   .an-thumb { width: 44px; height: 44px; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); vertical-align: middle; margin-right: 8px; }
   .drop-zone:hover { background: var(--brand-soft); border-color: var(--brand); }

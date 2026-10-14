@@ -1827,13 +1827,19 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     try {
       const { seen, missed, notIn, buttons, repeat = [] } = await api(`/api/admin/announcements/${a.id}/seen`);
       const list = (rows, when) => rows.length ? `<ul class="pv-list">${rows.map(p => `<li>${personLink(p.id, p.name)} <span class="muted small">${escapeHtml(p.department || '')}${when(p) ? ' · ' + when(p) : ''}</span></li>`).join('')}</ul>` : '';
-      $('vw-body').innerHTML = `<div class="muted small" style="margin-top:6px">Showing ${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'} · ${a.departments.length ? escapeHtml(a.departments.join(', ')) : 'All staff'}. "Seen" means they tapped ${buttons.length ? 'a button' : 'Got it'} on the iPad.</div>
+      // Tapping an answer bar filters the list below to just those people; "Clear filter" shows everyone again.
+      const draw = (choice = '') => {
+        const shown = choice ? seen.filter(p => p.choice === choice) : seen;
+        $('vw-body').innerHTML = `<div class="muted small" style="margin-top:6px">Showing ${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'} · ${a.departments.length ? escapeHtml(a.departments.join(', ')) : 'All staff'}. "Seen" means they tapped ${buttons.length ? 'a button' : 'Got it'} on the iPad.</div>
         <div class="pv-stats"><div><b>${seen.length}</b><span>${buttons.length ? 'answered' : 'saw it'}</span></div><div><b>${missed.length}</b><span>came in but didn't see it</span></div><div><b>${notIn.length}</b><span>haven't been in since it started</span></div></div>
-        ${buttons.length ? `<h3 style="margin-top:16px">Answers</h3><div class="pick-bars">${buttons.map(b => { const n = seen.filter(p => p.choice === b).length;
-          return `<div><span>${escapeHtml(b)}</span><i style="width:${seen.length ? Math.round(100 * n / seen.length) : 0}%"></i><b>${n}</b></div>`; }).join('')}</div>` : ''}
-        <h3 style="margin-top:16px">✅ ${buttons.length ? 'Answered' : 'Saw it'} (${seen.length})</h3>${list(seen, p => (p.choice ? `<b>${escapeHtml(p.choice)}</b> ${repeat.includes(p.choice) ? '<span class="pill" title="They see the pop-up again next clock-in">↻ asks again</span> ' : ''}` : 'tapped Got it ') + fmtWhen(p.at)) || '<p class="muted">No one yet.</p>'}
-        ${missed.length ? `<h3 style="margin-top:16px">⚠️ Came in but didn't see it (${missed.length})</h3><div class="muted small">They did an in-service after it was added but never tapped Got it. They may have walked away, or the iPad lost its connection right then.</div>${list(missed, p => 'last in ' + fmtWhen(p.lastIn))}` : ''}
-        ${notIn.length ? `<details style="margin-top:16px"><summary><b>Haven't been in since it started (${notIn.length})</b></summary>${list(notIn, () => '')}</details>` : ''}`;
+        ${buttons.length ? `<h3 style="margin-top:16px">Answers <span class="muted small" style="font-weight:400">· tap one to filter</span></h3><div class="pick-bars">${buttons.map(b => { const n = seen.filter(p => p.choice === b).length;
+          return `<button type="button" class="${choice === b ? 'on' : ''}" data-choice="${escapeHtml(b)}" title="Show only the people who picked ${escapeHtml(b)}"><span>${escapeHtml(b)}</span><i style="width:${seen.length ? Math.round(100 * n / seen.length) : 0}%"></i><b>${n}</b></button>`; }).join('')}</div>` : ''}
+        <h3 style="margin-top:16px">${choice ? `${escapeHtml(choice)} (${shown.length})` : `✅ ${buttons.length ? 'Answered' : 'Saw it'} (${seen.length})`}${choice ? ' <button type="button" class="btn subtle" data-choice="" style="margin-left:8px">✕ Clear filter</button>' : ''}</h3>${list(shown, p => (p.choice ? `<b>${escapeHtml(p.choice)}</b> ${repeat.includes(p.choice) ? '<span class="pill" title="They see the pop-up again next clock-in">↻ asks again</span> ' : ''}` : 'tapped Got it ') + fmtWhen(p.at)) || '<p class="muted">No one yet.</p>'}
+        ${!choice && missed.length ? `<h3 style="margin-top:16px">⚠️ Came in but didn't see it (${missed.length})</h3><div class="muted small">They did an in-service after it was added but never tapped Got it. They may have walked away, or the iPad lost its connection right then.</div>${list(missed, p => 'last in ' + fmtWhen(p.lastIn))}` : ''}
+        ${!choice && notIn.length ? `<details style="margin-top:16px"><summary><b>Haven't been in since it started (${notIn.length})</b></summary>${list(notIn, () => '')}</details>` : ''}`;
+        $('vw-body').querySelectorAll('[data-choice]').forEach(b => b.addEventListener('click', () => draw(b.dataset.choice === choice ? '' : b.dataset.choice)));
+      };
+      draw();
     } catch (err) { $('vw-body').innerHTML = `<p class="err">${escapeHtml(err.message)}</p>`; }
   }
   // A person at a glance: their numbers, recent answers, reviews and ratings, with Edit and Training record.
