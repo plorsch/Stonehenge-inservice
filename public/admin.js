@@ -381,7 +381,7 @@
         : '<span class="pill">🔁 Topic of the day</span>';
       const reqNote = reqs.length ? `<span class="pill req">⚠️ ${reqs.length} required first</span>` : '';
       const swap = ['daily', 'weekly', 'culture'].includes(d.source) && d.topicId ? `<button class="btn subtle" data-swap="${escapeHtml(d.department)}" title="Pick a different rotation topic for today">🔀 Pick another</button>` : '';
-      const title = d.title ? `<a href="#" data-preview="${d.topicId}">${escapeHtml(d.title)}</a>` : (d.source === 'random' ? '<span class="muted">Varies per person</span>' : d.source === 'quiz' ? '<span>One question from each person\'s past week</span>' : '<span class="muted">Nothing available</span>');
+      const title = d.title ? topicLink(d.topicId, d.title) : (d.source === 'random' ? '<span class="muted">Varies per person</span>' : d.source === 'quiz' ? '<span>One question from each person\'s past week</span>' : '<span class="muted">Nothing available</span>');
       const name = d.department || 'Everyone';
       return `<div class="dt-card" style="--dt:${DT_COLORS[i % DT_COLORS.length]}"><div class="dt-top"><div class="dt-av">${escapeHtml(name.slice(0, 1).toUpperCase())}</div><div class="dt-dept">${escapeHtml(name)}</div></div>
         <div class="dt-topic">${title}</div><div class="dt-foot">${why}${reqNote}${swap}</div></div>`;
@@ -610,7 +610,7 @@
       const live = s.startDate <= state.todayDate && (!s.endDate || s.endDate >= state.todayDate);
       const status = live ? ' <span class="pill good">Running now</span>' : s.startDate > state.todayDate ? ' <span class="pill">Upcoming</span>' : ' <span class="pill">Ended</span>';
       return `<tr class="${!live && s.startDate < state.todayDate ? 'dim' : ''}">
-        <td>${t ? `<a href="#" data-preview="${t.id}">${escapeHtml(t.title)}</a>` : '<span class="muted">Deleted topic</span>'}${t && t.status !== 'active' ? ' <span class="pill warn">Not active</span>' : ''}${status}
+        <td>${t ? topicLink(t.id, t.title) : '<span class="muted">Deleted topic</span>'}${t && t.status !== 'active' ? ' <span class="pill warn">Not active</span>' : ''}${status}
           ${s.note ? `<div class="muted small">${escapeHtml(s.note)}</div>` : ''}</td>
         <td>${whoLabel(s.departments)}</td>
         <td style="white-space:nowrap">${fmtDate(s.startDate)} – ${s.endDate ? fmtDate(s.endDate) : 'until removed'}</td>
@@ -631,7 +631,7 @@
     if (!laStart) laStart = mondayOf(state.todayDate);
     try {
       const f = await api(`/api/admin/forecast?start=${laStart}&weeks=${$('la-weeks').value}`);
-      $('la-required').innerHTML = f.required.map(q => `<div class="la-req">📌 <b>Required education comes first:</b> ${escapeHtml(q.title)} for ${whoLabel(q.departments)}, until everyone has done it${q.endDate ? ` or ${fmtDate(q.endDate)}` : ''}. People who've finished it get the topics below.</div>`).join('');
+      $('la-required').innerHTML = f.required.map(q => `<div class="la-req">📌 <b>Required education comes first:</b> ${q.topicId ? topicLink(q.topicId, q.title) : escapeHtml(q.title)} for ${whoLabel(q.departments)}, until everyone has done it${q.endDate ? ` or ${fmtDate(q.endDate)}` : ''}. People who've finished it get the topics below.</div>`).join('');
       const weeks = [];
       for (let i = 0; i < f.days.length; i += 7) weeks.push(f.days.slice(i, i + 7));
       const depts = f.days.length ? f.days[0].items.map(x => x.department) : [];
@@ -770,7 +770,7 @@
       const total = q.doneCount + q.pendingCount;
       const pct = total ? Math.round(100 * q.doneCount / total) : 0;
       return `<tr class="${q.active ? '' : 'dim'}">
-        <td>${t ? `<a href="#" data-preview="${t.id}">${escapeHtml(t.title)}</a>` : 'Deleted topic'} ${q.active ? '<span class="pill req">Open</span>' : '<span class="pill">Closed</span>'}
+        <td>${t ? topicLink(t.id, t.title) : 'Deleted topic'} ${q.active ? '<span class="pill req">Open</span>' : '<span class="pill">Closed</span>'}
           ${q.reason ? `<div class="muted small">${escapeHtml(q.reason)}</div>` : ''}
           ${q.endDate ? `<div class="small ${q.endDate < todayStr() ? 'muted' : ''}">${q.endDate < todayStr() ? 'Ended' : 'Shows until'} ${escapeHtml(q.endDate)}</div>` : ''}</td>
         <td>${whoLabel(q.departments)}</td>
@@ -845,7 +845,7 @@
     if (!nsDirty) { nsIds = st.topicIds.slice(); $('ns-days').value = st.days; }
     $('ns-list').innerHTML = nsIds.map((id, i) => {
       const t = topicById(id);
-      return `<li>${t ? escapeHtml(t.title) : '<span class="muted">Deleted topic</span>'}${t && t.status !== 'active' ? ' <span class="pill warn">Not active</span>' : ''}
+      return `<li>${t ? topicLink(t.id, t.title) : '<span class="muted">Deleted topic</span>'}${t && t.status !== 'active' ? ' <span class="pill warn">Not active</span>' : ''}
         <span class="muted small">${t ? whoLabel(t.departments) : ''}</span>
         <button class="btn subtle" data-ns-up="${i}"${i ? '' : ' disabled'}>↑</button><button class="btn subtle" data-ns-down="${i}"${i < nsIds.length - 1 ? '' : ' disabled'}>↓</button>
         <button class="btn subtle danger" data-ns-del="${i}">Remove</button></li>`;
@@ -1069,6 +1069,11 @@
     if (!t) return;
     vwPush(() => showDetails(t, opts));
     $('vw-title').textContent = t.title;
+    // Every topic view can open the topic's results and the editor.
+    const acts = (opts.actions || []).slice();
+    if (!acts.some(([l]) => l.includes('Results'))) acts.push(['📊 Results', () => showTopicResults(t)]);
+    if (!acts.some(([l]) => l.includes('Edit'))) acts.push(['✏️ Edit', () => { $('viewer').close(); openEditor(t); }]);
+    opts = Object.assign({}, opts, { actions: acts });
     $('vw-actions').innerHTML = (opts.actions || []).map(([label], i) => `<button class="btn ghost" data-vw-act="${i}">${escapeHtml(label)}</button>`).join('');
     $('vw-actions').onclick = e => { const x = e.target.closest('[data-vw-act]'); if (x) opts.actions[x.dataset.vwAct][1](); };
     $('vw-body').innerHTML = `${opts.note ? `<div class="vw-note">${opts.note}</div>` : ''}<div class="muted small" style="margin-top:12px">For: ${whoLabel(t.departments)}</div>
@@ -2033,9 +2038,9 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
           : `<span class="pill warn">Missed, right on try ${r.attempts.length}</span>`;
         return `<tr class="click-row" data-resp="${r.id}" title="Click to see their answers">
         <td style="white-space:nowrap">${fmtWhen(r.submittedAt)}</td>
-        <td><a href="#" class="row-link">${escapeHtml(r.name)}</a>${r.verified ? '' : ' <span class="pill" title="Typed their name; not on the roster">Not on roster</span>'}<div class="muted small">${escapeHtml(r.last4 || '')}</div></td>
+        <td>${r.employeeId && state.employees.some(e => e.id === r.employeeId) ? personLink(r.employeeId, r.name) : `<a href="#" class="row-link">${escapeHtml(r.name)}</a>`}${r.verified ? '' : ' <span class="pill" title="Typed their name; not on the roster">Not on roster</span>'}<div class="muted small">${escapeHtml(r.last4 || '')}</div></td>
         <td>${escapeHtml(r.department || '')}</td><td>${kindLabel[r.kind] || ''}${r.lang === 'es' ? ' <span class="pill">Español</span>' : ''}${r.offline ? ' <span class="pill" title="Answered while the iPad was offline, uploaded later">Saved offline</span>' : ''}</td>
-        <td><a href="#" class="row-link">${escapeHtml(r.topicTitle)}</a><div class="muted small">${escapeHtml(stripFormat(r.question))}</div></td>
+        <td>${topicById(r.topicId) ? topicLink(r.topicId, r.topicTitle) : `<a href="#" class="row-link">${escapeHtml(r.topicTitle)}</a>`}<div class="muted small">${escapeHtml(stripFormat(r.question))}</div></td>
         <td>${escapeHtml(r.attempts[0] || '')}</td><td>${result}${r.helpful === true ? ' <span title="Said the lesson was helpful">👍</span>' : r.helpful === false ? ' <span title="Said the lesson was not helpful">👎</span>' : ''}</td>
         <td class="resp-open-cell" data-label=""><button type="button" class="btn ghost resp-open">See their answers ›</button></td></tr>`;
       }).join(''));
@@ -2047,7 +2052,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   ['resp-from', 'resp-to', 'resp-dept', 'resp-topic', 'resp-missed', 'resp-helpful', 'resp-kind'].forEach(id => $(id).addEventListener('change', loadResponses));
   $('resp-rows').addEventListener('click', e => {
     const tr = e.target.closest('[data-resp]');
-    if (!tr) return;
+    if (!tr || e.target.closest('[data-person], [data-topic]')) return; // names open the person, topics open the topic
     e.preventDefault();
     showResponse(tr.dataset.resp);
   });
@@ -2319,7 +2324,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const by = new Map();
     for (const r of ccResult.results) {
       const k = `${r.last4}|${r.name.toLowerCase()}`;
-      const p = by.get(k) || { name: r.name, last4: r.last4, department: r.department, leader: r.leader || (r.onRoster ? '' : 'Not on roster'), onRoster: r.onRoster, shifts: 0, done: 0, missedDates: [] };
+      const p = by.get(k) || { name: r.name, employeeId: r.employeeId, last4: r.last4, department: r.department, leader: r.leader || (r.onRoster ? '' : 'Not on roster'), onRoster: r.onRoster, shifts: 0, done: 0, missedDates: [] };
       p.shifts++;
       if (r.status === 'done') p.done++; else p.missedDates.push(r.date);
       by.set(k, p);
@@ -2340,7 +2345,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       $('cc-people-rows').innerHTML = list.map(p => {
         const head = p.leader !== lastLeader ? `<tr class="group"><th colspan="5">${escapeHtml(p.leader || 'No leader set')} <span class="muted small">(${list.filter(x => x.leader === p.leader).length} to follow up)</span></th></tr>` : '';
         lastLeader = p.leader;
-        return head + `<tr class="${ccLeftOff.has(ccKey(p)) ? 'dim' : ''}"><td><input type="checkbox" data-cc-pick="${escapeHtml(ccKey(p))}"${ccLeftOff.has(ccKey(p)) ? '' : ' checked'} title="Include in the leader email"></td><td>${escapeHtml(p.name)}${p.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}<div class="muted small">${escapeHtml(p.last4)}</div></td>
+        return head + `<tr class="${ccLeftOff.has(ccKey(p)) ? 'dim' : ''}"><td><input type="checkbox" data-cc-pick="${escapeHtml(ccKey(p))}"${ccLeftOff.has(ccKey(p)) ? '' : ' checked'} title="Include in the leader email"></td><td>${p.employeeId ? personLink(p.employeeId, p.name) : escapeHtml(p.name)}${p.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}<div class="muted small">${escapeHtml(p.last4)}</div></td>
           <td>${escapeHtml(p.department || '')}</td>
           <td><strong>${p.missedDates.length}</strong> of ${p.shifts}${p.done ? '' : ' <span class="pill warn">Never did it</span>'}</td>
           <td>${p.missedDates.map(shortDay).join(', ')}</td></tr>`;
@@ -2475,7 +2480,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         const q = t && t.questions.find(x => x.id === g.questionId);
         const [wrong, n] = Object.entries(g.wrong).sort((a, b) => b[1] - a[1])[0] || [];
         const pct = Math.round(100 * g.missed / g.asked);
-        return `<tr class="${g.asked < 5 ? 'dim' : ''}"><td>${escapeHtml(q ? q.text : g.question)}<div class="muted small">${t ? topicLink(t.id, t.title) : escapeHtml(g.topicTitle)}</div></td>
+        return `<tr class="${g.asked < 5 ? 'dim' : ''}"><td>${t && q ? `<button class="linkish" data-mm-q="${t.id}|${t.questions.indexOf(q)}" title="See who missed it">${escapeHtml(stripFormat(q.text))}</button>` : escapeHtml(g.question)}<div class="muted small">${t ? topicLink(t.id, t.title) : escapeHtml(g.topicTitle)}</div></td>
           <td>${g.asked}</td><td><strong>${pct}%</strong> <span class="muted small">(${g.missed})</span></td>
           <td>${wrong ? `${escapeHtml(wrong)} <span class="muted small">(${n})</span>` : ''}</td>
           <td style="white-space:nowrap">${t ? `<button class="btn subtle" data-mm-edit="${t.id}">Edit topic</button>` : ''}</td></tr>`;
@@ -2484,6 +2489,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   }
   ['mm-from', 'mm-to', 'mm-dept'].forEach(id => $(id).addEventListener('change', loadMissed));
   $('mm-rows').addEventListener('click', e => {
+    const mq = e.target.closest('[data-mm-q]');
+    if (mq) { const [id, i] = mq.dataset.mmQ.split('|'); return showTopicResults(topicById(id), { fil: 'missed', q: Number(i) }); }
     const b = e.target.closest('[data-mm-edit]');
     if (b) openEditor(topicById(b.dataset.mmEdit));
   });
@@ -2527,7 +2534,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   async function loadAnnual() {
     try {
       annual = (await api('/api/admin/annual')).topics;
-      $('yr-rows').innerHTML = annual.map(t => `<tr><td><a href="#" data-preview="${t.id}">${escapeHtml(t.title)}</a>${t.status !== 'active' ? ' <span class="pill warn">Not active</span>' : ''}</td>
+      $('yr-rows').innerHTML = annual.map(t => `<tr><td>${topicLink(t.id, t.title)}${t.status !== 'active' ? ' <span class="pill warn">Not active</span>' : ''}</td>
         <td class="small">${whoLabel(t.departments)}</td><td>${t.current}</td><td>${t.soon}</td>
         <td>${t.overdue ? `<strong style="color:var(--warn)">${t.overdue}</strong>` : 0}</td><td>${t.never ? `<strong style="color:var(--warn)">${t.never}</strong>` : 0}</td>
         <td><button class="btn subtle" data-yr-view="${t.id}">Who's due</button></td></tr>`).join('')
@@ -2564,7 +2571,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const { usage } = await api('/api/admin/usage');
       $('usage-rows').innerHTML = usage.map(u => {
         const t = topicById(u.topicId);
-        return `<tr><td>${fmtDate(u.date)}</td><td>${escapeHtml(t ? t.title : u.title)}</td><td>${u.responses}</td></tr>`;
+        return `<tr><td>${fmtDate(u.date)}</td><td>${t ? topicLink(t.id, t.title) : escapeHtml(u.title)}</td><td>${u.responses}</td></tr>`;
       }).join('') || '<tr><td colspan="3" class="muted">No in-services completed yet.</td></tr>';
     } catch (err) { fail(err); }
   }
@@ -3030,8 +3037,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const fv = $('fu-filter').value, fd = $('fu-dept').value;
       const rows = followups.filter(f => (fv === 'all' || (fv === 'open' ? !f.attestedAt : f.attestedAt)) && (!fd || f.department === fd));
       $('fu-rows').innerHTML = rows.slice(0, 300).map(f => `<tr>
-        <td style="white-space:nowrap">${fmtWhen(f.createdAt)}</td><td><a href="#" data-fu-open="${f.responseId}"><strong>${escapeHtml(f.name)}</strong></a></td><td>${escapeHtml(f.department || '')}</td>
-        <td><a href="#" data-fu-open="${f.responseId}">${escapeHtml(f.question)}</a><div class="muted small">${escapeHtml(f.topicTitle)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>
+        <td style="white-space:nowrap">${fmtWhen(f.createdAt)}</td><td><strong>${f.employeeId ? personLink(f.employeeId, f.name) : escapeHtml(f.name)}</strong></td><td>${escapeHtml(f.department || '')}</td>
+        <td><a href="#" data-fu-open="${f.responseId}">${escapeHtml(f.question)}</a><div class="muted small">${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>
         <td>${escapeHtml(f.firstAnswer)}</td>
         <td class="small">${escapeHtml(f.leader || '')}${f.emailedTo.length ? `<div class="muted">✉ ${escapeHtml(f.emailedTo.join(', '))}</div>` : '<div class="muted">No leader email</div>'}</td>
         <td style="white-space:nowrap">${f.attestedAt ? `<span class="pill good">✓ Educated</span><div class="muted small">${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}</div><a href="#" class="small" data-fu-undo="${f.id}">Undo</a>`
