@@ -1826,7 +1826,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         ${buttons.length ? `<h3 style="margin-top:16px">Answers</h3><div class="pick-bars">${buttons.map(b => { const n = seen.filter(p => p.choice === b).length;
           return `<div><span>${escapeHtml(b)}</span><i style="width:${seen.length ? Math.round(100 * n / seen.length) : 0}%"></i><b>${n}</b></div>`; }).join('')}</div>` : ''}
         <h3 style="margin-top:16px">✅ ${buttons.length ? 'Answered' : 'Saw it'} (${seen.length})</h3>${list(seen, p => (p.choice ? `<b>${escapeHtml(p.choice)}</b> ${repeat.includes(p.choice) ? '<span class="pill" title="They see the pop-up again next clock-in">↻ asks again</span> ' : ''}` : 'tapped Got it ') + fmtWhen(p.at)) || '<p class="muted">No one yet.</p>'}
-        ${missed.length ? `<h3 style="margin-top:16px">⚠️ Came in but didn't see it (${missed.length})</h3><div class="muted small">They did an in-service after it started but never tapped Got it. They may have walked away, or the iPad lost its connection right then.</div>${list(missed, p => 'last in ' + fmtWhen(p.lastIn))}` : ''}
+        ${missed.length ? `<h3 style="margin-top:16px">⚠️ Came in but didn't see it (${missed.length})</h3><div class="muted small">They did an in-service after it was added but never tapped Got it. They may have walked away, or the iPad lost its connection right then.</div>${list(missed, p => 'last in ' + fmtWhen(p.lastIn))}` : ''}
         ${notIn.length ? `<details style="margin-top:16px"><summary><b>Haven't been in since it started (${notIn.length})</b></summary>${list(notIn, () => '')}</details>` : ''}`;
     } catch (err) { $('vw-body').innerHTML = `<p class="err">${escapeHtml(err.message)}</p>`; }
   }

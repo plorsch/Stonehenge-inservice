@@ -1738,7 +1738,10 @@ async function adminRoutes(req, res, p, m, url) {
     const seenBy = new Map(db.popupSeen.filter(x => x.id === a.id).map(x => [x.employeeId, x]));
     const meantFor = db.employees.filter(e => e.active && (!a.departments.length || a.departments.includes(e.department)));
     const lastIn = {};
-    for (const r of db.responses) if (r.employeeId && r.date >= a.startDate && !(lastIn[r.employeeId] >= r.submittedAt)) lastIn[r.employeeId] = r.submittedAt;
+    // "Since it started" means since the moment it was added (or its start date, if that's later): clock-ins
+    // from earlier that day happened before the pop-up existed, so those people never had a chance to see it.
+    const since = a.createdAt || '';
+    for (const r of db.responses) if (r.employeeId && r.date >= a.startDate && r.submittedAt >= since && !(lastIn[r.employeeId] >= r.submittedAt)) lastIn[r.employeeId] = r.submittedAt;
     const seen = [...seenBy].map(([id, x]) => { const e = findEmployee(id); return e && Object.assign(person(e), { at: x.at }, x.choice ? { choice: x.choice } : {}); }).filter(Boolean).sort((x, y) => y.at.localeCompare(x.at));
     const missed = meantFor.filter(e => !seenBy.has(e.id) && lastIn[e.id]).map(e => Object.assign(person(e), { lastIn: lastIn[e.id] })).sort((x, y) => y.lastIn.localeCompare(x.lastIn));
     const notIn = meantFor.filter(e => !seenBy.has(e.id) && !lastIn[e.id]).map(person).sort((x, y) => x.name.localeCompare(y.name));
