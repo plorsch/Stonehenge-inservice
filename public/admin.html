@@ -237,6 +237,9 @@
 
 /* Response details */
 tr.click-row { cursor: pointer; }
+/* A real button on each response card on phones: iPhone taps on a plain row don't always register. */
+.resp-open-cell { display: none; }
+@media (max-width: 700px) { .table-wrap table.stack td.resp-open-cell { display: block; text-align: left; padding-top: 8px; } .resp-open { width: 100%; justify-content: center; } }
 tr.click-row .row-link { color: inherit; text-decoration: none; font-weight: 600; }
 tr.click-row:hover .row-link { color: #1f6f8b; text-decoration: underline; }
 #viewer { width: min(860px, 96vw); }
@@ -248,7 +251,7 @@ tr.click-row:hover .row-link { color: #1f6f8b; text-decoration: underline; }
 .rd-stat { margin-top: 10px; font-size: 14px; }
 .rd-recent { list-style: none; padding: 0; margin: 6px 0 0; font-size: 13px; }
 .rd-recent li { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
-.rd-recent li a { flex: 1; }
+.rd-recent li a[data-rd-topic] { flex: 1; } .rd-recent li a[data-rd-open] { color: var(--muted); }
 .rd-recent li.me a { font-weight: 700; }
 .rd-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .rd-choices { list-style: none; padding: 0; margin: 0; }
@@ -412,6 +415,12 @@ table.la tr:hover td { background: transparent; }
   .clear-filters { color: var(--warn) !important; }
   .drop-zone { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; box-sizing: border-box; padding: 20px 16px; border: 2px dashed #b9d0db; border-radius: 14px; background: #f7fbfd; cursor: pointer; text-align: center; transition: background .15s, border-color .15s; }
   .an-img-prev { display: flex; align-items: center; gap: 12px; margin-top: 8px; } .an-img-prev img { max-width: 120px; max-height: 120px; border-radius: 8px; border: 1px solid var(--line); }
+  .tr-filter { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 8px; } .tr-filter button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .tr-q { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 8px; cursor: pointer; background: #fff; width: 100%; text-align: left; font: inherit; color: inherit; display: block; }
+  .tr-q:hover, .tr-q.on { border-color: var(--brand); background: #f3f8fa; }
+  .tr-q .tr-bar { height: 8px; border-radius: 4px; background: #e6edf1; margin: 6px 0 4px; overflow: hidden; } .tr-q .tr-bar i { display: block; height: 100%; }
+  .tr-rows td { vertical-align: top; } .tr-rows tr[data-resp] { cursor: pointer; } .tr-rows tr[data-resp]:hover td { background: #f3f8fa; }
+  button.tl-num { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; } button.tl-num:hover span, button.tl-num:hover { color: var(--brand); text-decoration: underline; }
   .an-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .an-btns input { width: 100%; }
   .card.editing { outline: 3px solid var(--brand); outline-offset: -1px; }
   .pick-bars { margin: 10px 0 4px; display: grid; gap: 6px; } .pick-bars div { display: grid; grid-template-columns: minmax(90px, auto) 1fr 40px; gap: 10px; align-items: center; font-size: 14px; }
@@ -1243,7 +1252,7 @@ table.la tr:hover td { background: transparent; }
 
 <!-- Generic viewer (preview, progress) -->
 <dialog id="viewer">
-  <div class="dlg-head"><h2 style="margin:0" id="vw-title"></h2></div>
+  <div class="dlg-head"><button class="btn subtle" id="vw-back" type="button" hidden>← Back</button><h2 style="margin:0" id="vw-title"></h2></div>
   <div class="dlg-body" id="vw-body"></div>
   <div class="dlg-foot"><span id="vw-actions" class="vw-actions"></span><button class="btn" onclick="this.closest('dialog').close()">Close</button></div>
 </dialog>

@@ -1984,7 +1984,7 @@ async function adminRoutes(req, res, p, m, url) {
       person: emp ? { id: emp.id, name: emp.name, department: emp.department, jobTitle: emp.jobTitle || '', hireDate: emp.hireDate || '' } : null,
       history: {
         total: done.length, firstTry: done.filter(x => x.firstTryCorrect).length,
-        recent: mine.slice(-8).reverse().map(x => ({ id: x.id, date: x.date, topicTitle: x.topicTitle, firstTryCorrect: x.firstTryCorrect, completed: x.completed }))
+        recent: mine.slice(-8).reverse().map(x => ({ id: x.id, date: x.date, topicId: x.topicId, topicTitle: x.topicTitle, firstTryCorrect: x.firstTryCorrect, completed: x.completed }))
       },
       followup: (db.followups || []).find(f => f.responseId === r.id) || null
     });

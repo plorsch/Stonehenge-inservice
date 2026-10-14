@@ -419,7 +419,7 @@
     $('tile-missed').classList.toggle('alert', state.missedToday > 0);
     drawDays(dash.days);
     drawDepts(dash.departments);
-    $('dash-missq').innerHTML = dash.topMissed.length ? dash.topMissed.map(q => `<button class="missq" data-missq="${escapeHtml(q.topicId)}"><b>${q.missed}×</b>${escapeHtml(q.question)}<div class="muted small">${escapeHtml(q.topicTitle)}</div></button>`).join('')
+    $('dash-missq').innerHTML = dash.topMissed.length ? dash.topMissed.map(q => `<button class="missq" data-missq="${escapeHtml(q.topicId)}" data-missq-text="${escapeHtml(q.question)}"><b>${q.missed}×</b>${escapeHtml(q.question)}<div class="muted small">${escapeHtml(q.topicTitle)}</div></button>`).join('')
       + '<div style="margin-top:10px"><a href="#" class="small" data-go="missed-report">Full missed-questions report →</a></div>'
       : '<div class="muted">Nobody missed a question this week. 🎉</div>';
     const cel = dash.celebrationsToday || [];
@@ -519,7 +519,9 @@
   });
   $('dash-missq').addEventListener('click', e => {
     const b = e.target.closest('[data-missq]');
-    if (b) openResponses({ from: dash.start7, to: dash.today, topicId: b.dataset.missq, missed: true });
+    const t = b && topicById(b.dataset.missq);
+    if (t) showTopicResults(t, { fil: 'missed', q: t.questions.findIndex(q => stripFormat(q.text).trim() === b.dataset.missqText.trim()) });
+    else if (b) openResponses({ from: dash.start7, to: dash.today, topicId: b.dataset.missq, missed: true });
   });
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-go]');
@@ -824,13 +826,14 @@
         const q = state.required.find(x => x.id === vw.dataset.rqView);
         const pr = await api(`/api/admin/required/${q.id}/progress`);
         const t = topicById(q.topicId);
+        vwPush(() => { const x = document.querySelector(`[data-rq-view="${q.id}"]`); if (x) x.click(); });
         $('vw-title').textContent = t ? t.title : 'Required education';
         $('vw-body').innerHTML = `
           <h3 style="margin-top:14px">Still to do (${pr.pending.length})</h3>
           ${pr.pending.length ? `<table><tbody>${pr.pending.map(p => `<tr><td>${personLink(p.id, p.name)}</td><td>${escapeHtml(p.department)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Everyone is done.</p>'}
           <h3 style="margin-top:18px">Done (${pr.done.length})</h3>
           ${pr.done.length ? `<table><tbody>${pr.done.map(p => `<tr><td>${personLink(p.id, p.name)}</td><td>${escapeHtml(p.department)}</td><td>${fmtWhen(p.completedAt)}</td><td>${p.firstTryCorrect ? '<span class="pill good">Right first try</span>' : '<span class="pill warn">Needed a retry</span>'}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No one yet.</p>'}`;
-        $('viewer').showModal();
+        openViewer();
       }
     } catch (err) { fail(err); }
   });
@@ -909,11 +912,11 @@
       return `<tr class="${retired ? 'dim' : ''}">
         <td><button class="tl-title linkish" data-act="details" data-id="${t.id}" title="See the lesson and questions">${escapeHtml(t.title)}</button><div class="tl-tags">${tags}</div>${draft && t.problems ? `<div class="muted small">${escapeHtml(t.problems[0])}</div>` : ''}</td>
         <td class="small">${whoLabel(t.departments)}</td>
-        <td><span class="tl-count">${t.questions.length}</span></td>
+        <td><button class="tl-num" data-act="details" data-id="${t.id}" title="See the questions and answers"><span class="tl-count">${t.questions.length}</span></button></td>
         <td>${retired || draft ? '<span class="muted">–</span>' : `<label class="sw" title="In rotation"><input type="checkbox" data-rotation="${t.id}"${t.inRotation ? ' checked' : ''} aria-label="In rotation"><span></span></label>`}</td>
-        <td style="white-space:nowrap">${fmtDate(t.lastUsedDate)}</td>
-        <td>${st ? st.responses : 0}</td>
-        <td>${pct}${rated}</td>
+        <td style="white-space:nowrap">${t.lastUsedDate ? `<button class="tl-num" data-act="results" data-id="${t.id}" title="Who did it and when">${fmtDate(t.lastUsedDate)}</button>` : fmtDate(t.lastUsedDate)}</td>
+        <td>${st && st.responses ? `<button class="tl-num" data-act="results" data-id="${t.id}" title="Who got it right, who missed it">${st.responses}</button>` : 0}</td>
+        <td>${n === null ? pct : `<button class="tl-num" data-act="results" data-id="${t.id}" title="Who got it right, who missed it, and which questions">${pct}</button>`}${rated}</td>
         <td><div class="tl-acts">
           <button class="tl-act" data-act="preview" data-id="${t.id}" title="Try it on the kiosk screens. Nothing is saved.">▶ Preview</button>
           <button class="tl-act" data-act="edit" data-id="${t.id}">✏️ Edit</button>
@@ -952,7 +955,8 @@
     const id = b.dataset.id, act = b.dataset.act, t = topicById(id);
     try {
       if (act === 'preview') return showPreview(t);
-      if (act === 'details') return showDetails(t);
+      if (act === 'details') return showDetails(t, topicActions(t));
+      if (act === 'results') return showTopicResults(t);
       if (act === 'edit') return openEditor(t);
       if (act === 'duplicate') {
         const { topic } = await post(`/api/admin/topics/${id}/duplicate`);
@@ -975,9 +979,95 @@
     if (!w) return alert('Your browser blocked the preview window. Allow pop-ups for this site and try again.');
     w.focus();
   }
+  const topicActions = t => ({ actions: [['📊 Results', () => showTopicResults(t)], ['▶ Preview', () => showPreview(t)], ['✏️ Edit', () => { $('viewer').close(); openEditor(t); }]] });
+  // A topic's results: how it's going overall and per question, and who got it right or missed it, when, and on which question.
+  // Everything opens from here: a person, their exact answer, the answer key, the editor.
+  // opts: { fil: 'missed' | 'right', q: question number (from 0) } to open already narrowed down.
+  async function showTopicResults(t, opts = {}) {
+    if (!t) return;
+    vwPush(() => showTopicResults(t, opts));
+    $('vw-title').textContent = t.title;
+    $('vw-actions').innerHTML = '<button class="btn ghost" data-tr="key">🔑 Answer key</button><button class="btn ghost" data-tr="preview">▶ Preview</button><button class="btn ghost" data-tr="edit">✏️ Edit</button><button class="btn ghost" data-tr="all">All in Responses</button>';
+    $('vw-actions').onclick = e => {
+      const b = e.target.closest('[data-tr]'); if (!b) return;
+      if (b.dataset.tr === 'key') return showDetails(t, topicActions(t));
+      if (b.dataset.tr === 'preview') return showPreview(t);
+      $('viewer').close();
+      if (b.dataset.tr === 'edit') openEditor(t);
+      if (b.dataset.tr === 'all') openResponses({ topicId: t.id });
+    };
+    $('vw-body').innerHTML = '<p class="muted">Loading…</p>';
+    openViewer();
+    try {
+      const { responses } = await api('/api/admin/responses?topicId=' + encodeURIComponent(t.id));
+      const rs = responses.filter(r => r.attempts.length).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+      const right = rs.filter(r => r.firstTryCorrect), missed = rs.filter(r => !r.firstTryCorrect);
+      const pctOf = (a, b) => b ? Math.round(100 * a / b) : null;
+      const color = n => n >= 80 ? 'var(--good)' : n >= 60 ? '#d39b1d' : 'var(--warn)';
+      const up = rs.filter(r => r.helpful === true).length, down = rs.filter(r => r.helpful === false).length;
+      // Per question: match by id, or by the text for answers given before the question had an id.
+      const qOf = r => t.questions.findIndex(q => q.id === r.questionId || q.text === r.question);
+      const byQ = t.questions.map((q, i) => {
+        const mine = rs.filter(r => qOf(r) === i);
+        const wrong = {};
+        mine.filter(r => !r.firstTryCorrect).forEach(r => { wrong[r.attempts[0]] = (wrong[r.attempts[0]] || 0) + 1; });
+        const top = Object.entries(wrong).sort((a, b) => b[1] - a[1])[0];
+        return { q, n: mine.length, right: mine.filter(r => r.firstTryCorrect).length, top };
+      });
+      const old = rs.filter(r => qOf(r) < 0).length;
+      const pct = pctOf(right.length, rs.length);
+      $('vw-body').innerHTML = `
+        <div class="pv-stats">
+          <div><b>${rs.length}</b><span>in-services</span></div>
+          <div><b>${pct === null ? '–' : pct + '%'}</b><span>right first try</span></div>
+          <div><b>${missed.length}</b><span>missed first try</span></div>
+          <div><b>${up + down ? `👍 ${up} · 👎 ${down}` : '–'}</b><span>lesson ratings</span></div>
+        </div>
+        <div class="muted small" style="margin-top:6px">For ${whoLabel(t.departments)} · last used ${t.lastUsedDate ? fmtDate(t.lastUsedDate) : 'never'}</div>
+        ${t.questions.length ? `<h3 style="margin-top:16px">By question <span class="muted small">tap one to see who answered it</span></h3>
+          ${byQ.map((x, i) => { const p = pctOf(x.right, x.n);
+            return `<button class="tr-q" data-tr-q="${i}"><b>Q${i + 1}.</b> ${escapeHtml(stripFormat(x.q.text))}
+              <div class="tr-bar"><i style="width:${p || 0}%;background:${p === null ? 'transparent' : color(p)}"></i></div>
+              <div class="small muted">${x.n ? `${p}% right first try · ${x.n} answered` : 'Not asked yet'}${x.top ? ` · most common wrong pick: <b>${escapeHtml(x.top[0])}</b> (${x.top[1]})` : ''}</div></button>`; }).join('')}
+          ${old ? `<div class="muted small" style="margin-top:6px">${old} answer${old === 1 ? ' was' : 's were'} to questions that have since been changed or removed.</div>` : ''}` : ''}
+        <div class="tr-filter" id="tr-filter">
+          <button class="btn subtle on" data-trf="all">Everyone (${rs.length})</button>
+          <button class="btn subtle" data-trf="missed">⚠️ Missed first try (${missed.length})</button>
+          <button class="btn subtle" data-trf="right">✅ Right first try (${right.length})</button>
+        </div>
+        <div class="table-wrap"><table class="tr-rows"><thead><tr><th>When</th><th>Who</th><th>Question</th><th>Result</th></tr></thead><tbody id="tr-rows"></tbody></table></div>
+        <div class="muted small" style="margin-top:6px">Tap a row to see exactly what they picked.</div>`;
+      let fil = opts.fil || 'all', qi = Number.isInteger(opts.q) && opts.q >= 0 ? opts.q : null;
+      $('tr-filter').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.trf === fil));
+      $('vw-body').querySelectorAll('[data-tr-q]').forEach(x => x.classList.toggle('on', Number(x.dataset.trQ) === qi));
+      const draw = () => {
+        const inQ = rs.filter(r => qi === null || qOf(r) === qi);
+        const label = { all: `Everyone${qi === null ? '' : ` on Q${qi + 1}`}`, missed: '⚠️ Missed first try', right: '✅ Right first try' };
+        $('tr-filter').querySelectorAll('[data-trf]').forEach(x => { const k = x.dataset.trf;
+          x.textContent = `${label[k]} (${inQ.filter(r => k === 'all' || (k === 'missed') === !r.firstTryCorrect).length})`; });
+        const list = inQ.filter(r => fil === 'all' || (fil === 'missed') === !r.firstTryCorrect);
+        $('tr-rows').innerHTML = list.map(r => `<tr data-resp="${r.id}"><td style="white-space:nowrap">${fmtWhen(r.submittedAt)}</td>
+          <td>${r.employeeId ? personLink(r.employeeId, r.name) : escapeHtml(r.name)}<div class="muted small">${escapeHtml(r.department || '')}</div></td>
+          <td class="small">${qOf(r) >= 0 ? `Q${qOf(r) + 1}. ` : ''}${escapeHtml(stripFormat(r.question || ''))}</td>
+          <td>${!r.completed ? '<span class="pill warn">Unfinished</span>' : r.firstTryCorrect ? '<span class="pill good">Right first try</span>'
+            : `<span class="pill warn">Missed</span><div class="small muted">First picked: ${escapeHtml(r.attempts[0] || '')}</div>`}
+            <div><button type="button" class="linkish small">See answers ›</button></div></td></tr>`).join('')
+          || '<tr><td colspan="4" class="muted">No one matches.</td></tr>';
+      };
+      draw();
+      $('tr-filter').onclick = e => { const b = e.target.closest('[data-trf]'); if (!b) return; fil = opts.fil = b.dataset.trf; $('tr-filter').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); draw(); };
+      $('vw-body').querySelectorAll('[data-tr-q]').forEach(b => b.onclick = () => {
+        const i = Number(b.dataset.trQ); qi = opts.q = qi === i ? null : i;
+        $('vw-body').querySelectorAll('[data-tr-q]').forEach(x => x.classList.toggle('on', Number(x.dataset.trQ) === qi)); draw();
+        $('tr-filter').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      $('tr-rows').onclick = e => { if (e.target.closest('[data-person]')) return; const tr = e.target.closest('[data-resp]'); if (tr) showResponse(tr.dataset.resp); };
+    } catch (err) { $('vw-body').innerHTML = `<p class="err">${escapeHtml(err.message)}</p>`; }
+  }
   // opts: { note (html shown at the top), actions: [[label, fn], ...] for extra buttons at the bottom }
   function showDetails(t, opts = {}) {
     if (!t) return;
+    vwPush(() => showDetails(t, opts));
     $('vw-title').textContent = t.title;
     $('vw-actions').innerHTML = (opts.actions || []).map(([label], i) => `<button class="btn ghost" data-vw-act="${i}">${escapeHtml(label)}</button>`).join('');
     $('vw-actions').onclick = e => { const x = e.target.closest('[data-vw-act]'); if (x) opts.actions[x.dataset.vwAct][1](); };
@@ -994,7 +1084,7 @@
           <ul>${q.es.correctAnswers.map(a => `<li>${escapeHtml(a)} <span class="pill good">Correcta</span></li>`).join('')}${q.es.wrongAnswers.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>`).join('')}
         ${t.questions.some(q => !q.es) ? `<div class="muted small">${t.questions.filter(q => !q.es).length} question(s) have no Spanish yet and show in English only.</div>` : ''}</details>` : ''}
       <div class="muted small" style="margin-top:14px">Each person gets one question per visit, with the answers in a random order.</div>`;
-    $('viewer').showModal();
+    openViewer();
   }
 
   // ---------- topic editor ----------
@@ -1483,7 +1573,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       }
       for (const e of state.employees) {
         const c = document.querySelector(`[data-last="${e.id}"]`);
-        if (c) c.textContent = last[e.id] ? fmtWhen(last[e.id]) : 'Never';
+        if (c) c.innerHTML = last[e.id] ? `<a href="#" data-person="${e.id}" title="See their in-services">${fmtWhen(last[e.id])}</a>` : 'Never';
         const t = document.querySelector(`[data-rated="${e.id}"]`);
         if (t) t.innerHTML = rated[e.id] ? `<a href="#" data-person-ratings="${e.id}" title="See which lessons they rated">👍 ${rated[e.id].up} · 👎 ${rated[e.id].down}</a>` : '<span class="muted">–</span>';
         const p = document.querySelector(`[data-pending="${e.id}"]`);
@@ -1623,6 +1713,23 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const rec = e.target.closest('[data-record]');
     if (rec) printRecord(state.employees.find(x => x.id === rec.dataset.record));
   });
+  // The pop-up viewer keeps a trail: opening something from inside it (a person from a topic, an answer from a person)
+  // shows "← Back" to return to what you were looking at.
+  // Each view passes a way to show itself again; Back re-opens the one before.
+  const vwTrail = [];
+  let vwCurrent = null, vwBacking = false;
+  function vwPush(redo) {
+    if (!vwBacking && $('viewer').open && vwCurrent) vwTrail.push(vwCurrent);
+    vwCurrent = redo || null;
+    $('vw-back').hidden = !vwTrail.length;
+  }
+  function openViewer() { if (!$('viewer').open) $('viewer').showModal(); }
+  $('vw-back').addEventListener('click', () => {
+    const f = vwTrail.pop();
+    if (!f) return;
+    vwBacking = true;
+    try { f(); } finally { vwBacking = false; }
+  });
   // One rule for names: a person's name opens that person, a topic's name opens that topic.
   const personLink = (id, name) => state.employees.some(e => e.id === id) ? `<button class="linkish" data-person="${escapeHtml(id)}">${escapeHtml(name)}</button>` : escapeHtml(name);
   const topicLink = (id, title) => topicById(id) ? `<button class="linkish" data-topic="${escapeHtml(id)}">${escapeHtml(title)}</button>` : escapeHtml(title);
@@ -1630,15 +1737,16 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const p = e.target.closest('[data-person], [data-up-staff]');
     if (p) { e.preventDefault(); return showPerson(state.employees.find(x => x.id === (p.dataset.person || p.dataset.upStaff))); }
     const t = e.target.closest('[data-topic]');
-    if (t) { e.preventDefault(); showDetails(topicById(t.dataset.topic), { actions: [['▶ Preview', () => showPreview(topicById(t.dataset.topic))], ['✏️ Edit', () => { $('viewer').close(); openEditor(topicById(t.dataset.topic)); }]] }); }
+    if (t) { e.preventDefault(); showTopicResults(topicById(t.dataset.topic)); }
   });
-  $('viewer').addEventListener('close', () => { $('vw-actions').innerHTML = ''; });
+  $('viewer').addEventListener('close', () => { $('vw-actions').innerHTML = ''; $('vw-title').textContent = ''; vwTrail.length = 0; vwCurrent = null; $('vw-back').hidden = true; });
   // Who has seen a pop-up announcement (they tapped Got it), who came in and didn't, and who hasn't been in yet.
   async function showSeen(a) {
     if (!a) return;
+    vwPush(() => showSeen(a));
     $('vw-title').textContent = a.title || 'Pop-up announcement';
     $('vw-body').innerHTML = '<p class="muted">Loading…</p>';
-    if (!$('viewer').open) $('viewer').showModal();
+    openViewer();
     try {
       const { seen, missed, notIn, buttons } = await api(`/api/admin/announcements/${a.id}/seen`);
       const list = (rows, when) => rows.length ? `<ul class="pv-list">${rows.map(p => `<li>${personLink(p.id, p.name)} <span class="muted small">${escapeHtml(p.department || '')}${when(p) ? ' · ' + when(p) : ''}</span></li>`).join('')}</ul>` : '';
@@ -1654,6 +1762,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   // A person at a glance: their numbers, recent answers, reviews and ratings, with Edit and Training record.
   async function showPerson(emp) {
     if (!emp) return;
+    vwPush(() => showPerson(emp));
     $('vw-title').textContent = emp.name;
     $('vw-actions').innerHTML = '<button class="btn ghost" data-pv="edit">✏️ Edit</button><button class="btn ghost" data-pv="record">🖨 Training record</button><button class="btn ghost" data-pv="all">All their answers</button>';
     $('vw-actions').onclick = e => {
@@ -1664,7 +1773,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       if (b.dataset.pv === 'all') openResponses({ person: emp });
     };
     $('vw-body').innerHTML = '<p class="muted">Loading…</p>';
-    if (!$('viewer').open) $('viewer').showModal();
+    openViewer();
     try {
       const [{ responses }, { reviews }] = await Promise.all([api('/api/admin/responses?employeeId=' + encodeURIComponent(emp.id)), api('/api/admin/reviews').catch(() => ({ reviews: [] }))]);
       const done = responses.filter(r => r.completed), year = state.todayDate.slice(0, 4);
@@ -1927,7 +2036,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <td><a href="#" class="row-link">${escapeHtml(r.name)}</a>${r.verified ? '' : ' <span class="pill" title="Typed their name; not on the roster">Not on roster</span>'}<div class="muted small">${escapeHtml(r.last4 || '')}</div></td>
         <td>${escapeHtml(r.department || '')}</td><td>${kindLabel[r.kind] || ''}${r.lang === 'es' ? ' <span class="pill">Español</span>' : ''}${r.offline ? ' <span class="pill" title="Answered while the iPad was offline, uploaded later">Saved offline</span>' : ''}</td>
         <td><a href="#" class="row-link">${escapeHtml(r.topicTitle)}</a><div class="muted small">${escapeHtml(stripFormat(r.question))}</div></td>
-        <td>${escapeHtml(r.attempts[0] || '')}</td><td>${result}${r.helpful === true ? ' <span title="Said the lesson was helpful">👍</span>' : r.helpful === false ? ' <span title="Said the lesson was not helpful">👎</span>' : ''}</td></tr>`;
+        <td>${escapeHtml(r.attempts[0] || '')}</td><td>${result}${r.helpful === true ? ' <span title="Said the lesson was helpful">👍</span>' : r.helpful === false ? ' <span title="Said the lesson was not helpful">👎</span>' : ''}</td>
+        <td class="resp-open-cell" data-label=""><button type="button" class="btn ghost resp-open">See their answers ›</button></td></tr>`;
       }).join(''));
     const left = respList.length - respShown;
     $('resp-more').hidden = left <= 0;
@@ -1943,8 +2053,10 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   });
   // Everything about one response: the person, the in-service, every choice and what they picked on each try.
   async function showResponse(id) {
+    vwPush(() => showResponse(id));
     try {
       const d = await api('/api/admin/responses/' + encodeURIComponent(id));
+      $('vw-actions').innerHTML = '';
       const r = d.response, q = d.question, h = d.history;
       const triedAt = a => r.attempts.findIndex(x => x.split('; ').map(s => s.toLowerCase()).includes(a.toLowerCase()));
       const ordinal = n => ['1st', '2nd', '3rd'][n] || `${n + 1}th`;
@@ -1964,19 +2076,19 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <div class="rd-grid">
           <section class="rd-box">
             <div class="rd-label">Person</div>
-            <div class="rd-big">${escapeHtml(r.name)}</div>
+            <div class="rd-big">${r.employeeId ? personLink(r.employeeId, r.name) : escapeHtml(r.name)}</div>
             <div class="muted small">${escapeHtml([r.department, d.person && d.person.jobTitle, r.last4 && 'Workday …' + r.last4].filter(Boolean).join(' · '))}</div>
             ${r.verified ? '' : '<div style="margin-top:6px"><span class="pill warn">Typed their name. Not on the roster.</span></div>'}
             ${h.total ? `<div class="rd-stat"><b>${h.total}</b> in-services · <b>${pct}%</b> right first try</div>
-              <ul class="rd-recent">${h.recent.map(x => `<li${x.id === r.id ? ' class="me"' : ''}><a href="#" data-rd-open="${x.id}">${escapeHtml(x.topicTitle)}</a><span class="muted small">${fmtDate(x.date)}</span>${!x.completed ? '<span class="pill warn">Unfinished</span>' : x.firstTryCorrect ? '<span title="Right first try">✅</span>' : '<span title="Missed first try">⚠️</span>'}</li>`).join('')}</ul>` : ''}
+              <ul class="rd-recent">${h.recent.map(x => `<li${x.id === r.id ? ' class="me"' : ''}>${topicById(x.topicId) ? `<a href="#" data-rd-topic="${x.topicId}" title="See this topic's results">${escapeHtml(x.topicTitle)}</a>` : escapeHtml(x.topicTitle)}${x.id === r.id ? '<span class="muted small">this one</span>' : `<a href="#" class="small" data-rd-open="${x.id}" title="See this answer">${fmtDate(x.date)}</a>`}${!x.completed ? '<span class="pill warn">Unfinished</span>' : x.firstTryCorrect ? '<span title="Right first try">✅</span>' : '<span title="Missed first try">⚠️</span>'}</li>`).join('')}</ul>` : ''}
             <div class="rd-actions">${d.person ? `<button class="btn subtle" data-rd-person="${d.person.id}">All their responses</button><button class="btn subtle" data-rd-staff="${d.person.id}">Staff record</button>` : ''}</div>
           </section>
           <section class="rd-box">
             <div class="rd-label">In-service</div>
-            <div class="rd-big">${escapeHtml(r.topicTitle)}</div>
+            <div class="rd-big">${d.topic ? `<button class="linkish" data-rd-topic="${d.topic.id}">${escapeHtml(r.topicTitle)}</button>` : escapeHtml(r.topicTitle)}</div>
             <div style="margin-top:4px">${kindLabel[r.kind] || ''} ${r.lang === 'es' ? '<span class="pill">Español</span>' : ''} ${result} ${r.helpful === true ? '<span title="Said the lesson was helpful">👍 Lesson helpful</span>' : r.helpful === false ? '<span title="Said the lesson was not helpful">👎 Lesson not helpful</span>' : ''}</div>
             ${f ? `<div style="margin-top:8px" class="small">${f.attestedAt ? `<span class="pill good">✓ Educated</span> by ${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}` : `<span class="pill warn">Waiting on leader follow-up</span> ${escapeHtml(f.leader || '')}`}</div>` : ''}
-            <div class="rd-actions">${d.topic ? `<button class="btn subtle" data-rd-topic="${d.topic.id}">All responses for this topic</button><button class="btn subtle" data-rd-key="${d.topic.id}">Answer key</button><button class="btn subtle" data-rd-preview="${d.topic.id}">Preview</button>` : '<span class="muted small">This topic has since been deleted.</span>'}</div>
+            <div class="rd-actions">${d.topic ? `<button class="btn subtle" data-rd-topic="${d.topic.id}">📊 Topic results</button><button class="btn subtle" data-rd-key="${d.topic.id}">Answer key</button><button class="btn subtle" data-rd-preview="${d.topic.id}">Preview</button>` : '<span class="muted small">This topic has since been deleted.</span>'}</div>
           </section>
         </div>
         <h3 style="margin:18px 0 6px">${formatInline(r.question)}${q && q.type === 'multi' ? ' <span class="pill brand">Select all that apply</span>' : ''}</h3>
@@ -1988,7 +2100,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         ${q && q.explanation ? `<div class="small" style="margin-top:6px"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
         ${d.topic && d.topic.lesson ? `<details style="margin-top:14px"><summary>The lesson they read</summary><div class="lesson-preview" style="margin-top:8px">${formatLesson(d.topic.lesson)}</div></details>` : ''}
         <div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);text-align:right"><button class="btn subtle danger" data-rd-delete="${r.id}" data-rd-who="${escapeHtml(r.name)}" data-rd-when="${escapeHtml(fmtWhen(r.submittedAt))}">🗑 Delete this response</button></div>`;
-      if (!$('viewer').open) $('viewer').showModal();
+      openViewer();
       $('vw-body').scrollTop = 0;
     } catch (err) { fail(err); }
   }
@@ -2008,12 +2120,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     e.preventDefault();
     const ds = b.dataset;
     if (ds.rdOpen) return showResponse(ds.rdOpen);
+    if (ds.rdTopic) return showTopicResults(topicById(ds.rdTopic));
+    if (ds.rdKey) return showDetails(topicById(ds.rdKey));
+    if (ds.rdPreview) return showPreview(topicById(ds.rdPreview));
     $('viewer').close();
     if (ds.rdPerson) openResponses({ person: state.employees.find(x => x.id === ds.rdPerson) });
-    if (ds.rdTopic) openResponses({ topicId: ds.rdTopic });
     if (ds.rdStaff) { goTab('staff'); openStaff(state.employees.find(x => x.id === ds.rdStaff)); }
-    if (ds.rdKey) showDetails(topicById(ds.rdKey));
-    if (ds.rdPreview) showPreview(topicById(ds.rdPreview));
   });
   $('resp-person').addEventListener('click', e => { if (e.target.id !== 'resp-person-x') return; e.preventDefault(); respPerson = null; loadResponses(); });
 
@@ -2428,11 +2540,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const t = annual.find(x => x.id === b.dataset.yrView);
     const order = { overdue: 0, never: 1, soon: 2, current: 3 };
     const people = t.people.slice().sort((a, c) => order[a.status] - order[c.status] || (a.due || '').localeCompare(c.due || '') || a.name.localeCompare(c.name));
+    vwPush(() => { const x = document.querySelector(`[data-yr-view="${t.id}"]`); if (x) x.click(); });
     $('vw-title').textContent = t.title;
     $('vw-body').innerHTML = `<table style="margin-top:12px"><thead><tr><th>Name</th><th>Department</th><th>Status</th><th>Last done</th><th>Due</th></tr></thead><tbody>
       ${people.map(p => `<tr><td>${personLink(p.id, p.name)}</td><td>${escapeHtml(p.department || '')}</td><td>${yrLabel[p.status]}</td><td>${p.last ? fmtDate(p.last) : ''}</td><td>${p.due ? fmtDate(p.due) : 'Now'}</td></tr>`).join('')
         || '<tr><td colspan="5" class="muted">No active staff in these departments.</td></tr>'}</tbody></table>`;
-    $('viewer').showModal();
+    openViewer();
   });
   $('yr-csv').addEventListener('click', () => {
     const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -2783,7 +2896,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       <div class="ipad-check">✓</div><div class="ipad-great">Correct!</div>
       ${msg && msg.gif ? `<img src="${escapeHtml(msg.gif)}" alt="">` : ''}
       <div class="ipad-msg" style="${messageStyle(msg)}">${formatMessage(sampleText(messageText(msg)))}</div></div></div>`;
-    $('viewer').showModal();
+    openViewer();
   }
   function closingFromRow(row) {
     const q = c => row.querySelector(c);
