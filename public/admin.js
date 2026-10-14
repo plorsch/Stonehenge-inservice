@@ -181,7 +181,11 @@
     if (b.dataset.tab === 'responses') { loadResponses(); loadUsage(); }
     if (b.dataset.tab === 'settings') renderSettings();
     if (b.dataset.tab === 'reports') { loadFollowups(); loadMissed(); loadAnnual(); loadReviews(); }
+    // Today's numbers are fetched fresh each time the tab opens, so a follow-up closed elsewhere (or by a leader's email link) shows right away.
+    if (b.dataset.tab === 'today') refresh();
   });
+  // Coming back to the window (phone unlock, another tab) also re-pulls the numbers.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && document.querySelector('#nav button.on[data-tab="today"]')) refresh(); });
 
   // Six groups across the top; the pages in the chosen group show as small buttons under the header.
   // A group opens the page you were last on in it.
@@ -3179,7 +3183,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     e.preventDefault();
     let by = '';
     if (a) { by = await prompt('Who educated them? (your name)', localStorage.getItem('fu-by') || '', 'Mark educated'); if (!by) return; try { localStorage.setItem('fu-by', by); } catch { /* ignore */ } }
-    try { await post(`/api/admin/followups/${(a || u).dataset[a ? 'fuAttest' : 'fuUndo']}/attest`, a ? { by } : { undo: true }); toast(a ? 'Marked educated' : 'Undone'); loadFollowups(); }
+    try { await post(`/api/admin/followups/${(a || u).dataset[a ? 'fuAttest' : 'fuUndo']}/attest`, a ? { by } : { undo: true }); toast(a ? 'Marked educated' : 'Undone'); loadFollowups(); loadDashboard(); }
     catch (err) { fail(err); }
   });
 
