@@ -927,7 +927,7 @@
       return `<tr class="${retired ? 'dim' : ''}">
         <td><button class="tl-title linkish" data-act="details" data-id="${t.id}" title="See the lesson and questions">${escapeHtml(t.title)}</button><div class="tl-tags">${tags}</div>${draft && t.problems ? `<div class="muted small">${escapeHtml(t.problems[0])}</div>` : ''}</td>
         <td class="small">${whoLabel(t.departments)}</td>
-        <td><button class="tl-num" data-act="details" data-id="${t.id}" title="See the questions and answers"><span class="tl-count">${t.questions.length}</span></button></td>
+        <td><button class="tl-num" data-act="details" data-id="${t.id}" title="See the questions and answers"><span class="tl-count">${t.questions.length}</span></button>${t.questions.some(q => (q.departments || []).length) ? `<div class="muted small" title="Some questions only go to certain departments">${t.questions.filter(q => (q.departments || []).length).length} dept-only</div>` : ''}</td>
         <td>${retired || draft ? '<span class="muted">–</span>' : `<label class="sw" title="In rotation"><input type="checkbox" data-rotation="${t.id}"${t.inRotation ? ' checked' : ''} aria-label="In rotation"><span></span></label>`}</td>
         <td style="white-space:nowrap">${t.lastUsedDate ? `<button class="tl-num" data-act="results" data-id="${t.id}" title="Who did it and when">${fmtDate(t.lastUsedDate)}</button>` : fmtDate(t.lastUsedDate)}</td>
         <td>${st && st.responses ? `<button class="tl-num" data-act="results" data-id="${t.id}" title="Who got it right, who missed it">${st.responses}</button>` : 0}</td>
@@ -1050,7 +1050,7 @@
         <div class="muted small" style="margin-top:6px">For ${whoLabel(t.departments)} · last used ${t.lastUsedDate ? fmtDate(t.lastUsedDate) : 'never'}</div>
         ${t.questions.length ? `<h3 style="margin-top:16px">By question <span class="muted small">tap one to see who answered it</span></h3>
           ${byQ.map((x, i) => { const p = pctOf(x.right, x.n);
-            return `<button class="tr-q" data-tr-q="${i}"><b>Q${i + 1}.</b> ${escapeHtml(stripFormat(x.q.text))}
+            return `<button class="tr-q" data-tr-q="${i}"><b>Q${i + 1}.</b> ${escapeHtml(stripFormat(x.q.text))}${(x.q.departments || []).length ? ` <span class="pill">Only ${escapeHtml(x.q.departments.join(', '))}</span>` : ''}
               <div class="tr-bar"><i style="width:${p || 0}%;background:${p === null ? 'transparent' : color(p)}"></i></div>
               <div class="small muted">${x.n ? `${p}% right first try · ${x.n} answered` : 'Not asked yet'}${x.top ? ` · most common wrong pick: <b>${escapeHtml(x.top[0])}</b> (${x.top[1]})` : ''}</div></button>`; }).join('')}
           ${old ? `<div class="muted small" style="margin-top:6px">${old} answer${old === 1 ? ' was' : 's were'} to questions that have since been changed or removed.</div>` : ''}` : ''}
@@ -1103,7 +1103,7 @@
     $('vw-body').innerHTML = `${opts.note ? `<div class="vw-note">${opts.note}</div>` : ''}<div class="muted small" style="margin-top:12px">For: ${whoLabel(t.departments)}</div>
       <div class="lesson-preview" style="margin-top:8px">${formatLesson(t.lesson) || '<span class="muted">No lesson yet.</span>'}</div>
       ${t.questions.map((q, n) => `
-        <h3 style="margin-top:18px">Question ${n + 1}${q.type === 'multi' ? ' <span class="pill brand">Select all that apply</span>' : ''}: ${formatInline(q.text)}</h3>
+        <h3 style="margin-top:18px">Question ${n + 1}${q.type === 'multi' ? ' <span class="pill brand">Select all that apply</span>' : ''}${(q.departments || []).length ? ` <span class="pill" title="Only these departments get this question">Only ${escapeHtml(q.departments.join(', '))}</span>` : ''}: ${formatInline(q.text)}</h3>
         <ul>${q.correctAnswers.map(a => `<li>${escapeHtml(a)} <span class="pill good">Correct</span></li>`).join('')}${q.wrongAnswers.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
         ${q.hint ? `<div class="muted small"><strong>Hint after a wrong answer:</strong> ${escapeHtml(q.hint)}</div>` : ''}
         ${q.explanation ? `<div class="muted small"><strong>Explanation:</strong> ${escapeHtml(q.explanation)}</div>` : ''}`).join('')}
@@ -1135,6 +1135,10 @@
       <input type="text" class="q-hint" style="width:100%" value="${escapeHtml(q.hint || '')}">
       <label class="block small">Explanation shown after the right answer <span class="hint">optional</span></label>
       <input type="text" class="q-expl" style="width:100%" value="${escapeHtml(q.explanation || '')}">
+      <details class="q-only"${(q.departments || []).length ? ' open' : ''}><summary class="small">Only for certain departments <span class="q-only-sum muted"></span></summary>
+        <div class="muted small" style="margin:4px 0 6px">Tick departments and only they get this question. Leave all unticked and everyone the topic is for can get it.</div>
+        <div class="checks q-depts"></div>
+      </details>
       <details class="es q-es"${q.es ? ' open' : ''}><summary>Spanish</summary>
         <div class="muted small" style="margin-top:4px">Put the answers in the same order as the English ones.</div>
         <textarea class="q-es-text" rows="2" placeholder="Pregunta" style="margin-top:6px">${escapeHtml(es.text || '')}</textarea>
@@ -1146,6 +1150,9 @@
         <label class="block small">Explanation in Spanish</label><input type="text" class="q-es-expl" style="width:100%" value="${escapeHtml(es.explanation || '')}">
       </details>`;
     card.dataset.qid = q.id || '';
+    renderChecks(card.querySelector('.q-depts'), q.departments || []);
+    const syncOnly = () => { const d = checked(card.querySelector('.q-depts')); card.querySelector('.q-only-sum').textContent = d.length ? `· ${d.join(', ')}` : ''; card.classList.toggle('q-limited', d.length > 0); };
+    card.querySelector('.q-depts').addEventListener('change', syncOnly); syncOnly();
     const syncLabel = () => { card.querySelector('.q-correct-label').innerHTML = card.querySelector('.q-multi').checked ? 'Correct answers <span class="hint">one per line</span>' : 'Correct answer'; };
     card.querySelector('.q-multi').addEventListener('change', syncLabel);
     syncLabel();
@@ -1236,7 +1243,8 @@ TYPE: single   (or: select all)
 CORRECT: a correct answer   (one line per correct answer)
 WRONG: a wrong answer       (one line per wrong answer)
 HINT: one short sentence that nudges without giving the answer away
-EXPLANATION: one short sentence on why the answer is right` + (es ? `
+EXPLANATION: one short sentence on why the answer is right
+ONLY FOR: (optional) department names, comma separated, if only they should get this question` + (es ? `
 SPANISH QUESTION: the question in Spanish
 SPANISH CORRECT: (same order as CORRECT)
 SPANISH WRONG: (same order as WRONG)
@@ -1260,7 +1268,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const out = { title: '', lesson: [], es: { title: '', lesson: [] }, questions: [] };
     let q = null, into = null;
     // Copying from a chat window often loses the line breaks ("TITLE: x LESSON: y - z QUESTION: ..."), so put each label back on its own line.
-    const LABEL = /(?<!SPANISH)\s+(?=(?:\*\*)?(?:SPANISH\s+)?(?:TITLE|LESSON|QUESTION|TYPE|CORRECT|WRONG|HINT|EXPLANATION)(?:\s+ANSWERS?)?\s*\d*\s*(?:\*\*)?\s*:)/g;
+    const LABEL = /(?<!SPANISH)\s+(?=(?:\*\*)?(?:SPANISH\s+)?(?:TITLE|LESSON|QUESTION|TYPE|CORRECT|WRONG|HINT|EXPLANATION|ONLY\s+FOR)(?:\s+ANSWERS?)?\s*\d*\s*(?:\*\*)?\s*:)/g;
     let body = String(text).replace(/\r/g, '').replace(/```\w*/g, '').replace(LABEL, '\n');
     // Inside a squashed lesson, " - " or " • " starts a bullet.
     body = body.replace(/((?:^|\n)(?:SPANISH\s+)?LESSON\s*:[^\n]*)/gi, m => m.replace(/\s+[-•*]\s+(?=\S)/g, '\n- '));
@@ -1269,22 +1277,23 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     body = body.split('\n').map(line => {
       const k = line.match(/^[\s*_]*(?:SPANISH\s+)?(CORRECT|WRONG)\b/i);
       if (k) { lastKey = line.match(/^[\s*_]*((?:SPANISH\s+)?(?:CORRECT|WRONG))/i)[1].toUpperCase(); return line; }
-      if (/^[\s*_]*(?:SPANISH\s+)?(TITLE|LESSON|QUESTION|TYPE|HINT|EXPLANATION)\b/i.test(line)) lastKey = null;
+      if (/^[\s*_]*(?:SPANISH\s+)?(TITLE|LESSON|QUESTION|TYPE|HINT|EXPLANATION|ONLY\s+FOR)\b/i.test(line)) lastKey = null;
       const b = lastKey && line.match(/^\s*(?:[-•*]|[a-d][.)])\s+(.+)$/i);
       return b ? `${lastKey}: ${b[1]}` : line;
     }).join('\n');
     for (const raw of body.split('\n')) {
       const clean = raw.replace(/^[\s>#*_`]*(\d+[.)]\s*)?[*_`]*/, '').replace(/^[-•]\s+(?=[A-Za-z ]+:)/, '');
-      const m = clean.match(/^(spanish\s+)?(title|lesson|question|type|correct(?:\s+answers?)?|wrong(?:\s+answers?)?|hint|explanation)\s*\d*\s*[*_]*\s*:\s*[*_]*\s*(.*)$/i);
+      const m = clean.match(/^(spanish\s+)?(title|lesson|question|type|correct(?:\s+answers?)?|wrong(?:\s+answers?)?|hint|explanation|only\s+for|departments?)\s*\d*\s*[*_]*\s*:\s*[*_]*\s*(.*)$/i);
       if (m) {
         const sp = !!m[1], key = m[2].toLowerCase().split(/\s/)[0], val = m[3].replace(/[*_]+$/, '').replace(/\s+\d+[.)]$/, '').trim();
-        if (key === 'question' && !sp) { q = { text: val, type: 'single', correctAnswers: [], wrongAnswers: [], hint: '', explanation: '', es: { text: '', correctAnswers: [], wrongAnswers: [], hint: '', explanation: '' } }; out.questions.push(q); into = null; continue; }
+        if (key === 'question' && !sp) { q = { text: val, type: 'single', correctAnswers: [], wrongAnswers: [], hint: '', explanation: '', departments: [], es: { text: '', correctAnswers: [], wrongAnswers: [], hint: '', explanation: '' } }; out.questions.push(q); into = null; continue; }
         if (key === 'title') { (sp ? out.es : out).title = val; into = null; continue; }
         if (key === 'lesson') { into = sp ? out.es.lesson : out.lesson; if (val) into.push(val); continue; }
         into = null;
         if (!q) continue;
         const tgt = sp ? q.es : q;
         if (key === 'type') { if (/all/i.test(val)) q.type = 'multi'; }
+        else if (key === 'only' || key === 'department' || key === 'departments') { if (!sp) q.departments = val.split(/\s*[,;|]\s*/).map(d => depts().find(x => sameDept(x, d)) || '').filter(Boolean); }
         else if (key === 'question') tgt.text = val;
         else if (key === 'correct') tgt.correctAnswers.push(...val.split(/\s*[|;]\s*/).filter(Boolean));
         else if (key === 'wrong') tgt.wrongAnswers.push(...val.split(/\s*[|;]\s*/).filter(Boolean));
@@ -1351,6 +1360,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         correctAnswers: splitLines(c.querySelector('.q-correct').value),
         wrongAnswers: splitLines(c.querySelector('.q-wrong').value),
         hint: c.querySelector('.q-hint').value, explanation: c.querySelector('.q-expl').value,
+        departments: checked(c.querySelector('.q-depts')),
         es: { text: c.querySelector('.q-es-text').value, correctAnswers: splitLines(c.querySelector('.q-es-correct').value),
           wrongAnswers: splitLines(c.querySelector('.q-es-wrong').value), hint: c.querySelector('.q-es-hint').value, explanation: c.querySelector('.q-es-expl').value }
       }))

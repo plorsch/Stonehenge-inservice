@@ -327,7 +327,9 @@ function validateQuestion(q, n) {
     correctAnswers: cleanList(Array.isArray(q.correctAnswers) ? q.correctAnswers : [q.correctAnswer], 500, 8),
     wrongAnswers: cleanList(q.wrongAnswers, 500, 8),
     hint: cleanText(q.hint, 1000),
-    explanation: cleanText(q.explanation, 2000)
+    explanation: cleanText(q.explanation, 2000),
+    // Blank = everyone the topic is for. Otherwise only these departments get this question.
+    departments: cleanList(q.departments, 60, 30)
   };
   const errors = [];
   const label = `Question ${n}`;
@@ -415,9 +417,15 @@ function pickStalest(pool, avoidId) {
   return pickRandom(tied.length > 1 ? tied : sorted.slice(0, Math.min(3, sorted.length)));
 }
 
+// The questions in a topic meant for this department. A question with no departments is for everyone;
+// if none are left for this department, every question is fair game so nobody gets stuck.
+function questionsFor(topic, dept) {
+  const mine = topic.questions.filter(q => forDepartment(q.departments, dept));
+  return mine.length ? mine : topic.questions;
+}
 // Pick the question in a topic this person has seen least (and not the one they saw last).
-function pickQuestion(topic, employeeId, avoid = []) {
-  let qs = topic.questions;
+function pickQuestion(topic, employeeId, avoid = [], dept = '') {
+  let qs = questionsFor(topic, dept);
   if (qs.length === 1 || !employeeId) return pickRandom(qs);
   // For a review, skip the questions they missed, so it's asked a different way (if the topic has other questions).
   if (avoid.length && qs.some(q => !avoid.includes(q.id))) qs = qs.filter(q => !avoid.includes(q.id));
@@ -538,8 +546,8 @@ function choicesFor(q) {
 // Spanish is offered only when the topic has a Spanish lesson and the question has a Spanish version.
 const hasSpanish = (topic, q) => !!(topic.es && topic.es.lesson && q.es && q.es.text);
 
-function kioskItem(topic, employeeId, extra) {
-  const q = pickQuestion(topic, employeeId, (extra && extra.avoid) || []);
+function kioskItem(topic, employeeId, extra, dept = '') {
+  const q = pickQuestion(topic, employeeId, (extra && extra.avoid) || [], dept);
   if (extra) delete extra.avoid;
   return itemForQuestion(topic, q, extra);
 }
@@ -1141,31 +1149,31 @@ async function kioskRoutes(req, res, p, m) {
     // Required education first, every pending one, oldest first. The regular topic is skipped that visit.
     if (who.employeeId) {
       for (const q of pendingRequiredFor(findEmployee(who.employeeId))) {
-        items.push(kioskItem(findTopic(q.topicId), who.employeeId, { kind: 'required', requiredId: q.id, reason: q.reason }));
+        items.push(kioskItem(findTopic(q.topicId), who.employeeId, { kind: 'required', requiredId: q.id, reason: q.reason }, who.department));
       }
     }
     // Then, instead of the regular topic: the next new hire topic, a spaced review that is due, or one yearly topic that is due.
     const emp = who.employeeId ? findEmployee(who.employeeId) : null;
     if (!items.length && isNewHire(emp)) {
       const next = starterProgress(emp).next;
-      if (next) items.push(kioskItem(next, emp.id, { kind: 'starter' }));
+      if (next) items.push(kioskItem(next, emp.id, { kind: 'starter' }, who.department));
     }
     if (!items.length && emp) {
       const rv = nextReviewFor(emp);
-      if (rv) items.push(kioskItem(findTopic(rv.topicId), emp.id, { kind: 'review', stage: rv.stage, avoid: rv.missed }));
+      if (rv) items.push(kioskItem(findTopic(rv.topicId), emp.id, { kind: 'review', stage: rv.stage, avoid: rv.missed }, who.department));
     }
     // Quiz day: one question from their past week instead of a yearly or regular topic.
     if (!items.length && isQuizDay()) {
       const qz = quizFor(emp, who.department);
-      if (qz) items.push(kioskItem(qz.topic, who.employeeId, { kind: 'quiz', avoid: qz.avoid, quizFrom: qz.from, quizText: db.settings.quizText }));
+      if (qz) items.push(kioskItem(qz.topic, who.employeeId, { kind: 'quiz', avoid: qz.avoid, quizFrom: qz.from, quizText: db.settings.quizText }, who.department));
     }
     if (!items.length && emp) {
       const due = nextAnnualFor(emp);
-      if (due) items.push(kioskItem(due.topic, emp.id, { kind: 'annual', due: due.due }));
+      if (due) items.push(kioskItem(due.topic, emp.id, { kind: 'annual', due: due.due }, who.department));
     }
     if (!items.length) {
       const r = regularTopicFor(who.department);
-      if (r.topic) items.push(kioskItem(r.topic, who.employeeId, { kind: r.source === 'schedule' ? 'scheduled' : 'rotation', scheduleId: r.scheduleId || null }));
+      if (r.topic) items.push(kioskItem(r.topic, who.employeeId, { kind: r.source === 'schedule' ? 'scheduled' : 'rotation', scheduleId: r.scheduleId || null }, who.department));
     }
     return send(res, 200, { who: Object.assign(who, { firstName: who.name.split(' ')[0] }), items, popups: popupsFor(who) });
   }
@@ -1487,7 +1495,7 @@ async function adminRoutes(req, res, p, m, url) {
     const out = { about: 'Stonehenge in-service topics for Spanish translation. Fill in each "es" part and keep answers in the same order and count as English.',
       exported: nowIso(), topics: db.topics.filter(t => t.status !== 'retired').map(t => ({ id: t.id, title: t.title, lesson: t.lesson,
         es: { title: (t.es && t.es.title) || '', lesson: (t.es && t.es.lesson) || '' },
-        questions: t.questions.map((q, i) => ({ n: i + 1, text: q.text, correctAnswers: q.correctAnswers, wrongAnswers: q.wrongAnswers, hint: q.hint || '', explanation: q.explanation || '',
+        questions: t.questions.map((q, i) => ({ n: i + 1, text: q.text, correctAnswers: q.correctAnswers, wrongAnswers: q.wrongAnswers, hint: q.hint || '', explanation: q.explanation || '', departments: q.departments || [],
           es: q.es || { text: '', correctAnswers: [], wrongAnswers: [], hint: '', explanation: '' } })) })) };
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="inservice-topics-for-spanish.json"' });
     return res.end(JSON.stringify(out, null, 2));
