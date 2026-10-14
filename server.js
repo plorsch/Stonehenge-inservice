@@ -2171,6 +2171,8 @@ async function adminRoutes(req, res, p, m, url) {
       topMissed: [...missedQ.values()].sort((a, b) => b.missed - a.missed).slice(0, 5),
       unlistedToday, unfinishedToday, quizzesToday, quizDay: isQuizDay(),
       followupsOpen: db.followups.filter(f => !f.attestedAt).length,
+      // How many of those are from today's misses; the rest are older ones a leader hasn't closed yet.
+      followupsToday: db.followups.filter(f => !f.attestedAt && (db.responses.find(r => r.id === f.responseId) || {}).date === t).length,
       celebrationsToday: db.settings.celebrations ? todaysCelebrations() : []
     });
   }

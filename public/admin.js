@@ -455,6 +455,8 @@
     const total = done.right + done.missed;
     $('stat-rate').textContent = total ? Math.round(100 * done.right / total) + '%' : '–';
     $('stat-fu').textContent = dash.followupsOpen;
+    const older = dash.followupsOpen - (dash.followupsToday || 0);
+    $('tile-fu').querySelector('.lbl').textContent = dash.followupsOpen && older ? `waiting on a leader follow-up (${dash.followupsToday || 0} from today, ${older} older)` : 'waiting on a leader follow-up';
     $('tile-fu').classList.toggle('alert', dash.followupsOpen > 0);
     $('tile-missed').classList.toggle('alert', state.missedToday > 0);
     drawDays(dash.days);
