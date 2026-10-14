@@ -312,6 +312,11 @@ table.la tr:hover td { background: transparent; }
 .re-x:hover { background: #fdece4; color: #c2501c; }
 
 /* Our pop-up (replaces the browser's alert) */
+#ask { width: min(460px, 94vw); } #ask .dlg-body { padding: 26px 24px 8px; text-align: center; }
+#ask .ask-icon { font-size: 34px; line-height: 1; margin-bottom: 10px; } #ask-text { white-space: pre-wrap; font-size: 16px; line-height: 1.5; color: #1d2a33; }
+#ask-input { width: 100%; margin-top: 14px; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+#ask .dlg-foot { justify-content: center; gap: 10px; padding-bottom: 20px; } #ask .dlg-foot .btn { min-width: 110px; justify-content: center; }
+#ask-ok.danger { background: var(--warn); border-color: var(--warn); color: #fff; }
 #notice { width: min(520px, 94vw); }
 #notice .dlg-body { padding-top: 22px; }
 #notice-text { white-space: pre-wrap; user-select: text; font-size: 15px; line-height: 1.5; color: #1d2a33; }
@@ -430,7 +435,8 @@ table.la tr:hover td { background: transparent; }
   .tr-q .tr-bar { height: 8px; border-radius: 4px; background: #e6edf1; margin: 6px 0 4px; overflow: hidden; } .tr-q .tr-bar i { display: block; height: 100%; }
   .tr-rows td { vertical-align: top; } .tr-rows tr[data-resp] { cursor: pointer; } .tr-rows tr[data-resp]:hover td { background: #f3f8fa; }
   button.tl-num { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; } button.tl-num:hover span, button.tl-num:hover { color: var(--brand); text-decoration: underline; }
-  .an-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .an-btns input { width: 100%; }
+  .an-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; } .an-btns input[type=text] { width: 100%; }
+  .an-rep { display: block; color: var(--muted); margin-top: 2px; } .an-rep.on { color: var(--brand); } .an-btns div:has(input[type=text]:placeholder-shown) .an-rep { visibility: hidden; }
   .card.editing { outline: 3px solid var(--brand); outline-offset: -1px; }
   .pick-bars { margin: 10px 0 4px; display: grid; gap: 6px; } .pick-bars div { display: grid; grid-template-columns: minmax(90px, auto) 1fr 40px; gap: 10px; align-items: center; font-size: 14px; }
   .pick-bars i { display: block; height: 12px; border-radius: 0 4px 4px 0; background: var(--brand); min-width: 2px; }
@@ -587,9 +593,12 @@ table.la tr:hover td { background: transparent; }
             <div class="small muted" id="an-image-status"></div>
             <label class="block">Buttons <span class="hint">leave blank for one "Got it 👍" button, or make your own, like RSVP Yes and RSVP No</span></label>
             <div class="an-btns" id="an-buttons">
-              <input type="text" maxlength="30" placeholder="e.g. ✅ RSVP Yes"><input type="text" maxlength="30" placeholder="e.g. ❌ RSVP No">
-              <input type="text" maxlength="30" placeholder="(optional)"><input type="text" maxlength="30" placeholder="(optional)">
+              <div><input type="text" maxlength="30" placeholder="e.g. ✅ RSVP Yes"><label class="an-rep small"><input type="checkbox"> ↻ Ask again next clock-in</label></div>
+              <div><input type="text" maxlength="30" placeholder="e.g. ❌ RSVP No"><label class="an-rep small"><input type="checkbox"> ↻ Ask again next clock-in</label></div>
+              <div><input type="text" maxlength="30" placeholder="(optional)"><label class="an-rep small"><input type="checkbox"> ↻ Ask again next clock-in</label></div>
+              <div><input type="text" maxlength="30" placeholder="(optional)"><label class="an-rep small"><input type="checkbox"> ↻ Ask again next clock-in</label></div>
             </div>
+            <div class="hint" style="margin-top:4px">"Ask again" is for a button like "Not sure yet": the pop-up comes back every clock-in until they pick something else.</div>
             <label style="display:block;margin-top:6px" id="an-confirm-wrap"><input type="checkbox" id="an-confirm"> Double-check their answer <span class="hint">shows "You picked RSVP Yes. Is that right?" before it counts</span></label>
             <label style="display:block;margin-top:8px"><input type="checkbox" id="an-everytime"> Show it every time they clock in <span class="hint">otherwise once per person, after they tap a button</span></label>
           </div>

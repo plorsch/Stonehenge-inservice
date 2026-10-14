@@ -920,7 +920,8 @@ function popupsFor(who) {
   const d = today();
   return db.announcements.filter(a => a.popup && a.startDate <= d && (!a.endDate || a.endDate >= d))
     .filter(a => !a.departments.length || a.departments.includes(who.department))
-    .filter(a => a.everyTime || !who.employeeId || !db.popupSeen.some(x => x.id === a.id && x.employeeId === who.employeeId))
+    // Once per person, unless the button they picked is one that asks again next time (like "Not sure yet").
+    .filter(a => a.everyTime || !who.employeeId || !db.popupSeen.some(x => x.id === a.id && x.employeeId === who.employeeId && !(a.repeat || []).includes(x.choice)))
     .map(a => ({ id: a.id, title: a.title, text: a.text, image: a.image, buttons: a.buttons || [], confirm: !!a.confirm }));
 }
 // Birthdays and work anniversaries for a day ("MM-DD"). Feb 29 birthdays show on Feb 28 in other years.
@@ -1707,7 +1708,11 @@ async function adminRoutes(req, res, p, m, url) {
     if (b.popup) Object.assign(a, { popup: true, title: cleanText(b.title, 80), everyTime: !!b.everyTime,
       image: /^\/media\/[\w-]+\.(png|jpe?g|gif|webp)$/i.test(img) ? img : '',
       buttons: [...new Set((Array.isArray(b.buttons) ? b.buttons : []).map(x => cleanText(x, 30)).filter(Boolean))].slice(0, 4) });
-    if (a.popup) a.confirm = a.buttons.length > 0 && !!b.confirm;
+    if (a.popup) {
+      a.confirm = a.buttons.length > 0 && !!b.confirm;
+      // Buttons that don't count as "seen": the pop-up comes back next clock-in until they pick another one.
+      a.repeat = (Array.isArray(b.repeat) ? b.repeat : []).map(x => cleanText(x, 30)).filter(x => a.buttons.includes(x));
+    }
     if (a.popup && !a.title && !a.image) return { error: 'Give the pop-up a title or a picture.' };
     if (!a.text && !a.popup) return { error: 'Write the announcement.' };
     if (!a.startDate) return { error: 'Choose a start date.' };
@@ -1750,7 +1755,7 @@ async function adminRoutes(req, res, p, m, url) {
       return send(res, 200, '\ufeff' + [head.join(','), ...rows.map(r => r.map(csvCell).join(','))].join('\r\n'), 'text/csv; charset=utf-8',
         { 'Content-Disposition': `attachment; filename="${safe}-answers-${today()}.csv"` });
     }
-    return send(res, 200, { seen, missed, notIn, buttons: a.buttons || [] });
+    return send(res, 200, { seen, missed, notIn, buttons: a.buttons || [], repeat: a.repeat || [] });
   }
   mt = p.match(/^\/api\/admin\/announcements\/(\w+)$/);
   if (mt && m === 'PUT') {
@@ -1759,7 +1764,7 @@ async function adminRoutes(req, res, p, m, url) {
     const { a, error } = announcementFrom(await readBody(req));
     if (error) return send(res, 400, { error });
     const was = old.buttons || [];
-    for (const k of ['popup', 'title', 'everyTime', 'image', 'buttons', 'confirm']) delete old[k];
+    for (const k of ['popup', 'title', 'everyTime', 'image', 'buttons', 'confirm', 'repeat']) delete old[k];
     Object.assign(old, a, { updatedAt: nowIso() });
     // A renamed button keeps its picks (matched by position). Picks for a removed button no longer count; those people see it again.
     const now = old.buttons || [];

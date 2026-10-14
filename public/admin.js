@@ -25,6 +25,37 @@
     d.showModal();
     d.querySelector('#notice-ok').focus();
   }
+  // Our own "Are you sure?" and "Type something" boxes instead of the browser's gray ones.
+  // confirm(message, okLabel) resolves true/false; prompt(message, startValue) resolves the text or null.
+  function askDialog({ message, okLabel = 'OK', input = null }) {
+    let d = document.getElementById('ask');
+    if (!d) {
+      d = document.createElement('dialog');
+      d.id = 'ask';
+      d.innerHTML = '<form method="dialog"><div class="dlg-body"><div class="ask-icon"></div><div id="ask-text"></div><input type="text" id="ask-input" autocomplete="off" hidden></div>'
+        + '<div class="dlg-foot"><button type="button" class="btn ghost" id="ask-no">Cancel</button><button type="submit" class="btn" id="ask-ok">OK</button></div></form>';
+      document.body.appendChild(d);
+    }
+    const danger = /^(remove|delete|clear|retire|replace|mark|take|close)/i.test(okLabel);
+    d.querySelector('#ask-text').textContent = String(message);
+    d.querySelector('.ask-icon').textContent = input ? '✏️' : danger ? '⚠️' : '❓';
+    const ok = d.querySelector('#ask-ok'), inp = d.querySelector('#ask-input');
+    ok.textContent = okLabel; ok.classList.toggle('danger', danger);
+    inp.hidden = !input; inp.value = input ? input.value || '' : ''; inp.placeholder = input ? input.placeholder || '' : '';
+    return new Promise(resolve => {
+      let answer = null;
+      const done = () => { d.removeEventListener('close', done); resolve(answer); };
+      d.addEventListener('close', done);
+      d.querySelector('form').onsubmit = () => { answer = input ? inp.value : true; };
+      d.querySelector('#ask-no').onclick = () => { answer = null; d.close(); };
+      if (d.open) d.close();
+      d.showModal();
+      (input ? inp : ok).focus();
+      if (input) inp.select();
+    });
+  }
+  const confirm = (message, okLabel = 'OK') => askDialog({ message, okLabel }).then(v => v === true);
+  const prompt = (message, value = '', okLabel = 'Save') => askDialog({ message, okLabel, input: { value } }).then(v => v === null ? null : String(v));
   let state = null;
   let editingTopicId = null;
   let editingStaffId = null;
@@ -756,7 +787,7 @@
       return scEdit.start(s.id, 'Edit scheduled topic');
     }
     const b = e.target.closest('[data-del-sched]');
-    if (!b || !confirm('Remove this from the schedule? Responses already recorded are kept.')) return;
+    if (!b || !await confirm('Remove this from the schedule? Responses already recorded are kept.', 'Remove')) return;
     try { await api('/api/admin/schedules/' + b.dataset.delSched, { method: 'DELETE' }); toast('Removed'); await refresh(); }
     catch (err) { fail(err); }
   });
@@ -804,7 +835,7 @@
       return;
     }
     const t = topicById($('rq-topic').value);
-    if (t && !confirm(`Require "${t.title}" for ${d.length ? d.join(', ') : 'all staff'}? Each person will get it the next time they clock in.`)) return;
+    if (t && !await confirm(`Require "${t.title}" for ${d.length ? d.join(', ') : 'all staff'}? Each person will get it the next time they clock in.`, 'Require it')) return;
     try {
       await post('/api/admin/required', { topicId: $('rq-topic').value, departments: d, reason: $('rq-reason').value, endDate: $('rq-end').value || null });
       $('rq-reason').value = ''; $('rq-end').value = '';
@@ -827,7 +858,7 @@
     try {
       if (tg) {
         const closing = tg.dataset.active === '1';
-        if (closing && !confirm('Close this? Staff who have not done it yet will no longer get it.')) return;
+        if (closing && !await confirm('Close this? Staff who have not done it yet will no longer get it.', 'Close it')) return;
         await post(`/api/admin/required/${tg.dataset.rqToggle}/${closing ? 'close' : 'reopen'}`);
         await refresh();
       }
@@ -979,7 +1010,7 @@
         toast('Copy created. It is not in the rotation yet.');
         return openEditor(topicById(topic.id));
       }
-      if (act === 'retire' && !confirm(`Retire "${t.title}"? It will stop showing on the iPad but its history is kept.`)) return;
+      if (act === 'retire' && !await confirm(`Retire "${t.title}"? It will stop showing on the iPad but its history is kept.`, 'Retire')) return;
       await post(`/api/admin/topics/${id}/${act}`);
       toast(act === 'retire' ? 'Topic retired' : 'Topic restored');
       await refresh();
@@ -1654,7 +1685,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     } catch (err) { fail(err); }
   }
   $('staff-bulk-move').addEventListener('click', () => bulk({ department: $('staff-bulk-dept').value }, 'Moved to ' + ($('staff-bulk-dept').value || 'no department')));
-  $('staff-bulk-off').addEventListener('click', () => { if (confirm(`Mark ${staffPicked.size} staff inactive? They won't be able to sign in on the iPad.`)) bulk({ active: false }, 'Marked inactive'); });
+  $('staff-bulk-off').addEventListener('click', async () => { if (await confirm(`Mark ${staffPicked.size} staff inactive? They won't be able to sign in on the iPad.`, 'Mark inactive')) bulk({ active: false }, 'Marked inactive'); });
   $('staff-bulk-on').addEventListener('click', () => bulk({ active: true }, 'Marked active'));
   $('staff-bulk-clear').addEventListener('click', () => { staffPicked.clear(); renderStaff(); });
 
@@ -1788,13 +1819,13 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('vw-body').innerHTML = '<p class="muted">Loading…</p>';
     openViewer();
     try {
-      const { seen, missed, notIn, buttons } = await api(`/api/admin/announcements/${a.id}/seen`);
+      const { seen, missed, notIn, buttons, repeat = [] } = await api(`/api/admin/announcements/${a.id}/seen`);
       const list = (rows, when) => rows.length ? `<ul class="pv-list">${rows.map(p => `<li>${personLink(p.id, p.name)} <span class="muted small">${escapeHtml(p.department || '')}${when(p) ? ' · ' + when(p) : ''}</span></li>`).join('')}</ul>` : '';
       $('vw-body').innerHTML = `<div class="muted small" style="margin-top:6px">Showing ${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'} · ${a.departments.length ? escapeHtml(a.departments.join(', ')) : 'All staff'}. "Seen" means they tapped ${buttons.length ? 'a button' : 'Got it'} on the iPad.</div>
         <div class="pv-stats"><div><b>${seen.length}</b><span>${buttons.length ? 'answered' : 'saw it'}</span></div><div><b>${missed.length}</b><span>came in but didn't see it</span></div><div><b>${notIn.length}</b><span>haven't been in since it started</span></div></div>
         ${buttons.length ? `<h3 style="margin-top:16px">Answers</h3><div class="pick-bars">${buttons.map(b => { const n = seen.filter(p => p.choice === b).length;
           return `<div><span>${escapeHtml(b)}</span><i style="width:${seen.length ? Math.round(100 * n / seen.length) : 0}%"></i><b>${n}</b></div>`; }).join('')}</div>` : ''}
-        <h3 style="margin-top:16px">✅ ${buttons.length ? 'Answered' : 'Saw it'} (${seen.length})</h3>${list(seen, p => (p.choice ? `<b>${escapeHtml(p.choice)}</b> ` : 'tapped Got it ') + fmtWhen(p.at)) || '<p class="muted">No one yet.</p>'}
+        <h3 style="margin-top:16px">✅ ${buttons.length ? 'Answered' : 'Saw it'} (${seen.length})</h3>${list(seen, p => (p.choice ? `<b>${escapeHtml(p.choice)}</b> ${repeat.includes(p.choice) ? '<span class="pill" title="They see the pop-up again next clock-in">↻ asks again</span> ' : ''}` : 'tapped Got it ') + fmtWhen(p.at)) || '<p class="muted">No one yet.</p>'}
         ${missed.length ? `<h3 style="margin-top:16px">⚠️ Came in but didn't see it (${missed.length})</h3><div class="muted small">They did an in-service after it started but never tapped Got it. They may have walked away, or the iPad lost its connection right then.</div>${list(missed, p => 'last in ' + fmtWhen(p.lastIn))}` : ''}
         ${notIn.length ? `<details style="margin-top:16px"><summary><b>Haven't been in since it started (${notIn.length})</b></summary>${list(notIn, () => '')}</details>` : ''}`;
     } catch (err) { $('vw-body').innerHTML = `<p class="err">${escapeHtml(err.message)}</p>`; }
@@ -2180,8 +2211,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   $('vw-body').addEventListener('click', async e => {
     const del = e.target.closest('[data-rd-delete]');
     if (del) {
-      if (!confirm(`Delete ${del.dataset.rdWho}'s response from ${del.dataset.rdWhen}?\n\nIt will no longer count on their training record, streaks, reports or the Clock-in check.`)) return;
-      if (!confirm('Are you sure? This can\'t be undone from the admin page.')) return;
+      if (!await confirm(`Delete ${del.dataset.rdWho}'s response from ${del.dataset.rdWhen}?\n\nIt will no longer count on their training record, streaks, reports or the Clock-in check.`, 'Delete')) return;
+      if (!await confirm('Are you sure? This can\'t be undone from the admin page.', 'Delete it')) return;
       try { await api('/api/admin/responses/' + encodeURIComponent(del.dataset.rdDelete), { method: 'DELETE' }); $('viewer').close(); toast('Response deleted'); loadResponses(); refresh(); }
       catch (err) { fail(err); }
       return;
@@ -2445,7 +2476,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   $('cc-email').addEventListener('click', async () => {
     const people = ccPeople().filter(p => !ccLeftOff.has(ccKey(p)));
     if (!people.length) return alert('Tick at least one person to email about.');
-    if (!confirm(`Email department leaders about ${people.length} ${people.length === 1 ? 'person' : 'people'} who clocked in without doing the in-service?`)) return;
+    if (!await confirm(`Email department leaders about ${people.length} ${people.length === 1 ? 'person' : 'people'} who clocked in without doing the in-service?`, 'Send emails')) return;
     try {
       const r = await post('/api/admin/clock-check/email', { people: people.map(p => ({ name: p.name, last4: p.last4, department: p.department, shifts: p.shifts, neverDone: !p.done, missedDates: p.missedDates })) });
       alert(`Sent to ${r.leaders} leader${r.leaders === 1 ? '' : 's'} about ${r.people} ${r.people === 1 ? 'person' : 'people'}.` +
@@ -2582,7 +2613,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   $('rv-rows').addEventListener('click', async e => {
     const b = e.target.closest('[data-rv-skip]');
     if (!b) return;
-    if (!confirm(`Take ${b.dataset.rvName} off the "${b.dataset.rvTitle}" review? It only comes back if they miss this topic again.`)) return;
+    if (!await confirm(`Take ${b.dataset.rvName} off the "${b.dataset.rvTitle}" review? It only comes back if they miss this topic again.`, 'Take off')) return;
     const [employeeId, topicId] = b.dataset.rvSkip.split('|');
     try { await post('/api/admin/reviews/skip', { employeeId, topicId }); toast('Taken off review'); loadReviews(); }
     catch (err) { fail(err); }
@@ -3126,7 +3157,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   ['fu-filter', 'fu-dept'].forEach(id => $(id).addEventListener('change', loadFollowups));
   $('fu-rows').addEventListener('click', e => { const a = e.target.closest('[data-fu-open]'); if (a) { e.preventDefault(); showResponse(a.dataset.fuOpen); } });
   $('fu-remind-all').addEventListener('click', async () => {
-    if (!confirm('Email each department leader one reminder listing everyone still waiting on them?')) return;
+    if (!await confirm('Email each department leader one reminder listing everyone still waiting on them?', 'Send reminders')) return;
     try {
       const r = await post('/api/admin/followups/remind-all');
       alert(`Sent to ${r.leaders} leader${r.leaders === 1 ? '' : 's'}.` + (r.skipped.length ? `\n\nNo leader email for: ${r.skipped.join(', ')}. Add one in Settings → Department leaders.` : ''));
@@ -3145,7 +3176,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     if (!a && !u) return;
     e.preventDefault();
     let by = '';
-    if (a) { by = prompt('Who educated them? (your name)', localStorage.getItem('fu-by') || ''); if (!by) return; try { localStorage.setItem('fu-by', by); } catch { /* ignore */ } }
+    if (a) { by = await prompt('Who educated them? (your name)', localStorage.getItem('fu-by') || '', 'Mark educated'); if (!by) return; try { localStorage.setItem('fu-by', by); } catch { /* ignore */ } }
     try { await post(`/api/admin/followups/${(a || u).dataset[a ? 'fuAttest' : 'fuUndo']}/attest`, a ? { by } : { undo: true }); toast(a ? 'Marked educated' : 'Undone'); loadFollowups(); }
     catch (err) { fail(err); }
   });
@@ -3163,7 +3194,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       const status = live ? ' <span class="pill good">Showing now</span>' : a.startDate > state.todayDate ? ' <span class="pill">Upcoming</span>' : ' <span class="pill">Ended</span>';
       const what = a.popup ? `${a.image ? `<img class="an-thumb" src="${escapeHtml(a.image)}" alt="">` : ''}<span class="pill">📲 Pop-up</span> <b>${escapeHtml(a.title || '')}</b>${a.text ? `<div class="small">${formatInline(a.text)}</div>` : ''}
         <div class="small muted">${a.everyTime ? 'Every clock-in' : 'Once per person'} · <a href="#" data-ann-seen="${a.id}">${(a.buttons || []).length
-          ? a.buttons.map((b, i) => `${escapeHtml(b)}: ${(a.picks || [])[i] || 0}`).join(' · ') + ' · who?' : `seen by ${a.seen || 0} · who?`}</a></div>` : formatInline(a.text);
+          ? a.buttons.map((b, i) => `${escapeHtml(b)}${(a.repeat || []).includes(b) ? ' ↻' : ''}: ${(a.picks || [])[i] || 0}`).join(' · ') + ' · who?' : `seen by ${a.seen || 0} · who?`}</a></div>` : formatInline(a.text);
       return `<tr class="${!live && a.startDate < state.todayDate ? 'dim' : ''}"><td>${what}${status}</td><td>${whoLabel(a.departments)}</td>
         <td style="white-space:nowrap">${fmtDate(a.startDate)} – ${a.endDate ? fmtDate(a.endDate) : 'until removed'}</td>
         <td style="white-space:nowrap"><button class="btn subtle" data-prev-ann="${a.id}">👁 Preview</button> <button class="btn subtle" data-edit-ann="${a.id}">✏️ Edit</button> <button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
@@ -3219,9 +3250,17 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const custom = annButtons().length > 0;
     $('an-confirm').disabled = !custom; $('an-confirm-wrap').classList.toggle('muted', !custom);
   }
-  const annButtons = () => [...$('an-buttons').querySelectorAll('input')].map(i => i.value.trim()).filter(Boolean);
-  const setAnnButtons = list => $('an-buttons').querySelectorAll('input').forEach((i, n) => { i.value = (list || [])[n] || ''; });
+  const annButtons = () => [...$('an-buttons').querySelectorAll('input[type=text]')].map(i => i.value.trim()).filter(Boolean);
+  // Buttons ticked "ask again": the person sees the pop-up again next time.
+  const annRepeat = () => [...$('an-buttons').querySelectorAll('div')].filter(d => d.querySelector('input[type=checkbox]').checked).map(d => d.querySelector('input[type=text]').value.trim()).filter(Boolean);
+  const setAnnButtons = (list, repeat) => $('an-buttons').querySelectorAll('div').forEach((d, n) => {
+    const v = (list || [])[n] || '';
+    d.querySelector('input[type=text]').value = v;
+    d.querySelector('input[type=checkbox]').checked = !!v && (repeat || []).includes(v);
+    d.querySelector('.an-rep').classList.toggle('on', d.querySelector('input[type=checkbox]').checked);
+  });
   $('an-buttons').addEventListener('input', popupForm);
+  $('an-buttons').addEventListener('change', e => { const l = e.target.closest('.an-rep'); if (l) l.classList.toggle('on', e.target.checked); });
   function popupImage(url) {
     $('an-image').value = url || '';
     $('an-image-preview').hidden = !url;
@@ -3254,7 +3293,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   function clearAnnForm() {
     $('an-text').value = ''; $('an-end').value = ''; $('an-start').value = state.todayDate; renderChecks($('an-depts'), []);
     $('an-popup').checked = false; $('an-title').value = ''; $('an-everytime').checked = false; popupImage(''); $('an-image-file').value = '';
-    setAnnButtons([]); $('an-confirm').checked = false; $('an-error').textContent = ''; popupForm();
+    setAnnButtons([], []); $('an-confirm').checked = false; $('an-error').textContent = ''; popupForm();
   }
   const anEdit = formEditor($('an-add'), clearAnnForm);
   $('an-add').addEventListener('click', async () => {
@@ -3262,10 +3301,10 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     try {
       const a = state.announcements.find(x => x.id === anEdit.id);
       const lost = a && a.popup ? (a.buttons || []).filter((b, i) => (a.picks || [])[i] && !annButtons().includes(b) && !annButtons()[i]) : [];
-      if (lost.length && !confirm(`People already picked "${lost.join('", "')}". If you remove it, their answers are cleared and they'll see the pop-up again. Save anyway?`)) return;
+      if (lost.length && !await confirm(`People already picked "${lost.join('", "')}". If you remove it, their answers are cleared and they'll see the pop-up again. Save anyway?`, 'Save anyway')) return;
       const body = JSON.stringify({ text: $('an-text').value, departments: checked($('an-depts')), startDate: $('an-start').value, endDate: $('an-end').value,
         popup: $('an-popup').checked, title: $('an-title').value, image: $('an-image').value, everyTime: $('an-everytime').checked,
-        buttons: annButtons(), confirm: $('an-confirm').checked });
+        buttons: annButtons(), confirm: $('an-confirm').checked, repeat: annRepeat() });
       if (anEdit.id) await api('/api/admin/announcements/' + anEdit.id, { method: 'PUT', body }); else await api('/api/admin/announcements', { method: 'POST', body });
       toast(anEdit.id ? 'Saved. The iPad shows the change within a minute.' : 'Announcement added. The iPad shows it within a minute.');
       if (anEdit.id) anEdit.stop(); else clearAnnForm();
@@ -3279,7 +3318,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       if (!a) return;
       $('an-popup').checked = !!a.popup; $('an-title').value = a.title || ''; $('an-text').value = a.text || '';
       popupImage(a.image || ''); $('an-image-file').value = ''; $('an-everytime').checked = !!a.everyTime;
-      setAnnButtons(a.buttons); $('an-confirm').checked = !!a.confirm;
+      setAnnButtons(a.buttons, a.repeat); $('an-confirm').checked = !!a.confirm;
       $('an-start').value = a.startDate; $('an-end').value = a.endDate || ''; renderChecks($('an-depts'), a.departments);
       popupForm();
       return anEdit.start(a.id, a.popup ? 'Edit pop-up' : 'Edit announcement');
@@ -3289,7 +3328,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const pv = e.target.closest('[data-prev-ann]');
     if (pv) return previewAnnouncement((state.announcements || []).find(a => a.id === pv.dataset.prevAnn) || {});
     const b = e.target.closest('[data-del-ann]');
-    if (!b || !confirm('Remove this announcement?')) return;
+    if (!b || !await confirm('Remove this announcement?', 'Remove')) return;
     try { await api('/api/admin/announcements/' + b.dataset.delAnn, { method: 'DELETE' }); toast('Removed'); await refresh(); }
     catch (err) { fail(err); }
   });
@@ -3332,7 +3371,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const pick = {};
     $('td-list').querySelectorAll('[data-td]').forEach(c => { if (c.checked) pick[c.dataset.td] = true; });
     if (!Object.keys(pick).length) return alert('Tick what you want to clear first.');
-    if (!confirm('Clear the ticked test data? This can only be undone by restoring a backup.')) return;
+    if (!await confirm('Clear the ticked test data? This can only be undone by restoring a backup.', 'Clear it')) return;
     try {
       const r = await post('/api/admin/test-data/clear', pick);
       alert(`Cleared. ${r.responses != null ? `${r.responses} answers. ` : ''}${r.sampleStaff != null ? `${r.sampleStaff} sample staff. ` : ''}${r.sampleSchedules != null ? `${r.sampleSchedules} sample schedule. ` : ''}${r.announcements != null ? `${r.announcements} announcements. ` : ''}${r.required != null ? `${r.required} required items. ` : ''}\n\nA copy from before was saved on the server as ${r.backup}.`);
@@ -3391,13 +3430,13 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const pw = e.target.closest('[data-au-pw]'), del = e.target.closest('[data-au-del]');
     try {
       if (pw) {
-        const np = prompt('New password (8+ characters):', makePassword());
+        const np = await prompt('New password (8+ characters):', makePassword(), 'Set password');
         if (!np) return;
         await post(`/api/admin/users/${pw.dataset.auPw}/password`, { password: np });
         alert('Password changed to: ' + np);
       }
       if (del) {
-        if (!confirm('Remove this login? They will no longer be able to open the admin page.')) return;
+        if (!await confirm('Remove this login? They will no longer be able to open the admin page.', 'Remove login')) return;
         await api('/api/admin/users/' + del.dataset.auDel, { method: 'DELETE' });
         toast('Login removed');
       }
@@ -3418,7 +3457,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     try {
       const text = await file.text();
       JSON.parse(text);
-      if (!confirm(`Replace ALL current data with "${file.name}"?`)) return;
+      if (!await confirm(`Replace ALL current data with "${file.name}"?`, 'Replace everything')) return;
       const r = await api('/api/admin/restore', { method: 'POST', body: text });
       alert(`Restored ${r.topics} topics, ${r.employees} staff and ${r.responses} responses.`);
       await refresh();
