@@ -255,7 +255,7 @@
     if (topics.length) groups.push(['Topics', topics]);
     const staff = state.employees.filter(e => hit([e.name, e.last4, e.department, e.jobTitle].join(' '))).slice(0, 6)
       .map(e => ({ label: e.name, where: [e.department, e.active ? '' : 'Inactive'].filter(Boolean).join(' · '),
-        go: () => { goTab('staff'); $('staff-filter').value = 'all'; $('staff-dept').value = ''; $('staff-missing').value = ''; $('staff-search').value = e.name; renderStaff(); } }));
+        go: () => { goTab('staff'); $('staff-filter').value = 'all'; $('staff-dept').value = ''; $('staff-missing').value = ''; $('staff-notdone').value = ''; $('staff-search').value = e.name; renderStaff(); } }));
     if (staff.length) groups.push(['Staff', staff]);
     const anns = (state.announcements || []).filter(a => hit(a.text)).slice(0, 4).map(a => ({ label: a.text.slice(0, 60), where: '', go: () => goTab('announcements') }));
     if (anns.length) groups.push(['Announcements', anns]);
@@ -444,7 +444,7 @@
     if (!a) return;
     e.preventDefault(); hideTip();
     goTab('staff');
-    $('staff-filter').value = 'all'; $('staff-search').value = ''; $('staff-missing').value = '';
+    $('staff-filter').value = 'all'; $('staff-search').value = ''; $('staff-missing').value = ''; $('staff-notdone').value = '';
     renderStaff();
     const opt = [...$('staff-dept').options].find(o => sameDept(o.value, a.dataset.gapDept));
     if (opt) { $('staff-dept').value = opt.value; renderStaff(); }
@@ -1384,8 +1384,15 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const mo = $('staff-missing').options;
     mo[0].textContent = `Everyone (${inSet.length})`; mo[1].textContent = `Missing birthday (${noBday})`; mo[2].textContent = `Missing hire date (${noHire})`;
     const miss = $('staff-missing').value;
+    // "Hasn't done an in-service": the last finished one is before the start of the chosen period (or there is none).
+    const nd = $('staff-notdone').value, since = notDoneSince(nd);
+    const notDoneFor = (e, k, s) => !staffLastDone[e.id] || (k !== 'ever' && staffLastDone[e.id] < s);
+    const notDone = e => staffLastDone && notDoneFor(e, nd, since);
+    const no = $('staff-notdone').options;
+    ['', 'today', 'week', 'd30', 'ever'].forEach((k, i) => { if (!i) return; const s = notDoneSince(k); no[i].textContent = no[i].textContent.replace(/ \(\d+\)$/, '') + (staffLastDone ? ` (${inSet.filter(e => notDoneFor(e, k, s)).length})` : ''); });
     const rows = inSet
       .filter(e => !miss || (miss === 'birthday' ? !e.birthday : !e.hireDate))
+      .filter(e => !nd || notDone(e))
       .filter(e => !q || [e.name, e.last4, e.department].join(' ').toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name));
     staffShown = rows.map(e => e.id);
@@ -1397,19 +1404,31 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       <td data-rated="${e.id}" class="small" style="white-space:nowrap"></td>
       <td data-pending="${e.id}"></td>
       <td style="white-space:nowrap"><button class="btn subtle" data-edit-staff="${e.id}">Edit</button><button class="btn subtle" data-record="${e.id}">Training record</button></td></tr>`).join('')
-      || '<tr><td colspan="8" class="muted">No staff yet. Add them one at a time or import your roster from a spreadsheet.</td></tr>';
+      || `<tr><td colspan="8" class="muted">${state.employees.length ? (nd ? 'Everyone here has done one. 🎉' : 'No one matches these filters.') : 'No staff yet. Add them one at a time or import your roster from a spreadsheet.'}</td></tr>`;
     fillStaffActivity();
     renderBulk();
     const sel = $('st-dept');
     sel.innerHTML = '<option value="">No department</option>' + depts().map(d => `<option>${escapeHtml(d)}</option>`).join('');
   }
+  let staffLastDone = null;   // employee id -> date of their last finished in-service
+  function notDoneSince(k) {
+    const t = state.todayDate;
+    if (k === 'today') return t;
+    if (k === 'week') { const d = new Date(t + 'T12:00:00'); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return isoDay(d); }
+    if (k === 'd30') { const d = new Date(t + 'T12:00:00'); d.setDate(d.getDate() - 29); return isoDay(d); }
+    return '';
+  }
   async function fillStaffActivity() {
     try {
       const { responses } = await api('/api/admin/responses');
       const last = {}, doneReq = {}, rated = {};
+      const firstLoad = !staffLastDone;
+      staffLastDone = {};
+      for (const r of responses) if (r.employeeId && r.completed && !(staffLastDone[r.employeeId] >= r.date)) staffLastDone[r.employeeId] = r.date;
+      if (firstLoad) return renderStaff();
       for (const r of responses) {
         if (!r.employeeId) continue;
-        if (!last[r.employeeId]) last[r.employeeId] = r.submittedAt;
+        if (!(last[r.employeeId] >= r.submittedAt)) last[r.employeeId] = r.submittedAt;
         if ('helpful' in r) { const x = rated[r.employeeId] || (rated[r.employeeId] = { up: 0, down: 0 }); x[r.helpful ? 'up' : 'down'] += 1; }
         if (r.requiredId && r.completed) (doneReq[r.employeeId] = doneReq[r.employeeId] || new Set()).add(r.requiredId);
       }
@@ -1533,6 +1552,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   $('staff-filter').addEventListener('change', renderStaff);
   $('staff-dept').addEventListener('change', renderStaff);
   $('staff-missing').addEventListener('change', renderStaff);
+  $('staff-notdone').addEventListener('change', renderStaff);
   function openStaff(e) {
     editingStaffId = e ? e.id : null;
     $('staff-heading').textContent = e ? 'Edit staff' : 'Add staff';
