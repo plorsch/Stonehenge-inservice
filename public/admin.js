@@ -2021,15 +2021,40 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('resp-topic').value = ct;
     fillRespEmp();
   }
-  // The staff picker on Responses: active staff by name, then inactive ones at the end. Picking someone filters to them.
-  function fillRespEmp() {
-    const sel = $('resp-emp');
-    const people = state.employees.slice().sort((a, b) => (b.active - a.active) || a.name.localeCompare(b.name));
-    sel.innerHTML = '<option value="">Everyone</option>' + people.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}${e.active ? '' : ' (inactive)'}${e.department ? ` · ${escapeHtml(e.department)}` : ''}</option>`).join('');
-    sel.value = respPerson ? respPerson.id : '';
-    if (respPerson && sel.value !== respPerson.id) sel.value = '';
+  // The staff search on Responses: type part of a name, Workday digits or a department and pick from the matches.
+  // The box shows the chosen person's name; clearing it shows everyone again.
+  const empInput = $('resp-emp'), empRes = $('resp-emp-results');
+  function fillRespEmp() { empInput.value = respPerson ? respPerson.name : ''; }
+  function empMatches(q) {
+    const words = q.split(/\s+/).filter(Boolean);
+    return state.employees.filter(e => { const hay = `${e.name} ${e.last4 || ''} ${e.department || ''} ${e.jobTitle || ''}`.toLowerCase(); return words.every(w => hay.includes(w)); })
+      .sort((a, b) => (b.active - a.active) || a.name.localeCompare(b.name)).slice(0, 12);
   }
-  $('resp-emp').addEventListener('change', () => { respPerson = state.employees.find(x => x.id === $('resp-emp').value) || null; loadResponses(); });
+  function showEmpResults() {
+    const q = empInput.value.trim().toLowerCase();
+    if (!q || (respPerson && q === respPerson.name.toLowerCase())) { empRes.hidden = true; return; }
+    const list = empMatches(q);
+    empRes.innerHTML = list.map((e, i) => `<button type="button" data-emp="${escapeHtml(e.id)}"${i ? '' : ' class="on"'}>${escapeHtml(e.name)}<span class="muted small"> · ${escapeHtml(e.department || '')}${e.active ? '' : ' · inactive'}</span></button>`).join('')
+      || '<div class="muted small" style="padding:9px 14px">No one matches.</div>';
+    empRes.hidden = false;
+  }
+  function pickEmp(id) {
+    respPerson = state.employees.find(x => x.id === id) || null;
+    empRes.hidden = true; fillRespEmp(); empInput.blur();
+    loadResponses(); syncClear();
+  }
+  empInput.addEventListener('input', showEmpResults);
+  empInput.addEventListener('focus', showEmpResults);
+  empInput.addEventListener('change', () => { if (!empInput.value.trim() && respPerson) { respPerson = null; loadResponses(); } });
+  empInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { empRes.hidden = true; return; }
+    const btns = [...empRes.querySelectorAll('[data-emp]')], cur = btns.findIndex(b => b.classList.contains('on'));
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const n = (cur + (e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length; btns.forEach((b, i) => b.classList.toggle('on', i === n)); }
+    if (e.key === 'Enter') { e.preventDefault(); const b = btns[cur] || btns[0]; if (b) pickEmp(b.dataset.emp); }
+  });
+  // mousedown, so the pick lands before the box loses focus.
+  empRes.addEventListener('mousedown', e => { const b = e.target.closest('[data-emp]'); if (b) { e.preventDefault(); pickEmp(b.dataset.emp); } });
+  empInput.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== empInput) { empRes.hidden = true; fillRespEmp(); } }, 150));
   function respQuery() {
     const p = new URLSearchParams();
     if ($('resp-from').value) p.set('from', $('resp-from').value);
@@ -2046,12 +2071,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     starter: '<span class="pill good">New hire</span>', annual: '<span class="pill req">Yearly</span>', review: '<span class="pill brand">Review</span>', quiz: '<span class="pill quiz">🧠 Quiz</span>' };
   async function loadResponses() {
     try {
-      // People not on the roster (typed their name) can't be picked from the dropdown; they show as a removable chip instead.
-      const onList = respPerson && state.employees.some(x => x.id === respPerson.id);
-      $('resp-emp').value = onList ? respPerson.id : '';
-      const pc = $('resp-person');
-      pc.hidden = !respPerson || onList;
-      if (respPerson && !onList) pc.innerHTML = `${escapeHtml(respPerson.name)} <a href="#" id="resp-person-x" title="Show everyone" style="text-decoration:none">×</a>`;
+      fillRespEmp();
       const { responses } = await api('/api/admin/responses?' + respQuery());
       const first = responses.filter(r => r.firstTryCorrect).length;
       const quizzes = responses.filter(r => r.kind === 'quiz').length;

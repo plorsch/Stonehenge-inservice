@@ -417,7 +417,11 @@ table.la tr:hover td { background: transparent; }
   .an-img-prev { display: flex; align-items: center; gap: 12px; margin-top: 8px; } .an-img-prev img { max-width: 120px; max-height: 120px; border-radius: 8px; border: 1px solid var(--line); }
   .vw-topic { font-size: inherit; font-weight: inherit; color: var(--brand); } .vw-topic:hover { text-decoration: underline; }
   .vw-edit-hint { font-size: 13px; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; vertical-align: middle; white-space: nowrap; }
-  .tr-filter { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 8px; } .tr-filter button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .emp-pick { position: relative; display: inline-block; }
+  .emp-results { position: absolute; left: 0; top: 100%; z-index: 40; min-width: 280px; max-width: 92vw; max-height: 50vh; overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,.14); margin-top: 4px; }
+  .emp-results button { display: block; width: 100%; text-align: left; background: none; border: 0; font: inherit; padding: 9px 14px; cursor: pointer; color: var(--ink); }
+  .emp-results button:hover, .emp-results button.on { background: var(--bg); }
+    .tr-filter { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 8px; } .tr-filter button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
   .tr-q { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 8px; cursor: pointer; background: #fff; width: 100%; text-align: left; font: inherit; color: inherit; display: block; }
   .tr-q:hover, .tr-q.on { border-color: var(--brand); background: #f3f8fa; }
   .tr-q .tr-bar { height: 8px; border-radius: 4px; background: #e6edf1; margin: 6px 0 4px; overflow: hidden; } .tr-q .tr-bar i { display: block; height: 100%; }
@@ -835,7 +839,7 @@ table.la tr:hover td { background: transparent; }
         <label><input type="checkbox" id="resp-missed"> Missed first try only</label>
         <select id="resp-kind"><option value="">All types</option><option value="noquiz">In-services only</option><option value="quiz">🧠 Quizzes only</option><option value="review">Spaced reviews only</option><option value="required">Required only</option></select>
         <select id="resp-helpful"><option value="">Any lesson rating</option><option value="any">Rated 👍 or 👎</option><option value="up">👍 Helpful</option><option value="down">👎 Not helpful</option></select>
-        <select id="resp-emp"><option value="">Everyone</option></select>
+        <span class="emp-pick"><input type="search" id="resp-emp" placeholder="🔍 Everyone (type a name)" autocomplete="off" style="width:230px"><div class="emp-results" id="resp-emp-results" hidden></div></span>
         <span class="pill" id="resp-person" hidden></span>
         <span class="grow"></span>
         <a class="btn" id="resp-csv" href="/api/admin/responses.csv">Download CSV</a>
