@@ -641,7 +641,7 @@ function publicStreaks() {
     const ev = liveEvent(stats[e.id]);
     return { id: e.id, text: ev.type === 'year' ? `🏆 ${shortName(e.name)}: ${ev.n} in-services this year!` : `🔥 ${shortName(e.name)} is on a ${ev.n}-day streak!` };
   });
-  const ranked = !boardOn ? [] : active.filter(e => stats[e.id].streak >= STREAK_LEADER_MIN)
+  const ranked = !boardOn ? [] : active.filter(e => stats[e.id].streak >= STREAK_LEADER_MIN && !e.noBoard)
     .sort((a, b) => stats[b.id].streak - stats[a.id].streak || a.name.localeCompare(b.name))
     .map(e => ({ id: e.id, name: shortName(e.name), department: e.department, streak: stats[e.id].streak }));
   const board = set.board || 'facility';
@@ -779,6 +779,7 @@ function validateEmployee(input) {
   if ('hireDate' in input && (input.hireDate || !input.keepBlank)) e.hireDate = cleanFullDate(input.hireDate);
   if ('jobTitle' in input && (input.jobTitle || !input.keepBlank)) e.jobTitle = cleanText(input.jobTitle, 100);
   if ('noReview' in input) e.noReview = !!input.noReview;
+  if ('noBoard' in input) e.noBoard = !!input.noBoard;   // kept off the streak board (department heads who work 5 days a week, say)
   const errors = [];
   if (!e.name) errors.push('Name is required.');
   if (!e.last4) errors.push('Enter the last 4 digits of the Workday ID.');
@@ -1481,8 +1482,10 @@ async function adminRoutes(req, res, p, m, url) {
       missedToday: db.responses.filter(r => r.date === today() && !r.firstTryCorrect).length,
       responseCountTotal: db.responses.length,
       newHires: newHireList(),
-      streakTop: (() => { const st = streakStats(); return db.employees.filter(e => e.active && st[e.id] && st[e.id].streak >= STREAK_LEADER_MIN)
-        .sort((a, b) => st[b.id].streak - st[a.id].streak).slice(0, 5).map(e => ({ id: e.id, name: e.name, department: e.department, streak: st[e.id].streak })); })(),
+      // The admin's own list keeps hidden people (greyed out) so they can be put back; the kiosk list leaves them out.
+      streakTop: (() => { const st = streakStats(); const all = db.employees.filter(e => e.active && st[e.id] && st[e.id].streak >= STREAK_LEADER_MIN)
+        .sort((a, b) => (!!a.noBoard - !!b.noBoard) || st[b.id].streak - st[a.id].streak || a.name.localeCompare(b.name));
+        return all.filter(e => !e.noBoard).slice(0, 5).concat(all.filter(e => e.noBoard)).map(e => ({ id: e.id, name: e.name, department: e.department, streak: st[e.id].streak, hidden: !!e.noBoard })); })(),
       kioskUrls: kioskUrls(), passwordFromEnv, me: req.adminUser,
       meName: req.adminUser === config.adminUser ? db.settings.adminName : ((db.admins.find(a => a.username === req.adminUser) || {}).name || req.adminUser).split(' ')[0],
       isMainAdmin: req.adminUser === config.adminUser,
@@ -1683,6 +1686,15 @@ async function adminRoutes(req, res, p, m, url) {
     }
     saveDb();
     return send(res, 200, { moved });
+  }
+  // Hide from / show on the streak board, one tap from the Settings streak card.
+  mt = p.match(/^\/api\/admin\/employees\/(\w+)\/board$/);
+  if (mt && m === 'POST') {
+    const e = findEmployee(mt[1]);
+    if (!e) return send(res, 404, { error: 'Staff member not found.' });
+    e.noBoard = !!(await readBody(req)).hide;
+    saveDb();
+    return send(res, 200, { employee: e });
   }
   mt = p.match(/^\/api\/admin\/employees\/(\w+)$/);
   if (mt && m === 'PUT') {

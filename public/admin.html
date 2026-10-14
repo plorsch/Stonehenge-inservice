@@ -123,6 +123,10 @@
   .seg button.on { background: #fff; color: var(--brand); font-weight: 650; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .sk-board-prev { border-radius: 14px; padding: 16px; background: linear-gradient(160deg,#fff8ec,#fff1f1); border: 1px solid #f6dfc8; }
   .sk-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #fff; border-radius: 10px; margin-bottom: 6px; }
+  .sk-row.off { opacity: .55; background: #fbfcfd; border: 1px dashed var(--line); }
+  .sk-row.off .sk-rank { visibility: hidden; }
+  .sk-hide { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 4px 9px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--muted); white-space: nowrap; }
+  .sk-hide:hover { color: var(--brand); border-color: var(--brand); }
   .sk-rank { width: 26px; text-align: center; font-size: 18px; }
   .sk-who { flex: 1; min-width: 0; }
   .sk-who small { color: var(--muted); }
@@ -1155,6 +1159,7 @@ table.la tr:hover td { background: transparent; }
       </div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" id="st-active"> Active</label>
       <label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="st-noreview"> No spaced review for this person <span class="hint">they won't get missed topics again later</span></label>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="st-noboard"> Keep off the streak board <span class="hint">for people who work 5 days a week and would always be on top</span></label>
       <div class="err" id="st-error" style="margin-top:8px"></div>
     </div>
     <div class="dlg-foot">

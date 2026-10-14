@@ -1775,7 +1775,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('st-last4').value = e ? e.last4 : '';
     $('st-dept').value = e ? e.department : '';
     $('st-active').checked = e ? e.active : true;
-    $('st-noreview').checked = !!(e && e.noReview);
+    $('st-noreview').checked = !!(e && e.noReview); $('st-noboard').checked = !!(e && e.noBoard);
     $('st-birthday').value = e && e.birthday ? e.birthday.split('-').map(Number).join('/') : '';
     $('st-hire').value = e && e.hireDate ? e.hireDate : '';
     $('st-error').textContent = '';
@@ -1954,7 +1954,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   }
   $('staff-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const body = { name: $('st-name').value, last4: $('st-last4').value, department: $('st-dept').value, active: $('st-active').checked, noReview: $('st-noreview').checked,
+    const body = { name: $('st-name').value, last4: $('st-last4').value, department: $('st-dept').value, active: $('st-active').checked, noReview: $('st-noreview').checked, noBoard: $('st-noboard').checked,
       birthday: $('st-birthday').value, hireDate: $('st-hire').value };
     if (body.birthday.trim() && !/^\d{1,2}\s*\/\s*\d{1,2}(\s*\/\s*\d{2,4})?$/.test(body.birthday.trim())) { $('st-error').textContent = 'Write the birthday as month/day, like 3/7.'; return; }
     body.birthday = body.birthday.replace(/\s/g, '');
@@ -3229,12 +3229,20 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     syncSegs();
     const top = state.streakTop || [];
     const medal = ['🥇', '🥈', '🥉'];
-    const places = [...new Set(top.map(l => l.streak))];
-    $('sk-now').innerHTML = top.length ? top.map(l => { const i = places.indexOf(l.streak); return `<div class="sk-row"><div class="sk-rank">${medal[i] || i + 1}</div>
-        <div class="sk-who"><button class="linkish" data-up-staff="${escapeHtml(l.id)}">${escapeHtml(l.name)}</button>${l.department ? ` <small>· ${escapeHtml(l.department)}</small>` : ''}</div>
-        <div class="sk-n">🔥 ${l.streak} days in a row</div></div>`; }).join('')
+    const places = [...new Set(top.filter(l => !l.hidden).map(l => l.streak))];
+    // Hidden people (department heads who'd always be on top) sit greyed out at the bottom with a Show button.
+    $('sk-now').innerHTML = top.length ? top.map(l => { const i = places.indexOf(l.streak); return `<div class="sk-row${l.hidden ? ' off' : ''}"><div class="sk-rank">${medal[i] || i + 1}</div>
+        <div class="sk-who"><button class="linkish" data-up-staff="${escapeHtml(l.id)}">${escapeHtml(l.name)}</button>${l.department ? ` <small>· ${escapeHtml(l.department)}</small>` : ''}${l.hidden ? ' <small>· off the board</small>' : ''}</div>
+        <div class="sk-n">🔥 ${l.streak} days in a row</div>
+        <button class="sk-hide" data-sk-hide="${escapeHtml(l.id)}" data-hidden="${l.hidden ? 1 : 0}" title="${l.hidden ? 'Put them back on the iPad streak board' : 'Take them off the iPad streak board'}">${l.hidden ? 'Show' : 'Hide'}</button></div>`; }).join('')
       : '<div class="muted small">No one has a streak of 3 or more yet.</div>';
   }
+  $('sk-now').addEventListener('click', async e => {
+    const b = e.target.closest('[data-sk-hide]');
+    if (!b) return;
+    try { await post(`/api/admin/employees/${b.dataset.skHide}/board`, { hide: b.dataset.hidden !== '1' }); toast(b.dataset.hidden === '1' ? 'Back on the board' : 'Off the board'); await refresh(); }
+    catch (err) { fail(err); }
+  });
   // Segmented buttons write to the hidden input named in data-for, then save.
   function syncSegs() { document.querySelectorAll('.seg[data-for]').forEach(g => g.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === $(g.dataset.for).value))); }
   document.querySelectorAll('.seg[data-for]').forEach(g => g.addEventListener('click', e => {
