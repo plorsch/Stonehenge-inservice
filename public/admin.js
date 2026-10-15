@@ -1086,11 +1086,12 @@
     if (!t) return;
     vwPush(() => showTopicResults(t, opts));
     vwTopicTitle(t);
-    $('vw-actions').innerHTML = '<button class="btn ghost" data-tr="key">🔑 Answer key</button><button class="btn ghost" data-tr="preview">▶ Preview</button><button class="btn ghost" data-tr="edit">✏️ Edit</button><button class="btn ghost" data-tr="all">All in Responses</button>';
+    $('vw-actions').innerHTML = '<button class="btn ghost" data-tr="key">🔑 Answer key</button><button class="btn ghost" data-tr="preview">▶ Preview</button><button class="btn ghost" data-tr="edit">✏️ Edit</button><button class="btn ghost" data-tr="sheet" title="Everyone who completed it, all dates, ready to print or save as PDF">🖨 Printable sheet</button><button class="btn ghost" data-tr="all">All in Responses</button>';
     $('vw-actions').onclick = e => {
       const b = e.target.closest('[data-tr]'); if (!b) return;
       if (b.dataset.tr === 'key') return showDetails(t, topicActions(t));
       if (b.dataset.tr === 'preview') return showPreview(t);
+      if (b.dataset.tr === 'sheet') return printSignInSheet(t);
       $('viewer').close();
       if (b.dataset.tr === 'edit') openEditor(t);
       if (b.dataset.tr === 'all') openResponses({ topicId: t.id });
@@ -2597,15 +2598,20 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   const query = obj => new URLSearchParams(Object.entries(obj).filter(([, v]) => v)).toString();
 
   // Printable sign-in sheet for surveyors: lesson, questions, and each person's first completion in the date range.
-  $('rp-print').addEventListener('click', async () => {
+  $('rp-print').addEventListener('click', () => {
     $('rp-error').textContent = '';
     const t = topicById($('rp-topic').value);
     if (!t) { $('rp-error').textContent = 'Choose a topic.'; return; }
+    printSignInSheet(t, { from: $('rp-from').value, to: $('rp-to').value, dept: $('rp-dept').value }, msg => { $('rp-error').textContent = msg; });
+  });
+  // Also offered from the topic results view (all dates, all staff), so nobody has to go through Reports for it.
+  async function printSignInSheet(t, { from = '', to = '', dept = '' } = {}, onError = toast) {
     const win = window.open('', '_blank'); // open now, while the click still counts, so it isn't blocked as a pop-up
-    if (!win) { $('rp-error').textContent = 'Your browser blocked the new window. Allow pop-ups for this site and try again.'; return; }
+    if (!win) { onError('Your browser blocked the new window. Allow pop-ups for this site and try again.'); return; }
     win.document.write('<p style="font-family:sans-serif">Loading…</p>');
     try {
-      const from = $('rp-from').value, to = $('rp-to').value, dept = $('rp-dept').value;
+      const shortWhen = iso => { const d = new Date(iso); return isNaN(d) ? '' : `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`; };
+      const qNum = r => { const i = t.questions.findIndex(q => q.id === r.questionId); return i < 0 ? '' : `Q${i + 1}`; };
       const { responses } = await api('/api/admin/responses?' + query({ topicId: t.id, from, to, department: dept }));
       const seen = new Map();
       for (const r of responses.filter(x => x.completed).sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))) {
@@ -2620,8 +2626,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         body { font: 13px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #111; margin: 28px; }
         h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 15px; margin: 18px 0 6px; }
         .meta { color: #444; margin-bottom: 10px; } .box { border: 1px solid #bbb; border-radius: 6px; padding: 8px 12px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 6px; } th, td { border: 1px solid #bbb; padding: 5px 7px; text-align: left; vertical-align: top; }
-        th { background: #eee; font-size: 12px; } ul { margin: 4px 0 8px; padding-left: 20px; } p { margin: 0 0 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; } th, td { border: 1px solid #bbb; padding: 4px 6px; text-align: left; vertical-align: top; }
+        th { background: #eee; font-size: 11px; } td.nw { white-space: nowrap; } td.num { text-align: right; color: #555; } td.ans { width: 32%; } td.res { font-size: 11px; } .first { color: #555; font-size: 11px; } ul { margin: 4px 0 8px; padding-left: 20px; } p { margin: 0 0 8px; }
         .sign { margin-top: 28px; display: flex; gap: 28px; } .sign div { flex: 1; border-top: 1px solid #333; padding-top: 4px; font-size: 12px; }
         .noprint { margin-bottom: 14px; } @media print { .noprint { display: none; } body { margin: 0.4in; } tr { break-inside: avoid; } }
       </style></head><body>
@@ -2631,20 +2637,22 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
           <strong>Dates:</strong> ${range} &nbsp; <strong>Staff:</strong> ${dept ? escapeHtml(dept) : whoLabel(t.departments)}<br>
           <strong>Format:</strong> Self-paced micro in-service on the facility iPad, with a knowledge check. Staff who answer wrong get a hint and must answer correctly to finish.</div>
         <h2>Content presented</h2><div class="box">${formatLesson(t.lesson)}</div>
-        <h2>Knowledge check questions</h2><div class="box">${t.questions.map(q => `<div><strong>${escapeHtml(q.text)}</strong>
+        <h2>Knowledge check questions</h2><div class="box">${t.questions.map((q, i) => `<div><strong>Q${i + 1}. ${escapeHtml(stripFormat(q.text))}</strong>
           <ul>${q.correctAnswers.map(a => `<li>${escapeHtml(a)} (correct)</li>`).join('')}${q.wrongAnswers.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul></div>`).join('')}</div>
         <h2>Attendance: ${people.length} staff completed${people.length ? `, ${Math.round(100 * first / people.length)}% correct on the first try` : ''}</h2>
-        <table><thead><tr><th>#</th><th>Name</th><th>Department</th><th>Workday last 4</th><th>Completed</th><th>Knowledge check</th></tr></thead><tbody>
-        ${people.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.department || '')}</td><td>${escapeHtml(r.last4 || '')}</td>
-          <td>${fmtWhen(r.completedAt)}</td><td>${r.firstTryCorrect ? 'Correct first try' : `Correct on try ${r.attempts.length}`}</td></tr>`).join('')
-          || '<tr><td colspan="6">No one has completed this topic in these dates.</td></tr>'}
+        <table><thead><tr><th>#</th><th>Name</th><th>Dept</th><th>Last 4</th><th>Completed</th><th>Question</th><th>Answer given</th><th>Result</th></tr></thead><tbody>
+        ${people.map((r, i) => `<tr><td class="num">${i + 1}</td><td class="nw">${escapeHtml(r.name)}</td><td>${escapeHtml(r.department || '')}</td><td class="nw">${escapeHtml(r.last4 || '')}</td>
+          <td class="nw">${shortWhen(r.completedAt)}</td><td class="nw">${qNum(r)}</td>
+          <td class="ans">${escapeHtml(r.attempts[r.attempts.length - 1] || '')}${r.firstTryCorrect || r.attempts.length < 2 ? '' : `<div class="first">First picked: ${escapeHtml(r.attempts[0])}</div>`}</td>
+          <td class="res">${r.firstTryCorrect ? 'Correct first try' : `Correct on try ${r.attempts.length}`}</td></tr>`).join('')
+          || '<tr><td colspan="8">No one has completed this topic in these dates.</td></tr>'}
         </tbody></table>
         <div class="sign"><div>In-service coordinator</div><div>Title</div><div>Date</div></div>
         <p style="margin-top:14px;color:#666;font-size:11px">Printed ${escapeHtml(new Date().toLocaleString())} from the in-service admin page.</p>
       </body></html>`);
       win.document.close();
-    } catch (err) { win.close(); $('rp-error').textContent = err.message; }
-  });
+    } catch (err) { win.close(); onError(err.message); }
+  }
 
   // Most-missed questions, from every response in the date range.
   async function loadMissed() {
