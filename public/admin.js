@@ -1196,6 +1196,7 @@
     card.querySelector('.q-remove').onclick = () => { if ($('f-questions').children.length > 1) { card.remove(); numberQuestions(); } };
     $('f-questions').appendChild(card);
     numberQuestions();
+    const pref = esPref(); if (pref !== null) card.querySelector('details.es').open = pref === '1';
   }
   function numberQuestions() { [...$('f-questions').children].forEach((c, i) => { c.querySelector('.qnum').textContent = `Question ${i + 1}`; }); }
   function openEditor(t) {
@@ -1215,7 +1216,8 @@
     renderChecks($('f-depts'), t ? t.departments : []);
     $('f-questions').innerHTML = '';
     (t && t.questions.length ? t.questions : [{}]).forEach(q => addQuestionCard(q));
-    $('f-error').textContent = t && t.problems ? 'Still needed: ' + t.problems.join(' ') : '';
+    showSaveProblem(t && t.problems ? t.problems : []);
+    applyEsPref();
     updateLessonPreview();
     $('editor').showModal();
     $('f-title').focus();
@@ -1242,6 +1244,40 @@
   function updateLessonPreview() { $('f-preview').innerHTML = formatLesson($('f-lesson').value); }
   $('f-lesson').addEventListener('input', updateLessonPreview);
   $('f-add-q').addEventListener('click', () => addQuestionCard());
+  // The orange "can't save" banner in the footer. Each "Question N" problem links to that question and flags its card.
+  function showSaveProblem(problems, jump = false) {
+    const box = $('f-error');
+    const list = (Array.isArray(problems) ? problems : String(problems || '').split(/(?<=\.)\s+(?=[A-Z])/)).map(x => x.trim()).filter(Boolean);
+    document.querySelectorAll('#f-questions .qcard.flag').forEach(c => c.classList.remove('flag'));
+    box.hidden = !list.length;
+    if (!list.length) return;
+    const cards = [...$('f-questions').children];
+    const item = p => { const m = p.match(/^Question (\d+)/); const card = m && cards[Number(m[1]) - 1]; if (card) card.classList.add('flag');
+      return `<li>${card ? `<a href="#" data-flag-q="${Number(m[1]) - 1}">${escapeHtml(p)}</a>` : escapeHtml(p)}</li>`; };
+    box.innerHTML = `<b>⚠️ Not saved yet. Please fix:</b><ul>${list.map(item).join('')}</ul>`;
+    const first = box.querySelector('[data-flag-q]');
+    const go = i => { const c = cards[i]; if (!c) return; c.scrollIntoView({ behavior: 'smooth', block: 'center' }); const f = c.querySelector('textarea, input[type=text]'); if (f) f.focus({ preventScroll: true }); };
+    box.querySelectorAll('[data-flag-q]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go(Number(a.dataset.flagQ)); }));
+    if (!jump) return;
+    if (first) go(Number(first.dataset.flagQ));
+    else $('f-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  // Show or hide every Spanish section at once; the choice is remembered on this computer.
+  const esPref = () => { try { return localStorage.getItem('esShow'); } catch { return null; } };
+  function applyEsPref() {
+    const pref = esPref();
+    const open = pref === null ? null : pref === '1';
+    if (open !== null) document.querySelectorAll('#editor details.es').forEach(d => { d.open = open; });
+    const anyOpen = [...document.querySelectorAll('#editor details.es')].some(d => d.open);
+    $('f-es-toggle').textContent = anyOpen ? '🇪🇸 Hide Spanish' : '🇪🇸 Show Spanish';
+  }
+  $('f-es-toggle').addEventListener('click', () => {
+    const anyOpen = [...document.querySelectorAll('#editor details.es')].some(d => d.open);
+    try { localStorage.setItem('esShow', anyOpen ? '0' : '1'); } catch { /* private window */ }
+    applyEsPref();
+  });
+  $('f-questions').addEventListener('toggle', e => { if (e.target.matches('details.es')) applyEsPref0(); }, true);
+  function applyEsPref0() { const anyOpen = [...document.querySelectorAll('#editor details.es')].some(d => d.open); $('f-es-toggle').textContent = anyOpen ? '🇪🇸 Hide Spanish' : '🇪🇸 Show Spanish'; }
   $('f-cancel').addEventListener('click', () => $('editor').close());
   $('new-topic').addEventListener('click', () => openEditor(null));
 
@@ -1369,7 +1405,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     [...$('f-questions').children].forEach(c => { if (!c.querySelector('.q-text').value.trim()) c.remove(); });
     r.questions.forEach(q => addQuestionCard(q));
     if (!$('f-questions').children.length) addQuestionCard();
-    $('f-error').textContent = `Filled in by AI: ${r.questions.length} question${r.questions.length === 1 ? '' : 's'}. Check it over, then Save.`;
+    toast(`Filled in by AI: ${r.questions.length} question${r.questions.length === 1 ? '' : 's'}. Check it over, then Save.`);
   }
   $('ai-help-btn').addEventListener('click', () => openAiHelp(false));
   $('f-ai').addEventListener('click', () => openAiHelp(true));
@@ -1409,7 +1445,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       $('editor').close();
       toast(draft ? 'Saved as draft. It will not show on the iPad until it is complete.' : 'Topic saved');
       await refresh();
-    } catch (err) { $('f-error').textContent = err.message; }
+    } catch (err) { showSaveProblem(err.message, true); }
     finally { $('f-save').disabled = false; }
   }
   $('editor-form').addEventListener('submit', e => { e.preventDefault(); saveTopic(false); });
