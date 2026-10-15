@@ -2981,6 +2981,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('leader-gaps').hidden = !gap;
     $('leader-gaps').innerHTML = gap ? '⚠️ Follow-up emails can\'t reach these departments yet.<br>' + gap : '';
     $('set-unlisted').checked = !!s.allowUnlisted;
+    $('set-fit').checked = s.fitScreen !== false;
     $('set-closing').innerHTML = '';
     (s.closingMessages || []).forEach(m => addClosingRow(m));
     $('set-news-seconds').value = s.newsSeconds || 3;
@@ -3191,6 +3192,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         departments: [...new Set(rowValues('set-depts'))],
         leaders: lv.out,
         allowUnlisted: $('set-unlisted').checked,
+        fitScreen: $('set-fit').checked,
         closingMessages: closingValues(),
         newsSeconds: Number($('set-news-seconds').value)
       }) });

@@ -129,6 +129,7 @@ function defaultSettings() {
     quizText: { en: 'This checks something you learned this past week.', es: 'Esto repasa algo que aprendió esta semana.' },
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
+    fitScreen: true,          // shrink each kiosk screen a little so it fits the iPad without scrolling
     leaders: {},              // { department: leader name and email(s) }, for the Clock-in check lists and follow-up emails
     alertEmails: [],          // emailed when someone not on the roster does an in-service
     missedFollowup: true,     // a first-try miss asks the department leader to re-educate and attest
@@ -1121,7 +1122,7 @@ async function kioskRoutes(req, res, p, m) {
     }
     const month = previewMonth || new Date().getMonth() + 1;
     const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
-    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, closingMessages: s.closingMessages, decor,
+    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, fitScreen: s.fitScreen !== false, closingMessages: s.closingMessages, decor,
       announcements: todaysAnnouncements(), newsSeconds: s.newsSeconds || 3, streaks: publicStreaks(), birthdayMessages: s.birthdayMessages, anniversaryMessages: s.anniversaryMessages, celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
   }
 
@@ -1910,6 +1911,7 @@ async function adminRoutes(req, res, p, m, url) {
     if ('facilityName' in b) s.facilityName = cleanText(b.facilityName, 100) || 'Stonehenge';
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
+    if ('fitScreen' in b) s.fitScreen = !!b.fitScreen;
     if ('celebrations' in b) s.celebrations = !!b.celebrations;
     if (b.review && typeof b.review === 'object') {
       const days = (v, d) => { const n = Math.round(Number(v)); return n >= 1 && n <= 60 ? n : d; };
