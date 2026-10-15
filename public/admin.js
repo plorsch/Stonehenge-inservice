@@ -493,7 +493,16 @@
       (list.length ? list.slice(0, 15).map(p => escapeHtml(p.name) + (p.jobTitle ? ` <span style="opacity:.7">${escapeHtml(p.jobTitle)}</span>` : '')).join('<br>') + (list.length > 15 ? `<br>…and ${list.length - 15} more` : '') : 'No active staff') +
       '<br><span style="opacity:.7">Click to see them on the Staff tab</span>');
   });
-  document.addEventListener('mouseout', e => { if (e.target.closest('[data-gap-dept], [data-rate-tip]')) hideTip(); });
+  // Same instant pop-up for the department names on the look-ahead (the browser's own title tooltip takes a second to appear).
+  document.addEventListener('mouseover', e => {
+    const a = e.target.closest('[data-la-people]');
+    if (!a) return;
+    const dept = a.dataset.laPeople, list = dept ? deptPeople(dept) : state.employees.filter(x => x.active).sort((x, y) => x.name.localeCompare(y.name));
+    showTip(e, `<b>${escapeHtml(dept || 'All staff')}</b> · ${list.length} active<br>` +
+      (list.length ? list.slice(0, 15).map(p => escapeHtml(p.name) + (p.jobTitle ? ` <span style="opacity:.7">${escapeHtml(p.jobTitle)}</span>` : '')).join('<br>') + (list.length > 15 ? `<br>…and ${list.length - 15} more` : '') : 'No active staff yet') +
+      '<br><span style="opacity:.7">Click to open the list</span>');
+  });
+  document.addEventListener('mouseout', e => { if (e.target.closest('[data-gap-dept], [data-rate-tip], [data-la-people]')) hideTip(); });
   // Hover the 👍/👎 on the topic library: the latest ratings, newest first.
   document.addEventListener('mouseover', e => {
     const a = e.target.closest('[data-rate-tip]');
@@ -734,8 +743,7 @@
   const laPeople = dept => dept ? deptPeople(dept) : state.employees.filter(e => e.active).sort((a, b) => a.name.localeCompare(b.name));
   function deptButton(dept) {
     const people = laPeople(dept), n = people.length;
-    const tip = !n ? 'Nobody active in this department yet' : n <= 14 ? people.map(p => p.name).join('\n') : `${n} people · click to see them`;
-    return `<button class="linkish la-dept" data-la-people="${escapeHtml(dept)}" title="${escapeHtml(tip)}">${escapeHtml(dept || 'All staff')}<small>${n}</small></button>`;
+    return `<button class="linkish la-dept" data-la-people="${escapeHtml(dept)}">${escapeHtml(dept || 'All staff')}<small>${n}</small></button>`;
   }
   function showDeptPeople(dept) {
     vwPush(() => showDeptPeople(dept));
