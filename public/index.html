@@ -223,11 +223,12 @@
   .cheer { display: inline-block; background: #fff4d6; color: #8a5a00; border-radius: 12px; padding: 10px 18px; font-size: 21px; font-weight: 700; margin: 4px 0 6px; }
   .helpful { margin-top: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
   .helpful .chip { font-size: 16px; min-height: 36px; min-width: 44px; padding: 0 10px; border-width: 1px; }
-  .leaders { margin: 18px auto 0; max-width: 460px; text-align: left; background: linear-gradient(160deg, #fff8ec, #fff1f1); border: 1px solid #f6dfc8; border-radius: 14px; padding: 12px 14px; }
+  .leaders { margin: 18px auto 0; max-width: 520px; text-align: left; background: linear-gradient(160deg, #fff8ec, #fff1f1); border: 1px solid #f6dfc8; border-radius: 14px; padding: 12px 14px; }
   .leaders h3 { margin: 0 0 8px; font-size: 18px; color: #8a5a00; text-align: center; }
-  .leaders div { display: flex; align-items: center; gap: 10px; font-size: 17px; padding: 9px 12px; line-height: 1.3; background: #fff; border-radius: 10px; margin-bottom: 6px; box-shadow: 0 1px 2px rgba(23, 72, 93, .06); }
+  .leaders div { display: flex; align-items: center; gap: 10px; font-size: 19px; padding: 11px 14px; line-height: 1.3; background: #fff; border-radius: 10px; margin-bottom: 6px; box-shadow: 0 1px 2px rgba(23, 72, 93, .06); }
   .leaders div:last-child { margin-bottom: 0; }
-  .leaders div > b { width: 26px; flex: none; text-align: center; font-size: 19px; }
+  .leaders div > b { width: 28px; flex: none; text-align: center; font-size: 22px; }
+  .leaders .lb-all { display: block; width: 100%; margin: 4px 0 0; padding: 8px; background: none; border: 0; color: var(--brand); font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
   .leaders div > span:last-child { margin-left: auto; color: #c2410c; font-weight: 700; white-space: nowrap; }
   .board-pop { position: absolute; right: 14px; top: calc(100% + 8px); z-index: 30; width: min(400px, calc(100vw - 28px)); max-height: 70vh; overflow-y: auto;
     background: #fff; border: 2px solid #f1c94e; border-radius: 18px; box-shadow: 0 16px 44px rgba(0,0,0,.22); padding: 16px 16px 14px; text-align: center; animation: pop-in .18s ease-out; }
@@ -265,6 +266,11 @@
   @media (min-width: 900px) and (max-height: 820px) {
     .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: center; }
     .home-grid .pin { margin-bottom: 0; }
+    /* Last screen sideways: the message on the left, announcements and streaks on the right, Done across the bottom. */
+    #s-result.with-extras { max-width: 980px; }
+    #s-result.with-extras .card { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: center; }
+    #s-result.with-extras .extras { margin: 0; max-width: none; }
+    #s-result.with-extras .row, #s-result.with-extras .countdown, #s-result.with-extras .helpful { grid-column: 1 / -1; }
   }
   @media (max-width: 600px) {
     body { font-size: 17px; }
@@ -416,6 +422,7 @@
 
     <section class="screen" id="s-result">
       <div class="card center">
+        <div class="result-main">
         <div class="party" id="result-party" hidden><div class="party-emoji" id="party-emoji"></div><div class="party-title" id="party-title"></div><div class="party-sub" id="party-sub"></div></div>
         <div class="badge" id="result-badge">✓</div>
         <h1 id="result-title"></h1>
@@ -424,6 +431,7 @@
         <div class="explain" id="result-explain" hidden></div>
         <div class="review-note" id="result-review" hidden></div>
         <div class="closing" id="result-closing" hidden></div>
+        </div>
         <div class="extras" id="result-extras" hidden>
           <div class="news-list" id="result-news" hidden></div>
           <div class="leaders" id="result-leaders" hidden></div>
@@ -688,6 +696,14 @@
   function tierRow(label, g) {
     const meId = s.who && s.who.employeeId;
     return g.slice().sort((a, b) => (b.id === meId) - (a.id === meId)).map(l => `<div class="${l.id === meId ? 'me' : ''}"><b>${label}</b><span class="nm">${escapeHtml(l.name)}${l.id === meId ? T(' (you!)', ' (¡usted!)') : ''}${deptTag(l)}</span><span>🔥 ${l.streak}${T(' days in a row', ' días seguidos')}</span></div>`).join('');
+  }
+  // The end screen shows 3 people, then a "See everyone" tap for the rest (your own row always shows).
+  function boardRows(g) {
+    const meId = s.who && s.who.employeeId;
+    const rows = g.flatMap((p, i) => p.slice().sort((a, b) => (b.id === meId) - (a.id === meId)).map(l => [MEDALS[i] || `${i + 1}.`, l]));
+    const hide = ([, l], i) => i >= 3 && l.id !== meId;
+    return rows.map(([label, l], i) => tierRow(label, [l]).replace('<div class="', `<div ${hide([label, l], i) ? 'hidden ' : ''}class="`)).join('')
+      + (rows.some(hide) ? `<button type="button" class="lb-all" data-action="board-all">${T(`See everyone (${rows.length}) ▾`, `Ver a todos (${rows.length}) ▾`)}</button>` : '');
   }
   // The 🏆 button: the full leaderboard, ranked the way it's set in admin.
   function renderBoard() {
@@ -1143,12 +1159,13 @@
     // Department board on this screen: just the person's own department.
     const myDept = showBoard && s.who && s.who.department ? str.deptLeaders.filter(l => l.department.toLowerCase() === s.who.department.toLowerCase()) : [];
     const g = tiers(board);
-    $('result-leaders').innerHTML = (g.length ? `<h3>🏅 ${T(board.length === 1 ? 'Streak leader' : g.length === 1 ? 'Streak leaders' : 'Top streaks', board.length === 1 ? 'Líder de racha' : g.length === 1 ? 'Líderes de racha' : 'Mejores rachas')}</h3>` + g.map((p, i) => tierRow(MEDALS[i] || `${i + 1}.`, p)).join('') : '') +
+    $('result-leaders').innerHTML = (g.length ? `<h3>🏅 ${T(board.length === 1 ? 'Streak leader' : g.length === 1 ? 'Streak leaders' : 'Top streaks', board.length === 1 ? 'Líder de racha' : g.length === 1 ? 'Líderes de racha' : 'Mejores rachas')}</h3>` + boardRows(g) : '') +
       (myDept.length ? `<h3${g.length ? ' style="margin-top:10px"' : ''}>🏅 ${T(`${escapeHtml(myDept[0].department)} leader`, `Líder de ${escapeHtml(myDept[0].department)}`)}</h3>` + tierRow('', myDept.map(l => Object.assign({}, l, { department: '' }))) : '');
     $('result-leaders').hidden = !board.length && !myDept.length;
     $('result-news').innerHTML = `<h3>${T('Announcements', 'Anuncios')}</h3>` + news.slice(0, 4).map(t => `<div>${formatInline(t)}</div>`).join('');
     $('result-news').hidden = !news.length;
     $('result-extras').hidden = $('result-news').hidden && $('result-leaders').hidden;
+    $('s-result').classList.toggle('with-extras', !$('result-extras').hidden);
     show('result');
     if (more) return;
     if (party.length) celebrate(party);
@@ -1180,6 +1197,7 @@
     if (act === 'lang') { s.lang = s.lang === 'es' ? 'en' : 'es'; renderItem(); bumpIdle(); }
     if (act === 'unlisted') { renderDepts(); show('unlisted'); setTimeout(() => $('name').focus(), 250); }
     if (act === 'forgot') { show('forgot'); setTimeout(() => $('forgot-name').focus(), 250); }
+    if (act === 'board-all') { $('result-leaders').querySelectorAll('div[hidden]').forEach(d => { d.hidden = false; }); a.remove(); refit(); bumpIdle(); }
   });
   document.addEventListener('pointerdown', bumpIdle, true);
   document.addEventListener('keydown', bumpIdle, true);
