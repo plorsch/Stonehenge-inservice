@@ -696,7 +696,7 @@
               title="${escapeHtml(title)} · ${escapeHtml(dept || 'All staff')} · ${fmtDate(from)}${to !== from ? ' – ' + fmtDate(to) : ''}">${escapeHtml(title)}<small>${laLabel[it.source] || ''}</small></button></td>`);
             i = j;
           }
-          return `<tr><td class="dept">${escapeHtml(dept || 'All staff')}</td>${cells.join('')}</tr>`;
+          return `<tr><td class="dept">${deptButton(dept)}</td>${cells.join('')}</tr>`;
         }).join('');
         return `<div class="la-week"><h3>Week of ${fmtDate(w[0].date)}</h3><table class="la"><thead><tr><th class="dept"></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
       }).join('')}</div>` + laPhoneList(f, depts);
@@ -730,7 +730,31 @@
   $('la-now').addEventListener('click', () => { laStart = null; loadLookAhead(); });
   $('la-weeks').addEventListener('change', loadLookAhead);
   // Tapping a square shows what that topic is, with buttons to schedule it (or swap it) and to preview it.
+  // The department name at the left of a look-ahead row: hover shows who's in it, a click opens the list.
+  const laPeople = dept => dept ? deptPeople(dept) : state.employees.filter(e => e.active).sort((a, b) => a.name.localeCompare(b.name));
+  function deptButton(dept) {
+    const people = laPeople(dept), n = people.length;
+    const tip = !n ? 'Nobody active in this department yet' : n <= 14 ? people.map(p => p.name).join('\n') : `${n} people · click to see them`;
+    return `<button class="linkish la-dept" data-la-people="${escapeHtml(dept)}" title="${escapeHtml(tip)}">${escapeHtml(dept || 'All staff')}<small>${n}</small></button>`;
+  }
+  function showDeptPeople(dept) {
+    vwPush(() => showDeptPeople(dept));
+    const people = laPeople(dept);
+    $('vw-title').textContent = `${dept || 'All staff'} · ${people.length} ${people.length === 1 ? 'person' : 'people'}`;
+    $('vw-actions').innerHTML = '<button class="btn ghost" data-pv="staff">👥 Open in Staff</button>';
+    $('vw-actions').onclick = e => {
+      if (!e.target.closest('[data-pv="staff"]')) return;
+      $('viewer').close(); goTab('staff');
+      $('staff-filter').value = 'all'; $('staff-search').value = ''; $('staff-missing').value = ''; $('staff-notdone').value = '';
+      const opt = [...$('staff-dept').options].find(o => sameDept(o.value, dept)); $('staff-dept').value = opt ? opt.value : ''; renderStaff();
+    };
+    $('vw-body').innerHTML = people.length ? `<ul class="pv-list">${people.map(p => `<li>${personLink(p.id, p.name)}${p.jobTitle ? ` <span class="muted small">${escapeHtml(p.jobTitle)}</span>` : ''}</li>`).join('')}</ul>`
+      : '<p class="muted">Nobody active in this department yet. Add people on the Staff tab.</p>';
+    openViewer();
+  }
   $('la-grid').addEventListener('click', e => {
+    const d = e.target.closest('[data-la-people]');
+    if (d) return showDeptPeople(d.dataset.laPeople);
     const b = e.target.closest('[data-la-dept]');
     if (!b) return;
     const ds = b.dataset, t = ds.laTopic && topicById(ds.laTopic);
