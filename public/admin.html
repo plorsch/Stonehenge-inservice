@@ -734,9 +734,17 @@ table.la tr:hover td { background: transparent; }
         </select>
       </div>
       <div style="margin-top:14px">
-        <label class="block" for="quiz-day"><strong>🧠 Quiz-only day</strong> <span class="muted">No lesson that day. Each person gets one question from a topic they did in the past week, ones they missed first. Someone with nothing recent gets a topic their department did this week. It takes the place of that day's scheduled or rotation topic. Required education and new hire topics still come first. Quizzes count toward streaks.</span></label>
-        <select id="quiz-day">
-          <option value="">No quiz day</option>
+        <label class="block" for="quiz-mode"><strong>🧠 Pop quizzes</strong> <span class="muted">No lesson, just one question from a topic the person did recently, ones they missed first. Someone with nothing recent gets a topic their department did lately. A quiz takes the place of that visit's scheduled or rotation topic. Required education and new hire topics still come first. Quizzes count toward streaks.</span></label>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <select id="quiz-mode">
+            <option value="off">Off</option>
+            <option value="every">Every Nth in-service for each person</option>
+            <option value="day">On one weekday for everyone</option>
+          </select>
+          <label id="quiz-every-wrap" hidden>every <input type="number" id="quiz-every" min="2" max="30" value="4" style="width:64px"> in-services <span class="hint">4 means their 4th visit is a quiz, then the 8th, and so on, whatever days they work</span></label>
+        </div>
+        <select id="quiz-day" hidden>
+          <option value="">Pick a day</option>
           <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option>
           <option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
         </select>

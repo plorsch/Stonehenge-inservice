@@ -125,6 +125,7 @@ function defaultSettings() {
     cultureDay: 5,
     // Quiz-only day (0-6, or null for none): no lesson, one question from a topic the person did in the past week.
     quizDay: null,
+    quizEvery: 0,             // pop quiz every Nth in-service for each person (0 = off); fair to people who don't work every day
     quizText: { en: 'This checks something you learned this past week.', es: 'Esto repasa algo que aprendió esta semana.' },
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
@@ -471,11 +472,23 @@ function weeklyPick(key, pool) {
 
 // ---------- Quiz-only day ----------
 const isQuizDay = (date = today()) => Number.isInteger(db.settings.quizDay) && weekday(date) === db.settings.quizDay;
+// Per-person pop quizzes: every Nth in-service, counted since their last quiz. Works for people who only work some days.
+function quizDueFor(emp) {
+  const n = Number(db.settings.quizEvery) || 0;
+  if (!n || !emp) return false;
+  // Only visits since the setting was switched on count, so turning it on doesn't quiz everyone at once.
+  const since0 = db.settings.quizSince || '';
+  const mine = db.responses.filter(r => r.employeeId === emp.id && r.completed && r.date < today() && r.date >= since0).sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));
+  // A day counts once, however many questions they answered that day.
+  const days = new Set(); let lastQuizDay = '';
+  for (const r of mine) { if (r.kind === 'quiz') { lastQuizDay = r.date; days.clear(); } else if (r.date !== lastQuizDay) days.add(r.date); }
+  return days.size >= n - 1 && !db.responses.some(r => r.employeeId === emp.id && r.date === today() && r.kind === 'quiz');
+}
 // One question from a topic this person did in the past 7 days, ones they missed first, then the most recent.
 // A different question than the ones they've already seen from it lately. Someone with nothing recent (new, PRN,
 // back from leave, or not on the roster) gets a topic their department did this week.
-function quizFor(emp, dept) {
-  const from = addDays(today(), -7), now = today();
+function quizFor(emp, dept, days = 7) {
+  const from = addDays(today(), -days), now = today();
   const quizzedToday = new Set(db.responses.filter(r => emp && r.employeeId === emp.id && r.date === now && r.kind === 'quiz').map(r => r.topicId));
   const mine = emp ? db.responses.filter(r => r.employeeId === emp.id && r.completed && r.date >= from && r.date < now && r.kind !== 'quiz') : [];
   const byTopic = {};
@@ -1165,8 +1178,8 @@ async function kioskRoutes(req, res, p, m) {
       if (rv) items.push(kioskItem(findTopic(rv.topicId), emp.id, { kind: 'review', stage: rv.stage, avoid: rv.missed }, who.department));
     }
     // Quiz day: one question from their past week instead of a yearly or regular topic.
-    if (!items.length && isQuizDay()) {
-      const qz = quizFor(emp, who.department);
+    if (!items.length && (isQuizDay() || quizDueFor(emp))) {
+      const qz = quizFor(emp, who.department, isQuizDay() ? 7 : 21);
       if (qz) items.push(kioskItem(qz.topic, who.employeeId, { kind: 'quiz', avoid: qz.avoid, quizFrom: qz.from, quizText: db.settings.quizText }, who.department));
     }
     if (!items.length && emp) {
@@ -1887,6 +1900,11 @@ async function adminRoutes(req, res, p, m, url) {
     const s = db.settings;
     if (['weekly', 'daily', 'random'].includes(b.fallbackMode)) s.fallbackMode = b.fallbackMode;
     if ('quizDay' in b) s.quizDay = Number.isInteger(b.quizDay) && b.quizDay >= 0 && b.quizDay <= 6 ? b.quizDay : null;
+    if ('quizEvery' in b) {
+      const n = Number.isInteger(b.quizEvery) && b.quizEvery >= 2 && b.quizEvery <= 30 ? b.quizEvery : 0;
+      if (n && !s.quizEvery) s.quizSince = today();
+      s.quizEvery = n;
+    }
     if (b.quizText && typeof b.quizText === 'object') s.quizText = { en: cleanText(b.quizText.en, 300) || defaultSettings().quizText.en, es: cleanText(b.quizText.es, 300) || defaultSettings().quizText.es };
     if ('cultureDay' in b) s.cultureDay = Number.isInteger(b.cultureDay) && b.cultureDay >= 0 && b.cultureDay <= 6 ? b.cultureDay : null;
     if ('facilityName' in b) s.facilityName = cleanText(b.facilityName, 100) || 'Stonehenge';
@@ -2181,7 +2199,7 @@ async function adminRoutes(req, res, p, m, url) {
       today: t, start7, days,
       departments: [...depts.values()].sort((a, b) => (b.right + b.missed) - (a.right + a.missed)),
       topMissed: [...missedQ.values()].sort((a, b) => b.missed - a.missed).slice(0, 5),
-      unlistedToday, unfinishedToday, quizzesToday, quizDay: isQuizDay(),
+      unlistedToday, unfinishedToday, quizzesToday, quizDay: isQuizDay(), quizEvery: Number(db.settings.quizEvery) || 0,
       followupsOpen: db.followups.filter(f => !f.attestedAt).length,
       // How many of those are from today's misses; the rest are older ones a leader hasn't closed yet.
       followupsToday: db.followups.filter(f => !f.attestedAt && (db.responses.find(r => r.id === f.responseId) || {}).date === t).length,

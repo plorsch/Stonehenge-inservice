@@ -472,7 +472,7 @@
     const line = (icon, html) => `<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)"><span>${icon}</span><span>${html}</span></div>`;
     $('dash-glance').innerHTML =
       line('🎂', cel.length ? cel.map(c => `${personLink(c.id, c.name)} <span class="muted">(${c.type === 'birthday' ? 'birthday' : c.years + '-year anniversary'})</span>`).join(', ') : '<span class="muted">No birthdays or work anniversaries today</span>') +
-      (dash.quizDay || dash.quizzesToday ? line('🧠', `It's quiz day. <a href="#" data-go="today-quiz">${dash.quizzesToday} pop quiz${dash.quizzesToday === 1 ? '' : 'zes'} done so far</a>`) : '') +
+      (dash.quizDay || dash.quizzesToday ? line('🧠', `${dash.quizDay ? "It's quiz day." : dash.quizEvery ? `Pop quiz every ${dash.quizEvery}th in-service.` : ''} <a href="#" data-go="today-quiz">${dash.quizzesToday} pop quiz${dash.quizzesToday === 1 ? '' : 'zes'} done so far today</a>`) : '') +
       line('🙋', dash.unlistedToday ? `<a href="#" data-go="today-all">${dash.unlistedToday} not on the roster today</a>` : '<span class="muted">Everyone today was on the roster</span>') +
       line('⏸️', dash.unfinishedToday ? `<a href="#" data-go="today-all">${dash.unfinishedToday} started but didn't finish</a>` : '<span class="muted">No unfinished in-services today</span>') +
       (leaderGapHtml(true) ? line('⚠️', `<span style="color:var(--warn)">Follow-up emails can't reach some departments.</span><br>${leaderGapHtml(true)}`) : '') +
@@ -652,6 +652,9 @@
     document.querySelectorAll('input[name=fallback]').forEach(r => { r.checked = r.value === state.settings.fallbackMode; });
     $('culture-day').value = Number.isInteger(state.settings.cultureDay) ? String(state.settings.cultureDay) : '';
     $('quiz-day').value = Number.isInteger(state.settings.quizDay) ? String(state.settings.quizDay) : '';
+    if (document.activeElement !== $('quiz-every')) $('quiz-every').value = String(state.settings.quizEvery || 4);
+    $('quiz-mode').value = Number.isInteger(state.settings.quizDay) ? 'day' : state.settings.quizEvery ? 'every' : 'off';
+    quizModeUi();
     const qt = state.settings.quizText || {};
     if (document.activeElement !== $('quiz-text-en')) $('quiz-text-en').value = qt.en || '';
     if (document.activeElement !== $('quiz-text-es')) $('quiz-text-es').value = qt.es || '';
@@ -680,8 +683,10 @@
   const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const laLabel = { schedule: 'Scheduled', weekly: 'Topic of the week', daily: 'Topic of the day', culture: 'Culture day', random: '', quiz: 'Quiz day' };
   // Quiz day and culture day on the same weekday: say which one wins.
-  function quizClash() { $('quiz-clash').hidden = !($('quiz-day').value !== '' && $('quiz-day').value === $('culture-day').value); }
+  function quizClash() { $('quiz-clash').hidden = !($('quiz-mode').value === 'day' && $('quiz-day').value !== '' && $('quiz-day').value === $('culture-day').value); }
+  function quizModeUi() { const m = $('quiz-mode').value; $('quiz-every-wrap').hidden = m !== 'every'; $('quiz-day').hidden = m !== 'day'; quizClash(); }
   ['quiz-day', 'culture-day'].forEach(id => $(id).addEventListener('change', quizClash));
+  $('quiz-mode').addEventListener('change', quizModeUi);
   async function loadLookAhead() {
     if (!laStart) laStart = mondayOf(state.todayDate);
     try {
@@ -832,9 +837,10 @@
   autoSave($('save-fallback').closest('.card'), async () => {
     const v = document.querySelector('input[name=fallback]:checked');
     if (!v) return;
-    const cd = $('culture-day').value, qd = $('quiz-day').value;
+    const cd = $('culture-day').value, qd = $('quiz-day').value, qm = $('quiz-mode').value;
     await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ fallbackMode: v.value, cultureDay: cd === '' ? null : Number(cd),
-      quizDay: qd === '' ? null : Number(qd), quizText: { en: $('quiz-text-en').value, es: $('quiz-text-es').value } }) });
+      quizDay: qm === 'day' && qd !== '' ? Number(qd) : null, quizEvery: qm === 'every' ? Math.min(30, Math.max(2, Number($('quiz-every').value) || 4)) : 0,
+      quizText: { en: $('quiz-text-en').value, es: $('quiz-text-es').value } }) });
     await refresh();
   }, [$('save-fallback')]);
 
