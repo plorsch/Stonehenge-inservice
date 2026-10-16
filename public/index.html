@@ -697,11 +697,13 @@
     const meId = s.who && s.who.employeeId;
     return g.slice().sort((a, b) => (b.id === meId) - (a.id === meId)).map(l => `<div class="${l.id === meId ? 'me' : ''}"><b>${label}</b><span class="nm">${escapeHtml(l.name)}${l.id === meId ? T(' (you!)', ' (¡usted!)') : ''}${deptTag(l)}</span><span>🔥 ${l.streak}${T(' days in a row', ' días seguidos')}</span></div>`).join('');
   }
-  // The end screen shows 3 people, then a "See everyone" tap for the rest (your own row always shows).
+  // The end screen fills 3 spots, then a "See everyone" tap for the rest (your own row always shows).
+  // Ties fill the spots: everyone tied for first is first, so a 5-way tie shows all 5 and nothing below them.
   function boardRows(g) {
     const meId = s.who && s.who.employeeId;
     const rows = g.flatMap((p, i) => p.slice().sort((a, b) => (b.id === meId) - (a.id === meId)).map(l => [MEDALS[i] || `${i + 1}.`, l]));
-    const hide = ([, l], i) => i >= 3 && l.id !== meId;
+    let cut = 0; for (const p of g) { cut += p.length; if (cut >= 3) break; }
+    const hide = ([, l], i) => i >= cut && l.id !== meId;
     return rows.map(([label, l], i) => tierRow(label, [l]).replace('<div class="', `<div ${hide([label, l], i) ? 'hidden ' : ''}class="`)).join('')
       + (rows.some(hide) ? `<button type="button" class="lb-all" data-action="board-all">${T(`See everyone (${rows.length}) ▾`, `Ver a todos (${rows.length}) ▾`)}</button>` : '');
   }
