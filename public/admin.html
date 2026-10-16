@@ -650,6 +650,16 @@ table.la tr:hover td { background: transparent; }
           <div class="rows-ed" id="an-anniv-msgs"></div><button class="btn subtle" id="add-anniv">+ Add an anniversary message</button></div>
       </div>
       <div class="toolbar" style="margin-top:10px"><button class="btn" id="an-save-msgs">Save messages</button><button class="btn ghost" data-show-preview="birthday">🎂 Play the birthday screen</button><button class="btn ghost" data-show-preview="anniversary">🎉 Play the anniversary screen</button></div>
+      <h3 style="margin-top:18px">Missed their day?</h3>
+      <label style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="checkbox" id="an-belated"> Still celebrate someone who wasn't in on their day, if they come in within <input type="number" id="an-belated-days" min="1" max="30" value="7" style="width:64px"> days after it</label>
+      <div class="muted small" style="margin-top:6px">They get a belated message on their first in-service back (once), with these messages instead of the ones above. Nothing shows early, so the real day still gets the real celebration.</div>
+      <div class="grid" style="margin-top:10px">
+        <div><label class="block">🎂 Belated birthday messages <span class="hint">{name} = first name</span></label>
+          <div class="rows-ed" id="an-bbday-msgs"></div><button class="btn subtle" id="add-bbday">+ Add a belated birthday message</button></div>
+        <div><label class="block">🎉 Belated anniversary messages <span class="hint">{years} = years worked, {name} = first name</span></label>
+          <div class="rows-ed" id="an-banniv-msgs"></div><button class="btn subtle" id="add-banniv">+ Add a belated anniversary message</button></div>
+      </div>
+      <div class="toolbar" style="margin-top:10px"><button class="btn ghost" data-show-preview="belated-birthday">🎂 Play the belated birthday screen</button><button class="btn ghost" data-show-preview="belated-anniversary">🎉 Play the belated anniversary screen</button></div>
       <h3 style="margin-top:14px">Coming up in the next 30 days</h3>
       <div id="an-upcoming" class="up-list"></div>
     </div>

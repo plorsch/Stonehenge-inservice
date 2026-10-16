@@ -3133,7 +3133,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   $('add-dept').addEventListener('click', () => focusLast(addDeptRow()));
   $('add-closing').addEventListener('click', () => focusLast(addClosingRow()));
   $('add-leader').addEventListener('click', () => focusLast(addLeaderRow()));
-  ['set-depts', 'set-leaders', 'set-closing', 'an-bday-msgs', 'an-anniv-msgs'].forEach(id => $(id).addEventListener('click', e => { const x = e.target.closest('.re-x:not(.cm-toggle):not(.cm-look)'); if (x) x.closest('.re-row').remove(); }));
+  ['set-depts', 'set-leaders', 'set-closing', 'an-bday-msgs', 'an-anniv-msgs', 'an-bbday-msgs', 'an-banniv-msgs'].forEach(id => $(id).addEventListener('click', e => { const x = e.target.closest('.re-x:not(.cm-toggle):not(.cm-look)'); if (x) x.closest('.re-row').remove(); }));
   $('set-leaders').addEventListener('input', e => {
     const i = e.target;
     if ((i.placeholder || '').includes('@')) i.classList.toggle('bad', !!i.value.trim() && (i.value.replace(EMAIL_RE, '').replace(/[\s,;]/g, '') !== ''));
@@ -3301,8 +3301,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <td style="white-space:nowrap"><button class="btn subtle" data-prev-ann="${a.id}">👁 Preview</button> <button class="btn subtle" data-edit-ann="${a.id}">✏️ Edit</button> <button class="btn subtle danger" data-del-ann="${a.id}">Remove</button></td></tr>`;
     }).join('') || '<tr><td colspan="4" class="muted">No announcements yet.</td></tr>';
     $('an-celebrate').checked = state.settings.celebrations !== false;
+    const bl = state.settings.belated || {};
+    $('an-belated').checked = !!bl.on;
+    if (document.activeElement !== $('an-belated-days')) $('an-belated-days').value = bl.days || 7;
     renderStreakSettings();
-    for (const [id, key, ph] of [['an-bday-msgs', 'birthdayMessages', 'Happy birthday, {name}!'], ['an-anniv-msgs', 'anniversaryMessages', 'Happy {years}-year anniversary, {name}!']]) {
+    for (const [id, key, ph] of [['an-bday-msgs', 'birthdayMessages', 'Happy birthday, {name}!'], ['an-anniv-msgs', 'anniversaryMessages', 'Happy {years}-year anniversary, {name}!'],
+      ['an-bbday-msgs', 'belatedBirthdayMessages', 'Happy belated birthday, {name}!'], ['an-banniv-msgs', 'belatedAnniversaryMessages', 'Happy belated {years}-year anniversary, {name}!']]) {
       if ($(id).contains(document.activeElement)) continue;
       $(id).innerHTML = '';
       (state.settings[key] || []).forEach(m => addClosingRow(m, $(id), ph));
@@ -3443,9 +3447,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   });
   $('add-bday').addEventListener('click', () => focusLast(addClosingRow('', $('an-bday-msgs'), 'Happy birthday, {name}!')));
   $('add-anniv').addEventListener('click', () => focusLast(addClosingRow('', $('an-anniv-msgs'), 'Happy {years}-year anniversary, {name}!')));
+  $('add-bbday').addEventListener('click', () => focusLast(addClosingRow('', $('an-bbday-msgs'), 'Happy belated birthday, {name}!')));
+  $('add-banniv').addEventListener('click', () => focusLast(addClosingRow('', $('an-banniv-msgs'), 'Happy belated {years}-year anniversary, {name}!')));
   // Plays the real iPad last screen (confetti, balloons, leaderboard) with a pretend person. Unsaved messages are included.
   function previewLastScreen(show) {
-    try { localStorage.setItem('previewDraft', JSON.stringify({ messages: { birthdayMessages: closingValues($('an-bday-msgs')), anniversaryMessages: closingValues($('an-anniv-msgs')) },
+    try { localStorage.setItem('previewDraft', JSON.stringify({ messages: { birthdayMessages: closingValues($('an-bday-msgs')), anniversaryMessages: closingValues($('an-anniv-msgs')),
+      belatedBirthdayMessages: closingValues($('an-bbday-msgs')), belatedAnniversaryMessages: closingValues($('an-banniv-msgs')) },
       streaks: { board: $('sk-board').value, top: Number($('sk-top').value) } })); } catch { /* preview uses saved messages */ }
     const w = window.open('/admin/preview?show=' + show, 'inservice-preview', 'width=820,height=1080');
     if (w) w.focus();
@@ -3453,7 +3460,9 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   document.addEventListener('click', e => { const b = e.target.closest('[data-show-preview]'); if (b) previewLastScreen(b.dataset.showPreview); });
   autoSave($('an-save-msgs').closest('.card'), async () => {
     await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ celebrations: $('an-celebrate').checked,
-      birthdayMessages: closingValues($('an-bday-msgs')), anniversaryMessages: closingValues($('an-anniv-msgs')) }) });
+      belated: { on: $('an-belated').checked, days: Number($('an-belated-days').value) || 7 },
+      birthdayMessages: closingValues($('an-bday-msgs')), anniversaryMessages: closingValues($('an-anniv-msgs')),
+      belatedBirthdayMessages: closingValues($('an-bbday-msgs')), belatedAnniversaryMessages: closingValues($('an-banniv-msgs')) }) });
     await refresh();
   }, [$('an-save-msgs')]);
 
@@ -3604,7 +3613,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   // Bold, italic, underline and strikethrough buttons for text the iPad shows.
   // They wrap the selected words in **, *, __ or ~~, which the iPad turns into the style.
   const FMT_FIELDS = '#f-lesson, #f-es-lesson, .q-text, .q-es-text, #an-text';
-  const FMT_GROUPS = '#set-closing, #an-bday-msgs, #an-anniv-msgs';
+  const FMT_GROUPS = '#set-closing, #an-bday-msgs, #an-anniv-msgs, #an-bbday-msgs, #an-banniv-msgs';
   const FMT_MARKS = { b: '**', i: '*', u: '__', s: '~~' };
   let lastFmt = null;
   function applyFmt(field, kind) {

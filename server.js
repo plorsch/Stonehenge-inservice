@@ -150,6 +150,11 @@ function defaultSettings() {
     birthdayMessages: ['Happy birthday, {name}! We hope your day is as great as you are.', 'Happy birthday, {name}! Thanks for spending part of your special day with us.',
       'Happy birthday, {name}! Our residents and team are lucky to have you.', 'It\'s your day, {name}! Happy birthday from all of us.'],
     anniversaryMessages: ['Happy {years}-year anniversary, {name}! Thank you for being here.', '{years} years, {name}! Thank you for everything you do.'],
+    // Belated wishes: someone who wasn't in on their day gets one on their first in-service back, within this many days.
+    belated: { on: false, days: 7 },
+    belatedBirthdayMessages: ['Happy belated birthday, {name}! We missed you on your day, so we\'re celebrating you now.', 'Happy belated birthday, {name}! Your day may have passed, but we still wanted to wish you a great one.',
+      'A little late, but just as heartfelt: happy birthday, {name}!'],
+    belatedAnniversaryMessages: ['Happy belated {years}-year anniversary, {name}! Thank you for being here.', 'We missed your work anniversary, {name}, so here it is a little late: {years} years. Thank you!'],
     // Sign-off lines shown on the kiosk's final screen; one is picked at random each time.
     closingMessages: ["Have a great shift!", "Thank you for what you do for our residents!", "Go give someone a shout out today, would ya?", "You make a difference!", "Our residents are lucky to have you.", "Thanks for learning something new today.", "Small moments of kindness add up. Thank you!", "You're the reason this place feels like home.", "Go make someone smile today!", "Teamwork makes the dream work. Have a great one!", "Thanks for showing up for our residents today.", "Your care matters more than you know.", "Proud to work alongside you!", "Take a deep breath. You've got this!", "Remember to drink some water today, too!", "Someone's day is better because you're here.", "Thanks for being part of the Stonehenge family.", "Kindness is contagious. Spread some today!", "You did it! Now go be awesome.", "Every resident you greet by name feels at home. Thank you!", "Thanks for keeping our residents safe.", "High five! Have a wonderful shift."],
     dailyPicks: {},           // { department: { date, topicId } }
@@ -954,6 +959,26 @@ function celebrationsOn(date) {
   return out;
 }
 const todaysCelebrations = () => celebrationsOn(today());
+// Belated birthday or anniversary for one person: their day was within the last N days, they didn't do an in-service
+// on the day itself, and this is their first in-service since (no completed responses from the day after through today).
+function belatedFor(emp) {
+  const bl = db.settings.belated || {};
+  if (!emp || !bl.on || !db.settings.celebrations) return [];
+  const days = Math.min(30, Math.max(1, Number(bl.days) || 7));
+  const t = today(), out = [];
+  const doneOn = d => db.responses.some(r => r.employeeId === emp.id && r.completed && r.date === d);
+  for (let i = 1; i <= days; i++) {
+    const d = addDays(t, -i);
+    const mine = celebrationsOn(d).filter(c => c.id === emp.id);
+    if (!mine.length) continue;
+    if (doneOn(d)) continue;
+    let back = false;
+    for (let j = i - 1; j >= 0; j--) if (doneOn(addDays(t, -j))) { back = true; break; }
+    if (back) continue;
+    for (const c of mine) out.push(Object.assign(c, { belated: true, daysAgo: i }));
+  }
+  return out;
+}
 
 // ---------- Kiosk routes (no login) ----------
 
@@ -1123,7 +1148,7 @@ async function kioskRoutes(req, res, p, m) {
     const month = previewMonth || new Date().getMonth() + 1;
     const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
     return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, fitScreen: s.fitScreen !== false, closingMessages: s.closingMessages, decor,
-      announcements: todaysAnnouncements(), newsSeconds: s.newsSeconds || 3, streaks: publicStreaks(), birthdayMessages: s.birthdayMessages, anniversaryMessages: s.anniversaryMessages, celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
+      announcements: todaysAnnouncements(), newsSeconds: s.newsSeconds || 3, streaks: publicStreaks(), birthdayMessages: s.birthdayMessages, anniversaryMessages: s.anniversaryMessages, belatedBirthdayMessages: s.belatedBirthdayMessages, belatedAnniversaryMessages: s.belatedAnniversaryMessages, celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
   }
 
   // Step 1: last 4 of Workday ID -> who might this be?
@@ -1191,7 +1216,7 @@ async function kioskRoutes(req, res, p, m) {
       const r = regularTopicFor(who.department);
       if (r.topic) items.push(kioskItem(r.topic, who.employeeId, { kind: r.source === 'schedule' ? 'scheduled' : 'rotation', scheduleId: r.scheduleId || null }, who.department));
     }
-    return send(res, 200, { who: Object.assign(who, { firstName: who.name.split(' ')[0] }), items, popups: popupsFor(who) });
+    return send(res, 200, { who: Object.assign(who, { firstName: who.name.split(' ')[0], belated: belatedFor(emp) }), items, popups: popupsFor(who) });
   }
 
   // "Got it" on a pop-up announcement, or the button they picked (like "RSVP Yes"). A new pick replaces the old one.
@@ -1913,6 +1938,9 @@ async function adminRoutes(req, res, p, m, url) {
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
     if ('fitScreen' in b) s.fitScreen = !!b.fitScreen;
     if ('celebrations' in b) s.celebrations = !!b.celebrations;
+    if (b.belated && typeof b.belated === 'object') { const n = Math.round(Number(b.belated.days)); s.belated = { on: !!b.belated.on, days: n >= 1 && n <= 30 ? n : (s.belated || {}).days || 7 }; }
+    if (Array.isArray(b.belatedBirthdayMessages)) s.belatedBirthdayMessages = b.belatedBirthdayMessages.slice(0, 300).map(cleanMessage).filter(Boolean);
+    if (Array.isArray(b.belatedAnniversaryMessages)) s.belatedAnniversaryMessages = b.belatedAnniversaryMessages.slice(0, 300).map(cleanMessage).filter(Boolean);
     if (b.review && typeof b.review === 'object') {
       const days = (v, d) => { const n = Math.round(Number(v)); return n >= 1 && n <= 60 ? n : d; };
       s.review = { on: !!b.review.on, firstDays: days(b.review.firstDays, s.review.firstDays), secondDays: days(b.review.secondDays, s.review.secondDays) };

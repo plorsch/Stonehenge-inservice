@@ -651,8 +651,8 @@
     return ann.concat(cel);
   }
   function personalLine(who) {
-    const mine = who && who.employeeId && (s.config.celebrations || []).filter(c => c.id === who.employeeId);
-    if (!mine || !mine.length) return '';
+    const mine = myCelebrations(who);
+    if (!mine.length) return '';
     const first = (who.name || '').split(' ')[0];
     // Lines starting with "Department:" go only to that department; if there are any for theirs, they get one of those.
     const depts = (s.config.departments || []).map(d => d.toLowerCase());
@@ -666,7 +666,9 @@
     };
     const years = (mine.find(c => c.type === 'anniversary') || {}).years || '';
     const fill = t => String(t || '').replace(/\{name\}/gi, first).replace(/\{years\}/gi, years);
-    const msgs = mine.map(c => c.type === 'birthday' ? [bday(c.id || c.name), pick(s.config.birthdayMessages, 'Happy birthday, {name}!')] : ['🎉', pick(s.config.anniversaryMessages, 'Happy {years}-year anniversary, {name}!')]);
+    const msgs = mine.map(c => c.type === 'birthday'
+      ? [bday(c.id || c.name), c.belated ? pick(s.config.belatedBirthdayMessages, 'Happy belated birthday, {name}!') : pick(s.config.birthdayMessages, 'Happy birthday, {name}!')]
+      : ['🎉', c.belated ? pick(s.config.belatedAnniversaryMessages, 'Happy belated {years}-year anniversary, {name}!') : pick(s.config.anniversaryMessages, 'Happy {years}-year anniversary, {name}!')]);
     // One message keeps its own style and GIF; a birthday and anniversary on the same day join, styled like the first.
     const first0 = msgs[0][1];
     const text = msgs.map(([icon, m]) => `${icon} ${fill(messageText(m))}`).join(' ');
@@ -1057,18 +1059,22 @@
   }
 
   // ----- birthday / work anniversary party on the last screen -----
+  // Today's celebrations for this person, plus a belated one (their day was recently and this is their first time back).
   function myCelebrations(who) {
-    return who && who.employeeId ? (s.config.celebrations || []).filter(c => c.id === who.employeeId) : [];
+    if (!who || !who.employeeId) return [];
+    return (s.config.celebrations || []).filter(c => c.id === who.employeeId).concat(who.belated || []);
   }
   let confettiRun = 0;
   function celebrate(list) {
     const first = (s.who.name || '').split(' ')[0];
-    const bdayToday = list.some(c => c.type === 'birthday'), anniv = list.find(c => c.type === 'anniversary');
+    const bd = list.find(c => c.type === 'birthday'), bdayToday = !!bd, anniv = list.find(c => c.type === 'anniversary');
+    const late = bdayToday ? bd.belated : anniv && anniv.belated;   // their day already passed; this is their first time back
     $('party-emoji').textContent = bdayToday ? '🎂' : '🏅';
-    $('party-title').textContent = bdayToday ? T(`Happy Birthday, ${first}!`, `¡Feliz cumpleaños, ${first}!`)
-      : T(`Happy ${anniv.years}-Year Anniversary, ${first}!`, `¡Feliz aniversario de ${anniv.years} año${anniv.years == 1 ? '' : 's'}, ${first}!`);
+    $('party-title').textContent = bdayToday ? (late ? T(`Happy Belated Birthday, ${first}!`, `¡Feliz cumpleaños atrasado, ${first}!`) : T(`Happy Birthday, ${first}!`, `¡Feliz cumpleaños, ${first}!`))
+      : T(`Happy ${late ? 'Belated ' : ''}${anniv.years}-Year Anniversary, ${first}!`, `¡Feliz aniversario${late ? ' atrasado' : ''} de ${anniv.years} año${anniv.years == 1 ? '' : 's'}, ${first}!`);
     $('party-sub').textContent = bdayToday && anniv ? T(`And happy ${anniv.years}-year work anniversary too! 🎉`, `¡Y feliz aniversario de trabajo! 🎉`)
-      : bdayToday ? T('The whole team is celebrating you today 🎉', 'Todo el equipo lo celebra hoy 🎉') : T('Thank you for everything you do 💛', 'Gracias por todo lo que hace 💛');
+      : bdayToday ? (late ? T("We missed you on your day, so we're celebrating you now 🎉", 'No estuvo en su día, ¡así que lo celebramos ahora! 🎉') : T('The whole team is celebrating you today 🎉', 'Todo el equipo lo celebra hoy 🎉'))
+      : late ? T('A few days late, but thank you for everything you do 💛', 'Un poco tarde, pero gracias por todo lo que hace 💛') : T('Thank you for everything you do 💛', 'Gracias por todo lo que hace 💛');
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     floatUp(bdayToday ? ['🎈', '🎈', '🎈', '🎁', '🎈', '🥳', '🎈', '🎂', '🎈', '🎈', '🎈', '🎉'] : ['🎉', '⭐', '🏅', '🎊', '⭐', '💛', '🎉', '⭐', '🏆', '🎊']);
     confetti();
@@ -1239,6 +1245,8 @@
     }
     cfg.celebrations = previewShow === 'birthday' ? [{ type: 'birthday', id: 'preview', name: 'Maria L', department: dept }]
       : previewShow === 'anniversary' ? [{ type: 'anniversary', id: 'preview', name: 'Maria L', department: dept, years: 5 }] : [];
+    s.who.belated = previewShow === 'belated-birthday' ? [{ type: 'birthday', id: 'preview', name: 'Maria L', department: dept, belated: true, daysAgo: 3 }]
+      : previewShow === 'belated-anniversary' ? [{ type: 'anniversary', id: 'preview', name: 'Maria L', department: dept, years: 5, belated: true, daysAgo: 3 }] : [];
     if (previewShow === 'leaders') {
       const k = st(cfg);
       const demo = [{ id: 'p1', name: 'Jasmine R', department: 'Nursing', streak: 14 }, { id: 'preview', name: 'Maria L', department: dept, streak: 9 }, { id: 'p3', name: 'Tom B', department: 'Dietary', streak: 6 }];
