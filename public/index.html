@@ -680,6 +680,8 @@
   const tiers = list => { const m = new Map(); list.forEach(l => { const k = l.department && list.byDept ? l.department : l.streak; if (!m.has(k)) m.set(k, []); m.get(k).push(l); }); return [...m.values()]; };
   const byDept = list => Object.assign(list.slice(), { byDept: true });
   const MEDALS = ['🥇', '🥈', '🥉'];
+  // Places skip after a tie: two people tied for first, then the next person is third.
+  const placeLabels = g => { let ahead = 0; return g.map(p => { const l = MEDALS[ahead] || `${ahead + 1}.`; ahead += p.length; return l; }); };
   function tierNames(people, html) {
     const me = s.who && s.who.employeeId, list = people.slice().sort((a, b) => (b.id === me) - (a.id === me));
     return list.map(l => html ? `<span class="nm">${escapeHtml(l.name)}${l.id === me ? T(' (you!)', ' (¡usted!)') : ''}</span>` : l.name).join(html ? ' · ' : ', ');
@@ -697,12 +699,13 @@
     const meId = s.who && s.who.employeeId;
     return g.slice().sort((a, b) => (b.id === meId) - (a.id === meId)).map(l => `<div class="${l.id === meId ? 'me' : ''}"><b>${label}</b><span class="nm">${escapeHtml(l.name)}${l.id === meId ? T(' (you!)', ' (¡usted!)') : ''}${deptTag(l)}</span><span>🔥 ${l.streak}${T(' days in a row', ' días seguidos')}</span></div>`).join('');
   }
-  // The end screen fills 3 spots, then a "See everyone" tap for the rest (your own row always shows).
-  // Ties fill the spots: everyone tied for first is first, so a 5-way tie shows all 5 and nothing below them.
+  // The end screen fills 3 spots (ties fill spots, so 2 tied for first + 1 third is three people), never more than
+  // 5 rows, then a "See everyone" tap for the rest. Your own row always shows.
   function boardRows(g) {
-    const meId = s.who && s.who.employeeId;
-    const rows = g.flatMap((p, i) => p.slice().sort((a, b) => (b.id === meId) - (a.id === meId)).map(l => [MEDALS[i] || `${i + 1}.`, l]));
+    const meId = s.who && s.who.employeeId, labels = placeLabels(g);
+    const rows = g.flatMap((p, i) => p.slice().sort((a, b) => (b.id === meId) - (a.id === meId)).map(l => [labels[i], l]));
     let cut = 0; for (const p of g) { cut += p.length; if (cut >= 3) break; }
+    cut = Math.min(cut, 5);
     const hide = ([, l], i) => i >= cut && l.id !== meId;
     return rows.map(([label, l], i) => tierRow(label, [l]).replace('<div class="', `<div ${hide([label, l], i) ? 'hidden ' : ''}class="`)).join('')
       + (rows.some(hide) ? `<button type="button" class="lb-all" data-action="board-all">${T(`See everyone (${rows.length}) ▾`, `Ver a todos (${rows.length}) ▾`)}</button>` : '');
@@ -710,7 +713,8 @@
   // The 🏆 button: the full leaderboard, ranked the way it's set in admin.
   function renderBoard() {
     const str = st(s.config), g = tiers(str.leaders);
-    const html = (g.length ? `<div class="leaders"><h3>${str.leaders.length === 1 ? 'Facility leader' : g.length === 1 ? 'Facility leaders' : 'Top streaks'}</h3>${g.map((p, i) => tierRow(MEDALS[i] || `${i + 1}.`, p)).join('')}</div>` : '') +
+    const labels = placeLabels(g);
+    const html = (g.length ? `<div class="leaders"><h3>${str.leaders.length === 1 ? 'Facility leader' : g.length === 1 ? 'Facility leaders' : 'Top streaks'}</h3>${g.map((p, i) => tierRow(labels[i], p)).join('')}</div>` : '') +
       (str.deptLeaders.length ? `<div class="leaders"><h3>Department leaders</h3>${tiers(byDept(str.deptLeaders)).map(p => `<div><b style="width:auto;min-width:140px">${escapeHtml(p[0].department)}</b><span>${tierNames(p, true)}</span><span>🔥 ${p[0].streak}</span></div>`).join('')}</div>` : '');
     $('board-lists').innerHTML = html || '<p style="margin-top:18px">No one has 3 days in a row yet. Be the first!</p>';
   }
