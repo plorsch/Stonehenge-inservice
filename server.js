@@ -3,6 +3,7 @@
 // Data lives in ./data/db.json (or $DATA_DIR/db.json), with daily backups in ./data/backups/.
 
 const http = require('http');
+const webpush = require('./webpush');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -226,6 +227,7 @@ function upgradeDb(d) {
   d.popupSeen = Array.isArray(d.popupSeen) ? d.popupSeen : [];
   d.clockMisses = Array.isArray(d.clockMisses) ? d.clockMisses : [];   // [{ employeeId, date }] clocked in, no in-service that shift (from the Clock-in check); breaks streaks   // [{ id, employeeId, at, choice? }] who tapped "Got it" (or a custom button like "RSVP Yes") on a pop-up
   d.followups = Array.isArray(d.followups) ? d.followups : [];
+  d.push = Object.assign({ vapid: null, subs: [] }, d.push || {});
   d.emailLog = Array.isArray(d.emailLog) ? d.emailLog : [];
   d.admins = Array.isArray(d.admins) ? d.admins : [];
   d.sessionSecret = d.sessionSecret || crypto.randomBytes(32).toString('hex');   // signs the admin sign-in cookie
@@ -1165,10 +1167,47 @@ async function sendEmail(to, subject, html, kind) {
 }
 const when = iso => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 // Someone typed their name because they aren't on the roster: one email per name per day.
+// ---- Phone alerts (web push to the admin home-screen app): a notification plus the red badge count.
+function pushKeys() {
+  if (!db.push.vapid) { db.push.vapid = webpush.generateVapidKeys(); saveDb(); }
+  return db.push.vapid;
+}
+// What the badge should say: open follow-ups, plus one if the iPad has gone quiet.
+function badgeCount() {
+  return db.followups.filter(f => !f.attestedAt).length + (kioskIsQuiet() ? 1 : 0);
+}
+function kioskIsQuiet() {
+  const limit = Number(db.settings.kioskQuietMin) || 0;
+  if (!limit) return false;
+  const last = kioskSeen && kioskSeen.at ? Date.parse(kioskSeen.at) : Date.parse(serverStartedAt);
+  return Date.now() - last > Math.max(5, limit) * 60000;
+}
+async function notifyAdmins(title, body, { tag = 'inservice', url = '/admin', badge } = {}) {
+  const subs = db.push.subs || [];
+  if (!subs.length) return { sent: 0 };
+  const keys = pushKeys();
+  const payload = { title, body, tag, url, badge: badge == null ? badgeCount() : badge };
+  let sent = 0, dropped = false;
+  for (const s of subs.slice()) {
+    const r = await webpush.sendPush(s, payload, keys, { subject: 'mailto:' + (MAIL.from || 'admin@example.com') });
+    if (r.ok) { sent++; s.lastOk = nowIso(); delete s.lastError; }
+    else { s.lastError = `${r.status || ''} ${r.error || ''}`.trim().slice(0, 120); if (r.gone) { db.push.subs = db.push.subs.filter(x => x !== s); dropped = true; } }
+  }
+  saveDb();
+  return { sent, dropped };
+}
+// The iPad going quiet: one alert per quiet spell, checked every few minutes.
+let quietAlerted = false;
+setInterval(() => {
+  const quiet = kioskIsQuiet();
+  if (quiet && !quietAlerted) { quietAlerted = true; notifyAdmins('iPad has gone quiet', `The in-service iPad hasn't checked in for over ${db.settings.kioskQuietMin} minutes. Check that it's charged, on Wi-Fi, and showing the in-service page.`, { tag: 'kiosk-quiet', url: '/admin#today' }).catch(() => {}); }
+  if (!quiet) quietAlerted = false;
+}, 3 * 60000).unref();
 function alertUnlisted(r) {
   if (r.verified || r.alerted || !(db.settings.alertEmails || []).length) return;
   r.alerted = true;
   if (db.responses.some(x => x !== r && !x.verified && x.date === r.date && sameText(x.name, r.name))) return;
+  notifyAdmins('Not on the roster', `${r.name} (${r.department || 'no department'}) did an in-service but isn't on the staff list.`, { tag: 'unlisted', url: '/admin#staff' }).catch(() => {});
   sendEmail(db.settings.alertEmails, `Not on the roster: ${r.name} did an in-service`, emailHtml(`${r.name} isn't on the staff roster`, [
     ['Name typed', r.name], ['Last 4 typed', r.last4], ['Department', r.department], ['Topic', r.topicTitle], ['When', when(r.submittedAt)],
     ['What to do', 'Add them on the Staff tab of the admin page so their in-services count toward their record.']
@@ -1196,6 +1235,7 @@ function followUpMiss(r) {
   db.followups.push(f);
   saveDb();
   if (f.emailedTo.length && db.settings.missedFollowup) emailFollowup(f, false).catch(() => {});
+  notifyAdmins('Needs follow-up', `${f.name} missed "${plainText(f.question)}" on the first try. ${f.leader ? f.leader + ' has been asked to follow up.' : 'No leader is set for ' + (f.department || 'their department') + '.'}`, { tag: 'followup', url: '/admin#reports' }).catch(() => {});
 }
 // The employee's own quiz link: a separate token from the leader's attest link, so the employee can't mark themselves
 // educated without actually passing. Made on demand so older follow-ups get one too.
@@ -1259,6 +1299,7 @@ function emailQuizResult(f) {
         <div style="margin-top:10px"><a href="${esc(siteUrl() + '/attest/' + o.token)}" style="display:inline-block;background:#1f5f7a;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px">I've educated ${esc(o.name.split(' ')[0])}</a> <a href="${esc(siteUrl() + '/attest/' + o.token)}" style="display:inline-block;color:#1f5f7a;padding:8px 10px;font-size:13px;text-decoration:underline">message to send them</a></div></div>`).join('')}</div>`
     : `<div style="margin-top:22px;background:#e3f4ea;color:#1e7a4c;border-radius:12px;padding:14px;text-align:center;font-weight:bold">🎉 Nobody else is waiting on you. All caught up!</div>`;
   const subject = ok ? `✅ ${f.name} got the makeup quiz right` : `❌ ${f.name} missed the makeup quiz`;
+  notifyAdmins(subject, ok ? `${n === 1 ? 'The question' : `All ${n} questions`} right on the first try.` : `Missed ${miss} of ${n} on the first try. It will come back as a spaced review.`, { tag: 'quiz', url: '/admin#reports' }).catch(() => {});
   return sendEmail(f.emailedTo, subject, emailShell(banner + details + missed + list, { preheader: subject }), 'quiz result');
 }
 function emailFollowup(f, reminder) {
@@ -2420,6 +2461,7 @@ async function adminRoutes(req, res, p, m, url) {
     for (const k of stillMissed) followUpClockMiss(k.split('|')[0], k.split('|')[1]);
     for (const k of clearedKeys) db.followups = db.followups.filter(f => !(f.kind === 'clockin' && !f.attestedAt && `${f.employeeId}|${f.date}` === k));
     if (added || cleared) saveDb();
+    if (added) notifyAdmins('Missed clock-ins', `${added} ${added === 1 ? 'person' : 'people'} clocked in without doing the in-service. Their leaders have follow-ups.`, { tag: 'clockin', url: '/admin#reports' }).catch(() => {});
     const streaksBroken = db.settings.clockMissBreaks !== false ? new Set([...stillMissed].map(k => k.split('|')[0])).size : 0;
     return send(res, 200, Object.assign(out, { missesSaved: stillMissed.size, missesAdded: added, missesCleared: cleared, streaksBroken }));
   }
@@ -2551,7 +2593,7 @@ async function adminRoutes(req, res, p, m, url) {
       departments: [...depts.values()].sort((a, b) => (b.right + b.missed) - (a.right + a.missed)),
       topMissed: [...missedQ.values()].sort((a, b) => b.missed - a.missed).slice(0, 5),
       unlistedToday, unfinishedToday, quizzesToday, quizDay: isQuizDay(), quizEvery: Number(db.settings.quizEvery) || 0,
-      followupsOpen: db.followups.filter(f => !f.attestedAt).length,
+      followupsOpen: db.followups.filter(f => !f.attestedAt).length, badge: badgeCount(),
       // How many of those are from today's misses; the rest are older ones a leader hasn't closed yet.
       followupsToday: db.followups.filter(f => !f.attestedAt && (f.kind === 'clockin' ? f.date : (db.responses.find(r => r.id === f.responseId) || {}).date) === t).length,
       celebrationsToday: db.settings.celebrations ? todaysCelebrations() : []
@@ -2578,6 +2620,28 @@ async function adminRoutes(req, res, p, m, url) {
     }
     saveDb();
     return send(res, 200, { ok: true, count: picked.length });
+  }
+  // Phone alerts: the browser subscribes with our public key; we keep the subscription and push to it.
+  if (m === 'GET' && p === '/api/admin/push') {
+    return send(res, 200, { publicKey: pushKeys().publicKey, badge: badgeCount(), subs: (db.push.subs || []).map(s => ({ id: s.id, device: s.device, user: s.user, createdAt: s.createdAt, lastOk: s.lastOk || null, lastError: s.lastError || '' })) });
+  }
+  if (m === 'POST' && p === '/api/admin/push/subscribe') {
+    const b = await readBody(req), sub = b.subscription || {};
+    if (!sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth || !/^https:\/\//.test(sub.endpoint)) return send(res, 400, { error: 'That subscription is not valid.' });
+    db.push.subs = (db.push.subs || []).filter(s => s.endpoint !== sub.endpoint);
+    const s = { id: newId(), endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth) }, device: cleanText(b.device, 80) || 'Device', user: req.adminUser || 'admin', createdAt: nowIso() };
+    db.push.subs.push(s); saveDb();
+    const r = await webpush.sendPush(s, { title: 'Alerts are on 🔔', body: "You'll get a badge and a note here when someone needs a follow-up or the iPad goes quiet.", tag: 'hello', url: '/admin', badge: badgeCount() }, pushKeys(), { subject: 'mailto:' + (MAIL.from || 'admin@example.com') });
+    return send(res, 200, { ok: true, id: s.id, hello: r.ok, error: r.ok ? '' : r.error });
+  }
+  if (m === 'POST' && p === '/api/admin/push/unsubscribe') {
+    const b = await readBody(req);
+    db.push.subs = (db.push.subs || []).filter(s => s.id !== String(b.id || '') && s.endpoint !== String(b.endpoint || '')); saveDb();
+    return send(res, 200, { ok: true });
+  }
+  if (m === 'POST' && p === '/api/admin/push/test') {
+    const r = await notifyAdmins('Test alert', `This is what an alert looks like. Right now ${badgeCount()} ${badgeCount() === 1 ? 'thing needs' : 'things need'} attention.`, { tag: 'test' });
+    return send(res, 200, r);
   }
   if (m === 'GET' && p === '/api/admin/followups') {
     return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, quizToken, ...f }) => Object.assign(f, f.attestedAt ? {} : { message: employeeMessage(db.followups.find(x => x.id === f.id)) })), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30), selfQuiz: selfQuizSettings(), selfQuizDefaults: defaultSettings().selfQuiz, msgFields: MSG_FIELDS,

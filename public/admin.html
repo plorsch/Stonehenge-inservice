@@ -1156,6 +1156,13 @@ table.la tr:hover td { background: transparent; }
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="save-email">Save email settings</button><button class="btn ghost" id="test-email">Send a test email</button></div>
         <details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Recent emails</summary><div id="em-log" class="small"></div></details>
       </div>
+      <div class="card" data-tile="push" data-title="Phone alerts">
+        <h2>Phone alerts</h2>
+        <div class="muted small">A red badge on the app icon and a notification on your phone when someone needs a follow-up, someone not on the roster does an in-service, a makeup quiz comes back, or the iPad goes quiet. On iPhone, first add this page to your home screen (📲 at the top), open it from there, then tap the button.</div>
+        <div id="push-status" class="small" style="margin-top:8px"></div>
+        <div class="toolbar" style="margin-top:10px"><button class="btn" id="push-on">🔔 Turn on alerts on this device</button><button class="btn ghost" id="push-test">Send a test alert</button></div>
+        <div id="push-devices" class="small" style="margin-top:10px"></div>
+      </div>
       <div class="card" data-tile="backup" data-title="Backup">
         <h2>Backup</h2>
         <div class="muted small">Download a copy at least weekly and keep it somewhere safe.</div>

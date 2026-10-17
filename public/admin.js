@@ -467,6 +467,7 @@
     const older = dash.followupsOpen - (dash.followupsToday || 0);
     $('tile-fu').querySelector('.lbl').textContent = dash.followupsOpen && older ? `waiting on a leader follow-up (${dash.followupsToday || 0} from today, ${older} older)` : 'waiting on a leader follow-up';
     $('tile-fu').classList.toggle('alert', dash.followupsOpen > 0);
+    setBadge(dash.badge);
     $('tile-missed').classList.toggle('alert', state.missedToday > 0);
     drawDays(dash.days);
     drawDepts(dash.departments);
@@ -2997,7 +2998,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     bar.innerHTML = `<span class="lay-help" hidden>${LAYOUT_HELP}</span><button class="btn ghost lay-reset" hidden>Reset to default</button><button class="btn ghost lay-edit">✥ Edit layout</button>`;
     return bar;
   };
-  const settingsLayout = makeLayout('settings', $('set-grid'), [['kiosk', 6], ['email', 6], ['depts', 12], ['closing', 12], ['logins', 6], ['password', 6], ['backup', 6], ['decor', 12]], $('lay-bar'));
+  const settingsLayout = makeLayout('settings', $('set-grid'), [['kiosk', 6], ['email', 6], ['push', 6], ['depts', 12], ['closing', 12], ['logins', 6], ['password', 6], ['backup', 6], ['decor', 12]], $('lay-bar'));
   // Other tabs: their cards become tiles. Ids come from each card's heading, so they stay the same between visits.
   function tileTab(page, blocks) {
     const sec = $('tab-' + page);
@@ -3059,6 +3060,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('set-alert-emails').value = (s.alertEmails || []).join('\n');
     $('set-missed-followup').checked = s.missedFollowup !== false;
     loadEmailStatus();
+    loadPush();
     $('pw-form').hidden = !!state.passwordFromEnv && main;
     $('pw-form').querySelector('.muted').innerHTML = main ? 'Used to open this admin page. The username is <code>admin</code>.' : `You're signed in as <code>${escapeHtml(state.me || '')}</code>. Change your own password here.`;
     // Nothing to change here when the hosting service sets the main password; the Admin logins card says so instead.
@@ -3304,6 +3306,55 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   // Hidden tabs can't lay out the frame, so it loads when Settings is opened.
   document.getElementById('nav').addEventListener('click', () => setTimeout(() => { const f = $('el-frame'); if (f.offsetParent && !f.src) endLayoutPreview(); }, 50));
   autoSave($('save-layout').closest('.card'), saveSettings, [$('save-layout')]);
+  // ---------- phone alerts (web push + app badge) ----------
+  // The badge on the home-screen icon follows the open count whenever the app is open; pushes keep it current in between.
+  function setBadge(n) {
+    if (!('setAppBadge' in navigator)) return;
+    (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+  }
+  const pushStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const pushReg = () => 'serviceWorker' in navigator ? navigator.serviceWorker.register('/admin-sw.js', { scope: '/admin' }) : Promise.reject(new Error('no sw'));
+  if ('serviceWorker' in navigator) pushReg().catch(() => {});
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const deviceName = () => { const ua = navigator.userAgent; const kind = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android phone' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows PC' : 'Device'; return kind; };
+  async function loadPush() {
+    try {
+      const r = await api('/api/admin/push');
+      let mine = null;
+      try { const reg = await navigator.serviceWorker.getRegistration('/admin'); mine = reg && await reg.pushManager.getSubscription(); } catch { /* no push here */ }
+      const supported = 'PushManager' in window && 'Notification' in window;
+      $('push-status').innerHTML = !supported ? (isIOS && !pushStandalone() ? '<span class="pill warn">Add to home screen first</span> <span class="muted">Alerts on iPhone only work from the home-screen app (iOS 16.4 or newer).</span>' : '<span class="pill warn">This browser can\'t do alerts</span>')
+        : Notification.permission === 'denied' ? '<span class="pill warn">Blocked</span> <span class="muted">Alerts were turned off in this device\'s settings for this site.</span>'
+        : mine ? '<span class="pill good">On for this device</span>' : '<span class="muted">Not on for this device yet.</span>';
+      $('push-on').hidden = !supported || !!mine; $('push-test').hidden = !r.subs.length;
+      $('push-devices').innerHTML = r.subs.length ? '<div class="muted" style="margin-bottom:4px">Devices getting alerts:</div>' + r.subs.map(s => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:3px 0"><span>📱 <strong>${escapeHtml(s.device)}</strong> <span class="muted">${escapeHtml(s.user)} · since ${fmtDate(s.createdAt.slice(0, 10))}${s.lastError ? ' · <span class="pill warn" title="' + escapeHtml(s.lastError) + '">last push failed</span>' : ''}</span></span><button class="btn subtle" data-push-rm="${s.id}">Remove</button></div>`).join('') : '';
+      if (r.badge != null) setBadge(r.badge);
+    } catch { /* leave as is */ }
+  }
+  $('push-on').addEventListener('click', async () => {
+    try {
+      if (isIOS && !pushStandalone()) { alert('On iPhone, alerts only work from the home-screen app. Tap 📲 at the top, add it to your home screen, open it from there, then come back here.'); return; }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { alert('Alerts were not allowed. You can turn them on in your phone\'s Settings for this app.'); return; }
+      const reg = await pushReg(); await navigator.serviceWorker.ready;
+      const { publicKey } = await api('/api/admin/push');
+      const key = Uint8Array.from(atob(publicKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      const r = await post('/api/admin/push/subscribe', { subscription: sub.toJSON(), device: deviceName() });
+      toast(r.hello ? 'Alerts are on. You should see a hello notification.' : 'Saved. The first push did not go through: ' + (r.error || 'unknown'));
+    } catch (err) { alert('Could not turn on alerts: ' + (err.message || err)); }
+    loadPush();
+  });
+  $('push-test').addEventListener('click', async () => {
+    try { const r = await post('/api/admin/push/test'); toast(`Sent to ${r.sent} device${r.sent === 1 ? '' : 's'}.`); } catch (err) { alert(err.message); }
+    loadPush();
+  });
+  $('push-devices').addEventListener('click', async e => {
+    const b = e.target.closest('[data-push-rm]'); if (!b) return;
+    if (!await confirm('Stop sending alerts to this device?', 'Remove')) return;
+    try { await post('/api/admin/push/unsubscribe', { id: b.dataset.pushRm }); try { const reg = await navigator.serviceWorker.getRegistration('/admin'); const s = reg && await reg.pushManager.getSubscription(); if (s) await s.unsubscribe(); } catch { /* ignore */ } } catch (err) { alert(err.message); }
+    loadPush();
+  });
   // ---------- email alerts and follow-ups ----------
   async function loadEmailStatus() {
     try {
