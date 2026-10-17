@@ -3324,6 +3324,14 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     loadEmailStatus();
   });
   let fuList = [];
+  // The makeup quiz result, obvious at a glance: green = right first try, red = missed, follow up again.
+  function fuQuizLine(f) {
+    const q = f.quiz;
+    if (!q || !q.finishedAt) return q ? `<div class="fu-quiz muted small">Makeup quiz started, not finished</div>` : '';
+    if (q.firstTry) return `<div class="fu-quiz ok">🟢 Makeup quiz: right first try</div>`;
+    const miss = (q.missed || []).map(x => `${escapeHtml(x.question)}\nThey answered: ${escapeHtml(x.answered)}\nCorrect: ${escapeHtml(x.correct)}`).join('\n\n');
+    return `<div class="fu-quiz bad" title="${miss}">🔴 Makeup quiz: missed ${q.missed.length} of ${q.total}${f.attestedAt ? '' : ' · follow up again'}</div>`;
+  }
   async function loadFollowups() {
     try {
       const { followups, emailReady, selfQuiz, selfQuizDefaults, msgFields, sampleMessage, sampleMissMessage } = await api('/api/admin/followups');
@@ -3352,8 +3360,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         ${f.kind === 'clockin' ? `<td><span class="pill warn">Missed clock-in</span> ${escapeHtml(f.question)}<div class="muted small">Topic that day: ${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle || 'not known')}</div></td>`
           : `<td><a href="#" data-fu-open="${f.responseId}">${escapeHtml(f.question)}</a><div class="muted small">${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle)}</div><div class="fu-first">Answered: ${escapeHtml(f.firstAnswer)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>`}
         <td class="small">${escapeHtml(f.leader || '')}${f.emailedTo.length ? `<div class="muted">✉ ${escapeHtml(f.emailedTo.join(', '))}</div>` : '<div class="muted">No leader email</div>'}</td>
-        <td>${f.attestedAt ? `<span class="pill good">✓ Educated</span><div class="muted small">${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}</div><a href="#" class="small" data-fu-undo="${f.id}">Undo</a>`
-          : `<div class="fu-acts"><button class="btn subtle" data-fu-attest="${f.id}">✓ Mark educated</button><button class="btn subtle" data-fu-remind="${f.id}" title="Email the leader a reminder">✉ Remind</button><button class="btn subtle" data-fu-msg="${f.id}" title="Copy a message with a quiz link to send them. Passing it marks this educated.">📋 Message</button>${f.kind === 'clockin' ? `<button class="btn subtle" data-fu-excuse="${f.id}" title="Not a real miss: remove it and give the streak back">Excuse</button>` : ''}</div>${(f.reminders || []).length ? `<div class="muted small">Reminded ${f.reminders.length}×, last ${fmtWhen(f.reminders[f.reminders.length - 1])}</div>` : ''}`}</td></tr>`).join('')
+        <td>${fuQuizLine(f)}${f.attestedAt ? `<span class="pill good">✓ Educated</span><div class="muted small">${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}</div><a href="#" class="small" data-fu-undo="${f.id}">Undo</a>`
+          : `<div class="fu-acts"><button class="btn subtle" data-fu-attest="${f.id}">✓ Mark educated</button><button class="btn subtle" data-fu-remind="${f.id}" title="Email the leader a reminder">✉ Remind</button><button class="btn subtle" data-fu-msg="${f.id}" title="Copy a message with a quiz link to send them. Right on the first try marks this educated; a miss emails the leader to follow up again.">📋 Message</button>${f.kind === 'clockin' ? `<button class="btn subtle" data-fu-excuse="${f.id}" title="Not a real miss: remove it and give the streak back">Excuse</button>` : ''}</div>${(f.reminders || []).length ? `<div class="muted small">Reminded ${f.reminders.length}×, last ${fmtWhen(f.reminders[f.reminders.length - 1])}</div>` : ''}`}</td></tr>`).join('')
         || `<tr><td colspan="6" class="muted">${fv === 'open' ? 'Nothing waiting. Everyone is caught up. 🎉' : 'None yet.'}</td></tr>`;
     } catch (err) { fail(err); }
   }

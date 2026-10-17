@@ -1110,6 +1110,21 @@ function smtpSend(to, subject, html) {
   });
 }
 // Text without the **bold**, *italic*, __underline__ and ~~strike~~ marks, for emails, CSV and lists.
+// Lesson text as safe HTML (same rules as public/format.js: **bold** *italic* __underline__ ~~strike~~, "- " bullets, blank line = paragraph).
+const inlineHtml = t => esc(t).replace(/\*\*(?=\S)(.+?)\*\*/g, '<strong>$1</strong>').replace(/__(?=\S)(.+?)__/g, '<u>$1</u>').replace(/~~(?=\S)(.+?)~~/g, '<s>$1</s>').replace(/(^|[^*\w])\*(?=\S)([^*]+?)\*(?![*\w])/g, '$1<em>$2</em>');
+function lessonHtml(text) {
+  const out = []; let para = [], list = [];
+  const flushPara = () => { if (para.length) { out.push('<p>' + para.map(inlineHtml).join('<br>') + '</p>'); para = []; } };
+  const flushList = () => { if (list.length) { out.push('<ul>' + list.map(li => '<li>' + inlineHtml(li) + '</li>').join('') + '</ul>'); list = []; } };
+  for (const raw of String(text || '').split('\n')) {
+    const line = raw.trim();
+    if (/^[-•*]\s+/.test(line)) { flushPara(); list.push(line.replace(/^[-•*]\s+/, '')); }
+    else if (!line) { flushPara(); flushList(); }
+    else { flushList(); para.push(line); }
+  }
+  flushPara(); flushList();
+  return out.join('');
+}
 const plainText = t => String(t || '').replace(/\*\*(?=\S)(.+?)\*\*/g, '$1').replace(/__(?=\S)(.+?)__/g, '$1').replace(/~~(?=\S)(.+?)~~/g, '$1').replace(/(^|[^*\w])\*(?=\S)([^*]+?)\*(?![*\w])/g, '$1$2');
 const emailsIn = text => [...new Set((String(text || '').match(/[^\s<>,;:"'()]+@[^\s<>,;:"'()]+\.[a-z]{2,}/gi) || []).map(e => e.toLowerCase()))];
 function leaderFor(dept) {
@@ -1207,8 +1222,32 @@ function sampleFollowup() {
 function messageBlockHtml(f) {
   return `<div style="border:1px dashed #9fb3c0;border-radius:10px;padding:12px 14px;margin:14px 0;background:#fff">
     <div style="font-weight:bold;color:#1f5f7a">Or let them do it themselves</div>
-    <div style="color:#5b6b78;font-size:13px;margin:2px 0 8px">Copy this and send it to ${esc(f.name.split(' ')[0])}. When they pass the quiz at that link, this follow-up is marked educated for you.</div>
+    <div style="color:#5b6b78;font-size:13px;margin:2px 0 8px">Copy this and send it to ${esc(f.name.split(' ')[0])}. If they get it right on the first try, this follow-up is marked educated for you. If they miss, you get an email to follow up in person.</div>
     <div style="white-space:pre-line;background:#f3f6f8;border-radius:8px;padding:10px 12px;font-size:14px">${esc(employeeMessage(f))}</div></div>`;
+}
+// After the employee finishes the makeup quiz: one email to the leader, green or red at a glance.
+function emailQuizResult(f) {
+  const q = f.quiz, first = f.name.split(' ')[0], ok = q.firstTry;
+  const n = q.total, miss = (q.missed || []).length;
+  // Everyone else this leader still owes a follow-up, so one email is the whole to-do list.
+  const others = db.followups.filter(o => o !== f && !o.attestedAt && (o.emailedTo || []).some(e => f.emailedTo.includes(e))).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const banner = ok
+    ? `<div style="background:#1e7a4c;color:#fff;border-radius:12px;padding:18px 20px;font-size:20px;font-weight:bold">✅ ${esc(f.name)} got the makeup quiz right<div style="font-size:14px;font-weight:normal;margin-top:4px;opacity:.9">${n === 1 ? 'The question' : `All ${n} questions`} right on the first try. Marked educated, nothing more to do.</div></div>`
+    : `<div style="background:#b23b3b;color:#fff;border-radius:12px;padding:18px 20px;font-size:20px;font-weight:bold">❌ ${esc(f.name)} missed the makeup quiz<div style="font-size:14px;font-weight:normal;margin-top:4px;opacity:.9">Missed ${miss} of ${n} on the first try (they got it right after ${q.tries} tries). Please follow up with ${esc(first)} in person, then tap the button below.</div></div>`;
+  const missed = ok ? '' : `<div style="margin:16px 0"><div style="font-weight:bold;color:#1f5f7a;margin-bottom:6px">What ${esc(first)} missed</div>${q.missed.map(x => `<div style="border:1px solid #dbe3e9;border-radius:10px;padding:10px 12px;margin-bottom:8px"><div><strong>${esc(x.question)}</strong></div><div style="color:#b23b3b">They answered: ${esc(x.answered)}</div><div style="color:#1e7a4c">Correct: ${esc(x.correct)}</div></div>`).join('')}</div>`;
+  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1d2b36;max-width:600px">${banner}
+    <table style="border-collapse:collapse;margin-top:14px"><tr><td style="padding:4px 14px 4px 0;color:#5b6b78">Staff</td><td style="padding:4px 0">${esc(f.name)}${f.department ? ' (' + esc(f.department) + ')' : ''}</td></tr>
+    <tr><td style="padding:4px 14px 4px 0;color:#5b6b78">Topic</td><td style="padding:4px 0">${esc(f.topicTitle || 'Not known')}</td></tr>
+    <tr><td style="padding:4px 14px 4px 0;color:#5b6b78">About</td><td style="padding:4px 0">${esc(f.question)}</td></tr>
+    <tr><td style="padding:4px 14px 4px 0;color:#5b6b78">Finished</td><td style="padding:4px 0">${esc(when(q.finishedAt))}</td></tr></table>
+    ${missed}
+    ${ok ? '' : `<p style="margin:22px 0"><a href="${esc(siteUrl() + '/attest/' + f.token)}" style="background:#1f5f7a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">I've followed up with ${esc(first)}</a></p>`}
+    ${others.length ? `<div style="margin-top:22px;border-top:1px solid #dbe3e9;padding-top:14px"><div style="font-weight:bold;color:#1f5f7a;margin-bottom:6px">Still waiting on you: ${others.length} ${others.length === 1 ? 'person' : 'people'}</div>
+      ${others.map(o => `<div style="border:1px solid #dbe3e9;border-radius:10px;padding:10px 12px;margin-bottom:8px"><strong>${esc(o.name)}</strong>${o.department ? ` <span style="color:#5b6b78">(${esc(o.department)})</span>` : ''} <span style="color:#5b6b78;font-size:13px">· ${esc(when(o.createdAt))}</span>
+        <div style="font-size:14px;margin-top:2px">${esc(o.question)}${o.quiz && o.quiz.finishedAt ? (o.quiz.firstTry ? '' : ' <span style="color:#b23b3b;font-weight:bold">· missed the makeup quiz</span>') : ''}</div>
+        <div style="margin-top:8px;font-size:14px"><a href="${esc(siteUrl() + '/attest/' + o.token)}" style="color:#1f5f7a;font-weight:bold">I've educated ${esc(o.name.split(' ')[0])}</a> · <a href="${esc(siteUrl() + '/attest/' + o.token)}" style="color:#5b6b78">message to send them</a></div></div>`).join('')}</div>` : `<p style="color:#1e7a4c;font-weight:bold;margin-top:22px">🎉 Nobody else is waiting on you. All caught up!</p>`}
+    <p style="color:#5b6b78;font-size:12px;margin-top:24px">Sent by the ${esc(db.settings.facilityName || 'Stonehenge')} in-service kiosk.</p></div>`;
+  return sendEmail(f.emailedTo, ok ? `✅ ${f.name} got the makeup quiz right` : `❌ ${f.name} missed the makeup quiz, please follow up`, html, 'quiz result');
 }
 function emailFollowup(f, reminder) {
   if (f.kind === 'clockin') return sendEmail(f.emailedTo, `${reminder ? 'Reminder: please' : 'Please'} follow up: ${f.name} clocked in without doing the in-service`, clockFollowupHtml(f, reminder), reminder ? 'reminder' : 'follow-up');
@@ -1233,7 +1272,7 @@ function quizHtml(topic, { answers = true } = {}) {
   const qs = (topic.questions || []).slice(0, 10);
   return `<div style="border:1px solid #dbe3e9;border-radius:10px;padding:12px 14px;margin:14px 0;background:#f8fafb">
     <div style="font-weight:bold;color:#1f5f7a">${esc(topic.title)}</div>
-    ${topic.lesson ? `<div style="margin:6px 0 10px;white-space:pre-line">${esc(plainText(topic.lesson))}</div>` : ''}
+    ${topic.lesson ? `<div style="margin:6px 0 10px">${lessonHtml(topic.lesson)}</div>` : ''}
     ${qs.map((q, i) => `<div style="margin-top:10px"><strong>${i + 1}. ${esc(plainText(q.text))}</strong>${q.type === 'multi' ? ' <span style="color:#5b6b78;font-size:13px">(select all that apply)</span>' : ''}
       <ul style="margin:4px 0 0 18px;padding:0">${[...(q.correctAnswers || []), ...(q.wrongAnswers || [])].map(a => `<li>${esc(a)}${answers && (q.correctAnswers || []).includes(a) ? ' <span style="color:#1e7a4c;font-weight:bold">✓ correct</span>' : ''}</li>`).join('')}</ul></div>`).join('')}
   </div>`;
@@ -1290,7 +1329,7 @@ function attestPage(f) {
   <div id="box">${done ? `<p class="ok">✓ Educated. Confirmed by ${esc(f.attestedBy)} on ${esc(when(f.attestedAt))}.</p>`
     : `<label style="display:block;margin-top:16px">Your name<input id="by" autocomplete="name" value="${esc(f.leader)}"></label><button id="go">✓ I've educated them</button>
   <div style="border:1px dashed #9fb3c0;border-radius:10px;padding:12px 14px;margin-top:18px"><div style="font-weight:700;color:#1f5f7a">Or let them do it themselves</div>
-  <div style="color:#5b6b78;font-size:13px;margin:2px 0 8px">Send ${esc(f.name.split(' ')[0])} this message. When they pass the quiz at that link, this is marked educated for you.</div>
+  <div style="color:#5b6b78;font-size:13px;margin:2px 0 8px">Send ${esc(f.name.split(' ')[0])} this message. Right on the first try marks this educated; a miss emails you to follow up in person.</div>
   <div id="msg" style="white-space:pre-line;background:#f3f6f8;border-radius:8px;padding:10px 12px;font-size:14px">${esc(employeeMessage(f))}</div>
   <button id="copy" type="button" style="background:#fff;color:#1f5f7a;border:1px solid #1f5f7a;margin-top:10px">📋 Copy message</button></div>`}</div></div>
   <script>var c=document.getElementById('copy');if(c)c.onclick=function(){var t=document.getElementById('msg').innerText;function ok(){c.textContent='✓ Copied'}
@@ -1317,17 +1356,18 @@ function quizPage(f, { preview = false } = {}) {
   const facility = esc(db.settings.facilityName || 'Stonehenge');
   const sq = selfQuizSettings();
   const n = qs.length;
-  const body = f.attestedAt ? `<div class="done"><div class="big">🎉</div><h1>All set, ${first}!</h1><p>This one is already marked done${f.attestedBy ? ' (' + esc(f.attestedBy) + ')' : ''}. Nothing else to do.</p></div>`
+  const body = f.attestedAt || (f.quiz && f.quiz.finishedAt) ? `<div class="done"><div class="big">🎉</div><h1>All set, ${first}!</h1><p>${f.attestedAt ? `This one is already marked done${f.attestedBy ? ' (' + esc(f.attestedBy) + ')' : ''}.` : 'You already finished this quiz.'} Nothing else to do.</p></div>`
     : !topic || !n ? `<div class="done"><div class="big">🤔</div><h1>Hmm.</h1><p>This topic isn't available any more. Please check with ${esc(f.leader || 'your leader')}.</p></div>`
     : `<div class="hello"><div class="kicker">${f.kind === 'clockin' ? 'Quick catch-up' : 'Quick refresher'}</div><h1>Hi ${first}! 👋</h1>
     <p>${f.kind === 'clockin' ? `Looks like the in-service got skipped on ${esc(fmtDay(f.date))}. No big deal.` : `You missed one on this topic the other day. Happens to everyone.`}
     Read the short lesson, answer ${n === 1 ? 'the question' : `the ${n} questions`} below, and you're all caught up. It takes about a minute.</p></div>
-  <div class="lesson"><div class="kicker">📖 ${esc(topic.title)}</div>${topic.lesson ? `<div class="lesson-text">${esc(plainText(topic.lesson))}</div>` : ''}</div>
-  <form id="qf">${qs.map((q, i) => `<fieldset data-q="${esc(q.id)}"><div class="qhead"><span class="qnum">${i + 1}</span><legend>${esc(plainText(q.text))}${q.type === 'multi' ? ' <span class="multi">Select all that apply</span>' : ''}</legend></div>
+  <div class="lesson"><div class="kicker">📖 ${esc(topic.title)}</div>${topic.lesson ? `<div class="lesson-text">${lessonHtml(topic.lesson)}</div>` : ''}</div>
+  <form id="qf">${qs.map((q, i) => `<fieldset data-q="${esc(q.id)}"><div class="qhead"><span class="qnum">${i + 1}</span><legend>${inlineHtml(q.text)}${q.type === 'multi' ? ' <span class="multi">Select all that apply</span>' : ''}</legend></div>
     ${shuffle(choicesFor(q).map(a => a.en)).map(a => `<label><input type="${q.type === 'multi' ? 'checkbox' : 'radio'}" name="q${i}" value="${esc(a)}"><span class="mark"></span><span class="txt">${esc(a)}</span></label>`).join('')}
     <div class="hint" hidden></div></fieldset>`).join('')}
   <button id="go" type="submit">Check my answers</button></form>`;
   const doneHtml = `<div class="done"><div class="big">🎉</div><h1>Nice work, ${first}!</h1><p>You got ${n === 1 ? 'it' : 'them all'} right and you're all caught up.${f.kind === 'clockin' && sq.reminder ? ' ' + esc(sq.reminder) : ''}</p><p class="small">You can close this page.</p></div>`;
+  const doneRetryHtml = `<div class="done"><div class="big">👍</div><h1>You got there, ${first}!</h1><p>All correct now. Since the first try had a miss, ${esc(f.leader || 'your leader')} may check in with you on this one. Nothing else to do here.</p><p class="small">You can close this page.</p></div>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${facility} in-service quiz</title><link rel="icon" href="/admin-icon-192.png">
   <style>:root{--brand:#1f5f7a;--brand-dark:#174a60;--soft:#e4f0f5;--ink:#1d2b36;--muted:#5b6b78;--line:#dbe3e9;--good:#1e7a4c;--good-soft:#e3f4ea;--warn:#a4521b;--warn-soft:#fbeee2}
   *{box-sizing:border-box}body{font:17px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,var(--soft) 0,#f3f6f8 260px);color:var(--ink);margin:0;min-height:100vh}
@@ -1335,7 +1375,7 @@ function quizPage(f, { preview = false } = {}) {
   header .fac{font-weight:700;color:var(--brand);font-size:15px;letter-spacing:.3px}${preview ? 'header .fac::after{content:" · PREVIEW";color:var(--warn)}' : ''}
   main{max-width:560px;margin:0 auto;padding:18px 14px 40px}.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px 20px;box-shadow:0 6px 24px rgba(31,95,122,.08)}
   .kicker{text-transform:uppercase;letter-spacing:1.4px;font-size:12px;font-weight:700;color:var(--brand);margin-bottom:6px}h1{font-size:26px;color:var(--brand);margin:0 0 8px;line-height:1.2}.hello p{margin:0;color:var(--ink)}
-  .lesson{background:var(--soft);border-radius:14px;padding:14px 16px;margin:18px 0 22px}.lesson .kicker{margin-bottom:4px}.lesson-text{white-space:pre-line}
+  .lesson{background:var(--soft);border-radius:14px;padding:14px 16px;margin:18px 0 22px}.lesson .kicker{margin-bottom:4px}.lesson-text p{margin:0 0 10px}.lesson-text p:last-child,.lesson-text ul:last-child{margin-bottom:0}.lesson-text ul{margin:0 0 10px;padding-left:22px}
   fieldset{border:0;padding:0;margin:0 0 22px}.qhead{display:flex;gap:10px;align-items:flex-start;margin-bottom:8px}.qnum{flex:none;width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;margin-top:1px}
   legend{font-weight:700;padding:0;float:left}.multi{display:inline-block;background:#fff3c4;color:#6b4e00;font-size:12px;font-weight:700;border-radius:999px;padding:1px 10px;margin-left:6px;vertical-align:middle;text-transform:uppercase;letter-spacing:.6px}
   label{display:flex;gap:12px;align-items:center;padding:12px 14px;border:2px solid var(--line);border-radius:14px;margin:8px 0;cursor:pointer;background:#fff;transition:border-color .12s,background .12s}
@@ -1353,7 +1393,7 @@ function quizPage(f, { preview = false } = {}) {
   var b=document.getElementById('go');b.disabled=true;
   fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:answers})}).then(function(r){return r.json()}).then(function(d){
   if(d.error){alert(d.error);b.disabled=false;return}
-  if(d.passed){document.querySelector('.card').innerHTML=${JSON.stringify(doneHtml)};window.scrollTo(0,0);return}
+  if(d.passed){document.querySelector('.card').innerHTML=d.firstTry===false?${JSON.stringify(doneRetryHtml)}:${JSON.stringify(doneHtml)};window.scrollTo(0,0);return}
   sets.forEach(function(s,i){var r=d.results[i];s.classList.toggle('wrong',!r.correct);s.classList.toggle('right',r.correct);var h=s.querySelector('.hint');
   if(r.correct){h.hidden=true;s.querySelectorAll('input').forEach(function(x){x.disabled=true})}else{h.hidden=false;h.textContent='Not quite. '+(r.hint?'Hint: '+r.hint:'Have another look at the lesson and try again.');s.querySelectorAll('input').forEach(function(x){x.checked=false})}});
   b.disabled=false;b.textContent='Try again';var w=f.querySelector('fieldset.wrong');if(w)w.scrollIntoView({behavior:'smooth',block:'center'})}).catch(function(){b.disabled=false;alert('Could not check. Please try again.')})}</script></body></html>`;
@@ -2695,7 +2735,7 @@ async function handle(req, res) {
     const f = db.followups.find(x => x.quizToken === qz[1]);
     if (!f) return send(res, 404, '<p style="font-family:sans-serif">This quiz link is no longer valid.</p>', 'text/html; charset=utf-8');
     if (m === 'POST') {
-      if (f.attestedAt) return send(res, 200, { passed: true, results: [] });
+      if (f.attestedAt || (f.quiz && f.quiz.finishedAt)) return send(res, 200, { passed: true, results: [], firstTry: f.quiz ? f.quiz.firstTry : true });
       const b = await readBody(req);
       const { qs } = quizQuestionsFor(f);
       const given = Array.isArray(b.answers) ? b.answers : [];
@@ -2703,11 +2743,22 @@ async function handle(req, res) {
       const results = qs.map((q, i) => {
         const chosen = cleanList(Array.isArray(given[i].answer) ? given[i].answer : [given[i].answer], 500, 8);
         const correct = String(given[i].questionId) === q.id && isRightAnswer(q, chosen);
-        return { correct, hint: correct ? '' : (q.hint || '') };
+        return { correct, hint: correct ? '' : (q.hint || ''), chosen, q };
       });
       const passed = results.every(r => r.correct);
-      if (passed) { f.attestedAt = nowIso(); f.attestedBy = `${f.name} (passed the quiz online)`; f.quizPassedAt = f.attestedAt; syncMissHandled(f); saveDb(); }
-      return send(res, 200, { passed, results });
+      // The first submit is the one that counts: right on the first try = educated; a miss = the leader follows up again.
+      if (!f.quiz) {
+        f.quiz = { startedAt: nowIso(), firstTry: passed, total: qs.length,
+          missed: results.filter(r => !r.correct).map(r => ({ question: plainText(r.q.text), answered: r.chosen.join(', '), correct: r.q.correctAnswers.join(', ') })) };
+      }
+      f.quiz.tries = (f.quiz.tries || 0) + 1;
+      if (passed) {
+        f.quiz.finishedAt = nowIso();
+        if (f.quiz.firstTry) { f.attestedAt = f.quiz.finishedAt; f.attestedBy = `${f.name} (passed the makeup quiz on the first try)`; syncMissHandled(f); }
+        saveDb();
+        if (f.emailedTo.length) emailQuizResult(f).catch(() => {});
+      } else saveDb();
+      return send(res, 200, { passed, results: results.map(({ correct, hint }) => ({ correct, hint })), firstTry: f.quiz.firstTry });
     }
     return send(res, 200, quizPage(f), 'text/html; charset=utf-8');
   }

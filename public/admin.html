@@ -114,6 +114,9 @@
   #fu-card .fu-acts { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
   #fu-card .fu-acts .btn.subtle { padding: 3px 6px; font-size: 13px; white-space: nowrap; }
   #fu-card .fu-first { font-size: 13px; color: var(--muted); }
+  #fu-card .fu-quiz { font-size: 13px; font-weight: 700; margin-bottom: 4px; white-space: nowrap; }
+  #fu-card .fu-quiz.ok { color: var(--good, #1e7a4c); }
+  #fu-card .fu-quiz.bad { color: #b23b3b; }
   .sk-head { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; }
   .sk-icon { width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg,#ffb36b,#ff6b6b); display: grid; place-items: center; font-size: 24px; flex: none; }
   .sk-grid { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 18px; }
@@ -993,7 +996,7 @@ table.la tr:hover td { background: transparent; }
     </div>
     <div class="card" id="sq-card">
       <h2>Employee quiz link</h2>
-      <div class="muted small">Every follow-up comes with a message you can send the person (📋 Message on the row, and in the leader's email). The link opens a short quiz on their phone: the lesson, then a question or two with no answers shown. Passing it marks them educated. This is what the message says and how long the quiz is.</div>
+      <div class="muted small">Every follow-up comes with a message you can send the person (📋 Message on the row, and in the leader's email). The link opens a short quiz on their phone: the lesson, then a question or two with no answers shown. Right on the first try marks them educated and emails the leader a green result; a miss emails the leader a red one to follow up in person. This is what the message says and how long the quiz is.</div>
       <div class="toolbar" style="margin-top:10px">
         <label>Quiz length <select id="sq-count"><option value="1">1 question</option><option value="2">2 questions</option><option value="3">3 questions</option></select></label>
         <a class="btn ghost" id="sq-preview" href="/admin/quiz-preview" target="_blank" rel="noopener">👀 Preview the quiz page</a>
