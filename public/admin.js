@@ -3347,20 +3347,19 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('push-prefs').hidden = !prefs;
     if (!prefs) return;
     document.querySelectorAll('#push-prefs [data-pp]').forEach(c => { c.checked = !!prefs[c.dataset.pp]; });
-    document.querySelectorAll('#push-prefs [name=pp-scope]').forEach(r => { r.checked = r.value === (prefs.scope === 'mine' ? 'mine' : 'all'); });
+    $('pp-mine').checked = prefs.scope === 'mine';
     const all = [...new Set([...depts(), ...(prefs.depts || [])])];
-    $('pp-depts').innerHTML = all.map(d => `<label><input type="checkbox" value="${escapeHtml(d)}"${(prefs.depts || []).some(x => sameDept(x, d)) ? ' checked' : ''}> ${escapeHtml(d)}</label>`).join('') || '<span class="muted">Add departments in Settings first.</span>';
-    $('pp-depts').style.opacity = prefs.scope === 'mine' ? '' : '.5';
+    $('pp-depts').innerHTML = all.map(d => `<label class="pp"><span>${escapeHtml(d)}</span><span class="sw"><input type="checkbox" value="${escapeHtml(d)}"${(prefs.depts || []).some(x => sameDept(x, d)) ? ' checked' : ''}><i></i></span></label>`).join('') || '<span class="muted">Add departments in Settings first.</span>';
+    $('pp-depts').hidden = prefs.scope !== 'mine';
   }
   function prefsFromForm() {
-    const p = { scope: (document.querySelector('#push-prefs [name=pp-scope]:checked') || {}).value || 'all', depts: checked($('pp-depts')) };
+    const p = { scope: $('pp-mine').checked ? 'mine' : 'all', depts: checked($('pp-depts')) };
     document.querySelectorAll('#push-prefs [data-pp]').forEach(c => { p[c.dataset.pp] = c.checked; });
     return p;
   }
   let ppTimer = null;
   $('push-prefs').addEventListener('change', e => {
-    if (e.target.closest('#pp-depts') && !document.querySelector('#push-prefs [name=pp-scope][value=mine]').checked) document.querySelector('#push-prefs [name=pp-scope][value=mine]').checked = true;
-    $('pp-depts').style.opacity = document.querySelector('#push-prefs [name=pp-scope][value=mine]').checked ? '' : '.5';
+    $('pp-depts').hidden = !$('pp-mine').checked;
     clearTimeout(ppTimer);
     ppTimer = setTimeout(async () => {
       try { $('pp-saved').textContent = 'Saving…'; const r = await post('/api/admin/push/prefs', { endpoint: myEndpoint, prefs: prefsFromForm() }); $('pp-saved').textContent = 'Saved ✓'; setBadge(r.badge); loadPush(); }

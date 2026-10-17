@@ -336,8 +336,17 @@ table.la tr:hover td { background: transparent; }
 .sp-msg .cm-row { grid-template-columns: 1fr 34px 34px !important; }
 .sp-msg .cm-row > .re-x:last-child { display: none; }
   .sp-today { color: var(--good, #1e7a4c); font-weight: 700; font-size: 13px; }
-  #push-prefs .pp { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0; font-size: 14px; }
-  #push-prefs .pp input { margin-top: 3px; }
+  #push-prefs .pp { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin: 0; padding: 9px 0; font-size: 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  #push-prefs .pp:last-of-type { border-bottom: 0; }
+  #pp-depts .pp { padding: 7px 0; font-size: 14px; }
+  /* iPhone-style switch: a hidden checkbox styled as a track and knob */
+  .sw { position: relative; display: inline-block; width: 46px; height: 28px; flex: none; }
+  .sw input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+  .sw i { position: absolute; inset: 0; background: #c9d3da; border-radius: 999px; transition: background .18s; }
+  .sw i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; background: #fff; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,.25); transition: transform .18s; }
+  .sw input:checked + i { background: var(--good, #1e7a4c); }
+  .sw input:checked + i::after { transform: translateX(18px); }
+  .sw input:focus-visible + i { outline: 2px solid #9cc9da; outline-offset: 2px; }
 .re-row, .re-head { display: grid; grid-template-columns: 1fr 34px; gap: 6px; align-items: center; }
 #set-leaders .re-row, #set-leaders .re-head { grid-template-columns: 1fr 1fr 1.6fr 34px; }
 .re-head { font-size: 12px; color: #6b7a86; font-weight: 600; }
@@ -1175,15 +1184,14 @@ table.la tr:hover td { background: transparent; }
         <div class="toolbar" style="margin-top:10px"><button class="btn" id="push-on">🔔 Turn on alerts on this device</button><button class="btn ghost" id="push-test">Send a test alert</button></div>
         <div id="push-prefs" hidden style="margin-top:12px;background:var(--bg,#f3f6f8);border-radius:10px;padding:10px 12px">
           <div style="font-weight:700;margin-bottom:6px">On this device, tell me when…</div>
-          <label class="pp"><input type="checkbox" data-pp="followups"> someone misses a question on the first try</label>
-          <label class="pp"><input type="checkbox" data-pp="clockin"> the Clock-in check finds people who skipped the in-service</label>
-          <label class="pp"><input type="checkbox" data-pp="quiz"> a makeup quiz comes back (✅ or ❌)</label>
-          <label class="pp"><input type="checkbox" data-pp="unlisted"> someone not on the roster does an in-service</label>
-          <label class="pp"><input type="checkbox" data-pp="kiosk"> the iPad goes quiet (offline, dead, or off the in-service page)</label>
-          <div style="font-weight:700;margin:10px 0 4px">About people in…</div>
-          <label class="pp"><input type="radio" name="pp-scope" value="all"> every department</label>
-          <label class="pp"><input type="radio" name="pp-scope" value="mine"> only these departments:</label>
-          <div id="pp-depts" class="checks" style="margin:4px 0 0 24px"></div>
+          <label class="pp"><span>someone misses a question on the first try</span><span class="sw"><input type="checkbox" data-pp="followups"><i></i></span></label>
+          <label class="pp"><span>the Clock-in check finds people who skipped the in-service</span><span class="sw"><input type="checkbox" data-pp="clockin"><i></i></span></label>
+          <label class="pp"><span>a makeup quiz comes back (✅ or ❌)</span><span class="sw"><input type="checkbox" data-pp="quiz"><i></i></span></label>
+          <label class="pp"><span>someone not on the roster does an in-service</span><span class="sw"><input type="checkbox" data-pp="unlisted"><i></i></span></label>
+          <label class="pp"><span>the iPad goes quiet (offline, dead, or off the in-service page)</span><span class="sw"><input type="checkbox" data-pp="kiosk"><i></i></span></label>
+          <div style="font-weight:700;margin:12px 0 4px">About people in…</div>
+          <label class="pp"><span>Only my departments <span class="muted small">(off = every department)</span></span><span class="sw"><input type="checkbox" id="pp-mine"><i></i></span></label>
+          <div id="pp-depts" style="margin:2px 0 0 12px"></div>
           <div class="muted small" style="margin-top:8px">The badge number counts open follow-ups for those departments (plus one when the iPad is quiet, if you watch it). <span id="pp-saved"></span></div>
         </div>
         <div id="push-devices" class="small" style="margin-top:10px"></div>
