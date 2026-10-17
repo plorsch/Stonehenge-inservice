@@ -1160,14 +1160,14 @@ function syncMissHandled(f) {
   if (f.attestedAt) { x.handledAt = f.attestedAt; x.handledBy = f.attestedBy; } else { delete x.handledAt; delete x.handledBy; }
 }
 function followUpMiss(r) {
-  if (!r.completed || r.firstTryCorrect || !db.settings.missedFollowup || db.followups.some(f => f.responseId === r.id)) return;
+  if (!r.completed || r.firstTryCorrect || db.followups.some(f => f.responseId === r.id)) return;
   const leader = leaderFor(r.department);
   const f = { id: newId(), token: crypto.randomBytes(18).toString('hex'), responseId: r.id, employeeId: r.employeeId, name: r.name, department: r.department,
     topicId: r.topicId, topicTitle: r.topicTitle, question: plainText(r.question), firstAnswer: r.attempts[0] || '', correctAnswer: r.correctAnswer,
     leader: leaderName(leader), emailedTo: emailsIn(leader), createdAt: nowIso(), attestedAt: null, attestedBy: '' };
   db.followups.push(f);
   saveDb();
-  if (f.emailedTo.length) emailFollowup(f, false).catch(() => {});
+  if (f.emailedTo.length && db.settings.missedFollowup) emailFollowup(f, false).catch(() => {});
 }
 function emailFollowup(f, reminder) {
   if (f.kind === 'clockin') return sendEmail(f.emailedTo, `${reminder ? 'Reminder: please' : 'Please'} follow up: ${f.name} clocked in without doing the in-service`, clockFollowupHtml(f, reminder), reminder ? 'reminder' : 'follow-up');
@@ -1199,13 +1199,14 @@ function quizHtml(topic, { answers = true } = {}) {
 }
 function followUpClockMiss(employeeId, date) {
   const e = findEmployee(employeeId);
-  if (!e || !db.settings.missedFollowup || db.followups.some(f => f.kind === 'clockin' && f.employeeId === employeeId && f.date === date)) return;
+  if (!e || db.followups.some(f => f.kind === 'clockin' && f.employeeId === employeeId && f.date === date)) return;
   const leader = leaderFor(e.department), topic = topicForDeptOnDay(e.department, date);
   const f = { id: newId(), kind: 'clockin', token: crypto.randomBytes(18).toString('hex'), responseId: null, employeeId, name: e.name, department: e.department, date,
     topicId: topic ? topic.id : null, topicTitle: topic ? topic.title : '', question: `Clocked in on ${fmtDay(date)} without doing the in-service`, firstAnswer: '', correctAnswer: '',
     leader: leaderName(leader), emailedTo: emailsIn(leader), createdAt: nowIso(), attestedAt: null, attestedBy: '' };
   db.followups.push(f);
-  if (f.emailedTo.length) emailFollowup(f, false).catch(() => {});
+  // Listed on Reports either way; the leader is emailed only when that setting is on.
+  if (f.emailedTo.length && db.settings.missedFollowup) emailFollowup(f, false).catch(() => {});
 }
 const fmtDay = d => { const [y, mo, day] = d.split('-'); return `${Number(mo)}/${Number(day)}/${y}`; };
 function clockFollowupHtml(f, reminder) {
@@ -2249,8 +2250,9 @@ async function adminRoutes(req, res, p, m, url) {
       .concat([...stillMissed].map(k => keep.get(k) || { employeeId: k.split('|')[0], date: k.split('|')[1] }));
     const addedKeys = [...stillMissed].filter(k => !before.has(k)), clearedKeys = [...covered].filter(k => before.has(k) && !stillMissed.has(k));
     const added = addedKeys.length, cleared = clearedKeys.length;
-    // Each new miss becomes a Needs follow-up item for the leader; a miss that turned out done drops its open item.
-    for (const k of addedKeys) followUpClockMiss(k.split('|')[0], k.split('|')[1]);
+    // Every miss that is still a miss has a Needs follow-up item for the leader (made once, so misses recorded before
+    // this existed get theirs on the next run); a miss that turned out done drops its open item.
+    for (const k of stillMissed) followUpClockMiss(k.split('|')[0], k.split('|')[1]);
     for (const k of clearedKeys) db.followups = db.followups.filter(f => !(f.kind === 'clockin' && !f.attestedAt && `${f.employeeId}|${f.date}` === k));
     if (added || cleared) saveDb();
     const streaksBroken = db.settings.clockMissBreaks !== false ? new Set([...stillMissed].map(k => k.split('|')[0])).size : 0;
