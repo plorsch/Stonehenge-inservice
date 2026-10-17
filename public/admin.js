@@ -3323,9 +3323,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     catch (err) { alert(err.message); }
     loadEmailStatus();
   });
+  let fuList = [];
   async function loadFollowups() {
     try {
       const { followups, emailReady } = await api('/api/admin/followups');
+      fuList = followups;
       const open = followups.filter(f => !f.attestedAt).length;
       $('fu-count').hidden = !open; $('fu-count').textContent = `${open} open`;
       $('fu-remind-all').hidden = !open;
@@ -3342,7 +3344,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
           : `<td><a href="#" data-fu-open="${f.responseId}">${escapeHtml(f.question)}</a><div class="muted small">${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle)}</div><div class="fu-first">Answered: ${escapeHtml(f.firstAnswer)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>`}
         <td class="small">${escapeHtml(f.leader || '')}${f.emailedTo.length ? `<div class="muted">✉ ${escapeHtml(f.emailedTo.join(', '))}</div>` : '<div class="muted">No leader email</div>'}</td>
         <td>${f.attestedAt ? `<span class="pill good">✓ Educated</span><div class="muted small">${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}</div><a href="#" class="small" data-fu-undo="${f.id}">Undo</a>`
-          : `<div class="fu-acts"><button class="btn subtle" data-fu-attest="${f.id}">✓ Mark educated</button><button class="btn subtle" data-fu-remind="${f.id}" title="Email the leader a reminder">✉ Remind</button>${f.kind === 'clockin' ? `<button class="btn subtle" data-fu-excuse="${f.id}" title="Not a real miss: remove it and give the streak back">Excuse</button>` : ''}</div>${(f.reminders || []).length ? `<div class="muted small">Reminded ${f.reminders.length}×, last ${fmtWhen(f.reminders[f.reminders.length - 1])}</div>` : ''}`}</td></tr>`).join('')
+          : `<div class="fu-acts"><button class="btn subtle" data-fu-attest="${f.id}">✓ Mark educated</button><button class="btn subtle" data-fu-remind="${f.id}" title="Email the leader a reminder">✉ Remind</button><button class="btn subtle" data-fu-msg="${f.id}" title="Copy a message with a quiz link to send them. Passing it marks this educated.">📋 Message</button>${f.kind === 'clockin' ? `<button class="btn subtle" data-fu-excuse="${f.id}" title="Not a real miss: remove it and give the streak back">Excuse</button>` : ''}</div>${(f.reminders || []).length ? `<div class="muted small">Reminded ${f.reminders.length}×, last ${fmtWhen(f.reminders[f.reminders.length - 1])}</div>` : ''}`}</td></tr>`).join('')
         || `<tr><td colspan="6" class="muted">${fv === 'open' ? 'Nothing waiting. Everyone is caught up. 🎉' : 'None yet.'}</td></tr>`;
     } catch (err) { fail(err); }
   }
@@ -3375,6 +3377,14 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     loadFollowups();
   });
   $('fu-rows').addEventListener('click', async e => {
+    const mb = e.target.closest('[data-fu-msg]');
+    if (mb) {
+      const f = (fuList || []).find(x => x.id === mb.dataset.fuMsg);
+      if (!f || !f.message) return;
+      try { await navigator.clipboard.writeText(f.message); toast('Message copied. Paste it into a text or email to them.'); }
+      catch { alert(f.message); }
+      return;
+    }
     const rm = e.target.closest('[data-fu-remind]');
     if (rm) {
       rm.disabled = true;

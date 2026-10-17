@@ -1169,6 +1169,26 @@ function followUpMiss(r) {
   saveDb();
   if (f.emailedTo.length && db.settings.missedFollowup) emailFollowup(f, false).catch(() => {});
 }
+// The employee's own quiz link: a separate token from the leader's attest link, so the employee can't mark themselves
+// educated without actually passing. Made on demand so older follow-ups get one too.
+function quizTokenFor(f) {
+  if (!f.quizToken) { f.quizToken = crypto.randomBytes(18).toString('hex'); saveDb(); }
+  return f.quizToken;
+}
+const quizUrlFor = f => `${siteUrl()}/quiz/${quizTokenFor(f)}`;
+// A ready-to-send note the leader can paste into a text or Teams message to the employee.
+function employeeMessage(f) {
+  const first = (f.name || '').split(' ')[0] || 'there';
+  const why = f.kind === 'clockin' ? `you clocked in on ${fmtDay(f.date)} without doing the in-service` : `you missed a question on the "${f.topicTitle}" in-service`;
+  const topic = f.topicTitle ? ` on "${f.topicTitle}"` : '';
+  return `Hi ${first}, ${why}. Please take this quick quiz${f.kind === 'clockin' ? topic : ''} when you get a minute (about 2 minutes) and you'll be all caught up:\n${quizUrlFor(f)}\nThanks!${f.leader ? ' – ' + f.leader : ''}`;
+}
+function messageBlockHtml(f) {
+  return `<div style="border:1px dashed #9fb3c0;border-radius:10px;padding:12px 14px;margin:14px 0;background:#fff">
+    <div style="font-weight:bold;color:#1f5f7a">Or let them do it themselves</div>
+    <div style="color:#5b6b78;font-size:13px;margin:2px 0 8px">Copy this and send it to ${esc(f.name.split(' ')[0])}. When they pass the quiz at that link, this follow-up is marked educated for you.</div>
+    <div style="white-space:pre-line;background:#f3f6f8;border-radius:8px;padding:10px 12px;font-size:14px">${esc(employeeMessage(f))}</div></div>`;
+}
 function emailFollowup(f, reminder) {
   if (f.kind === 'clockin') return sendEmail(f.emailedTo, `${reminder ? 'Reminder: please' : 'Please'} follow up: ${f.name} clocked in without doing the in-service`, clockFollowupHtml(f, reminder), reminder ? 'reminder' : 'follow-up');
   return sendEmail(f.emailedTo, `${reminder ? 'Reminder: please' : 'Please'} follow up: ${f.name} missed an in-service question`,
@@ -1176,7 +1196,7 @@ function emailFollowup(f, reminder) {
       ['Staff', `${f.name}${f.department ? ' (' + f.department + ')' : ''}`], ['Topic', f.topicTitle], ['Question', f.question],
       ['They first answered', f.firstAnswer], ['Correct answer', f.correctAnswer], ['When', when(f.createdAt)],
       ['What to do', 'Take a minute to go over this with them, then tap the button to confirm.']
-    ], { url: `${siteUrl()}/attest/${f.token}`, label: "I've educated them" }), reminder ? 'reminder' : 'follow-up');
+    ], { url: `${siteUrl()}/attest/${f.token}`, label: "I've educated them" }).replace('<p style="color:#5b6b78;font-size:12px;margin-top:24px">', messageBlockHtml(f) + '<p style="color:#5b6b78;font-size:12px;margin-top:24px">'), reminder ? 'reminder' : 'follow-up');
 }
 // ---- Missed clock-in follow-ups (from the Clock-in check): same list, same leader email and "Educated" button, plus a quiz
 // of the topic their department had that day so the leader can go over it in person.
@@ -1219,6 +1239,7 @@ function clockFollowupHtml(f, reminder) {
     <tr><td style="padding:4px 14px 4px 0;color:#5b6b78;vertical-align:top">What to do</td><td style="padding:4px 0">Go over the topic below with them and quiz them in person (or pass the questions along), then tap the button to confirm.</td></tr></table>
     ${quizHtml(topic)}
     <p style="margin:22px 0"><a href="${esc(siteUrl() + '/attest/' + f.token)}" style="background:#1f5f7a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">I've educated them</a></p>
+    ${messageBlockHtml(f)}
     <p style="color:#5b6b78;font-size:12px;margin-top:24px">Sent by the ${esc(db.settings.facilityName || 'Stonehenge')} in-service kiosk.</p></div>`;
 }
 // One reminder email per leader listing everyone still waiting on them.
@@ -1246,10 +1267,59 @@ function attestPage(f) {
     : `<dt>Topic</dt><dd>${esc(f.topicTitle)}</dd><dt>Question</dt><dd>${esc(f.question)}</dd>
   <dt>They first answered</dt><dd>${esc(f.firstAnswer)}</dd><dt>Correct answer</dt><dd>${esc(f.correctAnswer)}</dd></dl>`}
   <div id="box">${done ? `<p class="ok">✓ Educated. Confirmed by ${esc(f.attestedBy)} on ${esc(when(f.attestedAt))}.</p>`
-    : `<label style="display:block;margin-top:16px">Your name<input id="by" autocomplete="name" value="${esc(f.leader)}"></label><button id="go">✓ I've educated them</button>`}</div></div>
-  <script>var b=document.getElementById('go');if(b)b.onclick=function(){var n=document.getElementById('by').value.trim();if(!n){alert('Please type your name.');return}b.disabled=true;
+    : `<label style="display:block;margin-top:16px">Your name<input id="by" autocomplete="name" value="${esc(f.leader)}"></label><button id="go">✓ I've educated them</button>
+  <div style="border:1px dashed #9fb3c0;border-radius:10px;padding:12px 14px;margin-top:18px"><div style="font-weight:700;color:#1f5f7a">Or let them do it themselves</div>
+  <div style="color:#5b6b78;font-size:13px;margin:2px 0 8px">Send ${esc(f.name.split(' ')[0])} this message. When they pass the quiz at that link, this is marked educated for you.</div>
+  <div id="msg" style="white-space:pre-line;background:#f3f6f8;border-radius:8px;padding:10px 12px;font-size:14px">${esc(employeeMessage(f))}</div>
+  <button id="copy" type="button" style="background:#fff;color:#1f5f7a;border:1px solid #1f5f7a;margin-top:10px">📋 Copy message</button></div>`}</div></div>
+  <script>var c=document.getElementById('copy');if(c)c.onclick=function(){var t=document.getElementById('msg').innerText;function ok(){c.textContent='✓ Copied'}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,function(){sel()})}else sel();
+  function sel(){var r=document.createRange();r.selectNodeContents(document.getElementById('msg'));var s=getSelection();s.removeAllRanges();s.addRange(r);try{document.execCommand('copy');ok()}catch(e){}}};
+  var b=document.getElementById('go');if(b)b.onclick=function(){var n=document.getElementById('by').value.trim();if(!n){alert('Please type your name.');return}b.disabled=true;
   fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({by:n})}).then(function(r){return r.json()}).then(function(d){
   document.getElementById('box').innerHTML='<p class="ok">✓ Thank you! Recorded for '+${JSON.stringify(esc(f.name))}+'.</p>'}).catch(function(){b.disabled=false;alert('Could not save. Please try again.')})}</script></body></html>`;
+}
+
+// The employee's own quiz page: lesson plus up to three questions (the one they missed first), no answers shown.
+// Passing all of them marks the follow-up educated. Nothing else is saved.
+function quizQuestionsFor(f) {
+  const topic = f.topicId && findTopic(f.topicId);
+  if (!topic) return { topic: null, qs: [] };
+  let qs = (topic.questions || []).filter(q => q.correctAnswers && q.correctAnswers.length);
+  const missed = f.question && qs.find(q => plainText(q.text) === f.question);
+  if (missed) qs = [missed, ...qs.filter(q => q !== missed)];
+  return { topic, qs: qs.slice(0, 3) };
+}
+function quizPage(f) {
+  const { topic, qs } = quizQuestionsFor(f);
+  const first = esc((f.name || '').split(' ')[0]);
+  const facility = esc(db.settings.facilityName || 'Stonehenge');
+  const body = f.attestedAt ? `<p class="ok">✓ All set, ${first}. This one is already marked done${f.attestedBy ? ' (' + esc(f.attestedBy) + ')' : ''}.</p>`
+    : !topic || !qs.length ? `<p class="ok" style="background:#fff3df;color:#8a5a00">This topic isn't available any more. Please check with ${esc(f.leader || 'your leader')}.</p>`
+    : `<h1>${esc(topic.title)}</h1><p class="sub">Hi ${first}! Read this, then answer the ${qs.length === 1 ? 'question' : qs.length + ' questions'} below.</p>
+  ${topic.lesson ? `<div class="lesson">${esc(plainText(topic.lesson))}</div>` : ''}
+  <form id="qf">${qs.map((q, i) => `<fieldset data-q="${esc(q.id)}"><legend>${i + 1}. ${esc(plainText(q.text))}${q.type === 'multi' ? ' <span class="sub">(select all that apply)</span>' : ''}</legend>
+    ${shuffle(choicesFor(q).map(a => a.en)).map(a => `<label><input type="${q.type === 'multi' ? 'checkbox' : 'radio'}" name="q${i}" value="${esc(a)}"> <span>${esc(a)}</span></label>`).join('')}
+    <div class="hint" hidden></div></fieldset>`).join('')}
+  <button id="go" type="submit">Check my answers</button></form>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>In-service quiz</title>
+  <style>body{font:17px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f3f6f8;color:#1d2b36;margin:0;padding:20px 14px}
+  .card{max-width:560px;margin:0 auto;background:#fff;border:1px solid #dbe3e9;border-radius:14px;padding:22px}h1{font-size:22px;color:#1f5f7a;margin:0 0 6px}.sub{color:#5b6b78;font-size:14px;margin:0 0 12px}
+  .lesson{white-space:pre-line;background:#f8fafb;border:1px solid #dbe3e9;border-radius:10px;padding:12px 14px;margin:0 0 16px}
+  fieldset{border:0;padding:0;margin:0 0 18px}legend{font-weight:700;margin-bottom:6px;padding:0}label{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #dbe3e9;border-radius:10px;margin:6px 0;cursor:pointer}
+  label input{margin-top:5px;width:18px;height:18px}fieldset.wrong legend{color:#b23b3b}fieldset.right legend{color:#1e7a4c}.hint{background:#fff3df;color:#8a5a00;border-radius:8px;padding:8px 12px;font-size:14px;margin-top:6px}
+  button{width:100%;font:inherit;font-weight:700;background:#1f5f7a;color:#fff;border:0;border-radius:10px;padding:14px;cursor:pointer}button[disabled]{opacity:.6}.ok{background:#e3f4ea;color:#1e7a4c;border-radius:10px;padding:12px;font-weight:700}
+  .foot{color:#5b6b78;font-size:12px;margin-top:18px;text-align:center}</style></head>
+  <body><div class="card">${body}</div><p class="foot">${facility} in-service</p>
+  <script>var f=document.getElementById('qf');if(f)f.onsubmit=function(e){e.preventDefault();var sets=[].slice.call(f.querySelectorAll('fieldset')),answers=[];
+  for(var i=0;i<sets.length;i++){var picked=[].slice.call(sets[i].querySelectorAll('input:checked')).map(function(x){return x.value});if(!picked.length){alert('Please answer question '+(i+1)+'.');return}answers.push({questionId:sets[i].dataset.q,answer:picked})}
+  var b=document.getElementById('go');b.disabled=true;
+  fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:answers})}).then(function(r){return r.json()}).then(function(d){
+  if(d.error){alert(d.error);b.disabled=false;return}
+  if(d.passed){f.outerHTML='<p class="ok">✓ Nice work, '+${JSON.stringify(first)}+'! You got them all right and you are all caught up. You can close this page.</p>';return}
+  sets.forEach(function(s,i){var r=d.results[i];s.classList.toggle('wrong',!r.correct);s.classList.toggle('right',r.correct);var h=s.querySelector('.hint');
+  if(r.correct){h.hidden=true}else{h.hidden=false;h.textContent='Not quite.'+(r.hint?' Hint: '+r.hint:' Have another look at the lesson and try again.');s.querySelectorAll('input').forEach(function(x){x.checked=false})}});
+  b.disabled=false;b.textContent='Try again';var w=f.querySelector('fieldset.wrong');if(w)w.scrollIntoView({behavior:'smooth',block:'center'})}).catch(function(){b.disabled=false;alert('Could not check. Please try again.')})}</script></body></html>`;
 }
 
 async function kioskRoutes(req, res, p, m) {
@@ -2415,7 +2485,7 @@ async function adminRoutes(req, res, p, m, url) {
     return send(res, 200, { ok: true, count: picked.length });
   }
   if (m === 'GET' && p === '/api/admin/followups') {
-    return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, ...f }) => f), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30) });
+    return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, quizToken, ...f }) => Object.assign(f, f.attestedAt ? {} : { message: employeeMessage(db.followups.find(x => x.id === f.id)) })), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30) });
   }
   const fa = m === 'POST' && p.match(/^\/api\/admin\/followups\/([\w-]+)\/attest$/);
   if (fa) {
@@ -2574,6 +2644,28 @@ async function handle(req, res) {
       return send(res, 200, { ok: true });
     }
     return send(res, 200, attestPage(f), 'text/html; charset=utf-8');
+  }
+  // The employee's own quiz link from the leader's message. Passing it marks the follow-up educated.
+  const qz = p.match(/^\/quiz\/([a-f0-9]{36})$/);
+  if (qz) {
+    const f = db.followups.find(x => x.quizToken === qz[1]);
+    if (!f) return send(res, 404, '<p style="font-family:sans-serif">This quiz link is no longer valid.</p>', 'text/html; charset=utf-8');
+    if (m === 'POST') {
+      if (f.attestedAt) return send(res, 200, { passed: true, results: [] });
+      const b = await readBody(req);
+      const { qs } = quizQuestionsFor(f);
+      const given = Array.isArray(b.answers) ? b.answers : [];
+      if (!qs.length || given.length !== qs.length) return send(res, 400, { error: 'This quiz was changed. Please reload the page.' });
+      const results = qs.map((q, i) => {
+        const chosen = cleanList(Array.isArray(given[i].answer) ? given[i].answer : [given[i].answer], 500, 8);
+        const correct = String(given[i].questionId) === q.id && isRightAnswer(q, chosen);
+        return { correct, hint: correct ? '' : (q.hint || '') };
+      });
+      const passed = results.every(r => r.correct);
+      if (passed) { f.attestedAt = nowIso(); f.attestedBy = `${f.name} (passed the quiz online)`; f.quizPassedAt = f.attestedAt; syncMissHandled(f); saveDb(); }
+      return send(res, 200, { passed, results });
+    }
+    return send(res, 200, quizPage(f), 'text/html; charset=utf-8');
   }
   if (p.startsWith('/api/kiosk/')) {
     if ((await kioskRoutes(req, res, p, m)) !== false) return;
