@@ -126,6 +126,18 @@
   .sk-opt.col { flex-direction: column; align-items: stretch; gap: 8px; }
   .sk-t { font-weight: 650; }
   .sk-d { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  /* Every checkbox on the admin page is a switch (the user's choice, Oct 17). Smaller inside tables and pick-lists. */
+  input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 46px; height: 26px; border-radius: 26px; background: #cdd6dd; border: 0; margin: 0; position: relative; flex: none; vertical-align: middle; cursor: pointer; transition: background .2s; }
+  input[type=checkbox]::before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+  input[type=checkbox]:checked { background: var(--good); }
+  input[type=checkbox]:checked::before { transform: translateX(20px); }
+  input[type=checkbox]:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  input[type=checkbox]:disabled { opacity: .45; cursor: default; }
+  table input[type=checkbox], .checks input[type=checkbox], .small input[type=checkbox], label.small input[type=checkbox], .an-rep input[type=checkbox] { width: 36px; height: 20px; border-radius: 20px; }
+  table input[type=checkbox]::before, .checks input[type=checkbox]::before, .small input[type=checkbox]::before, label.small input[type=checkbox]::before, .an-rep input[type=checkbox]::before { width: 14px; height: 14px; }
+  table input[type=checkbox]:checked::before, .checks input[type=checkbox]:checked::before, .small input[type=checkbox]:checked::before, label.small input[type=checkbox]:checked::before, .an-rep input[type=checkbox]:checked::before { transform: translateX(16px); }
+  th:has(> input[type=checkbox]) { width: auto !important; }
+  label:has(> input[type=checkbox]) { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
   .sw { position: relative; display: inline-block; vertical-align: middle; width: 46px; height: 26px; flex: none; cursor: pointer; }
   .sw input { opacity: 0; width: 0; height: 0; position: absolute; }
   .sw span { position: absolute; inset: 0; background: #cdd6dd; border-radius: 26px; transition: background .2s; }
@@ -336,17 +348,10 @@ table.la tr:hover td { background: transparent; }
 .sp-msg .cm-row { grid-template-columns: 1fr 34px 34px !important; }
 .sp-msg .cm-row > .re-x:last-child { display: none; }
   .sp-today { color: var(--good, #1e7a4c); font-weight: 700; font-size: 13px; }
-  #push-prefs .pp { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin: 0; padding: 9px 0; font-size: 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  #push-prefs .pp { display: flex !important; gap: 12px; align-items: center; justify-content: space-between; margin: 0; padding: 9px 0; font-size: 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
   #push-prefs .pp:last-of-type { border-bottom: 0; }
   #pp-depts .pp { padding: 7px 0; font-size: 14px; }
   /* iPhone-style switch: a hidden checkbox styled as a track and knob */
-  .sw { position: relative; display: inline-block; width: 46px; height: 28px; flex: none; }
-  .sw input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
-  .sw i { position: absolute; inset: 0; background: #c9d3da; border-radius: 999px; transition: background .18s; }
-  .sw i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; background: #fff; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,.25); transition: transform .18s; }
-  .sw input:checked + i { background: var(--good, #1e7a4c); }
-  .sw input:checked + i::after { transform: translateX(18px); }
-  .sw input:focus-visible + i { outline: 2px solid #9cc9da; outline-offset: 2px; }
 .re-row, .re-head { display: grid; grid-template-columns: 1fr 34px; gap: 6px; align-items: center; }
 #set-leaders .re-row, #set-leaders .re-head { grid-template-columns: 1fr 1fr 1.6fr 34px; }
 .re-head { font-size: 12px; color: #6b7a86; font-weight: 600; }
@@ -661,7 +666,7 @@ table.la tr:hover td { background: transparent; }
           <div class="toolbar"><input type="date" id="an-start"> to <input type="date" id="an-end"> <span class="hint">leave the end empty to run until you remove it</span></div>
         </div>
         <div>
-          <label class="block">Who sees it <span class="hint">none ticked = all staff</span></label>
+          <label class="block">Who sees it <span class="hint">none switched on = all staff</span></label>
           <div class="checks" id="an-depts"></div>
         </div>
       </div>
@@ -750,7 +755,7 @@ table.la tr:hover td { background: transparent; }
           </div>
         </div>
         <div>
-          <label class="block">Who gets it <span class="hint">none ticked = all staff</span></label>
+          <label class="block">Who gets it <span class="hint">none switched on = all staff</span></label>
           <div class="checks" id="sc-depts"></div>
           <label class="block" for="sc-note">Note <span class="hint">optional, for you only</span></label>
           <input type="text" id="sc-note" style="width:100%">
@@ -821,7 +826,7 @@ table.la tr:hover td { background: transparent; }
           <input type="date" id="rq-end">
         </div>
         <div>
-          <label class="block">Who must complete it <span class="hint">none ticked = all staff</span></label>
+          <label class="block">Who must complete it <span class="hint">none switched on = all staff</span></label>
           <div class="checks" id="rq-depts"></div>
         </div>
       </div>
@@ -979,7 +984,7 @@ table.la tr:hover td { background: transparent; }
       <div class="toolbar">
         <select id="cc-filter"><option value="people">People to follow up, by leader</option><option value="problems">Missed or unfinished shifts</option><option value="all">All shifts</option><option value="done">Completed</option></select>
         <span class="grow"></span>
-        <button class="btn ghost" id="cc-email" title="Email each department leader the ticked people who clocked in without doing the in-service">✉ Email leaders</button>
+        <button class="btn ghost" id="cc-email" title="Email each department leader the switched-on people who clocked in without doing the in-service">✉ Email leaders</button>
         <button class="btn" id="cc-csv">Download as CSV</button>
       </div>
       <div class="table-wrap" id="cc-people-table"><table>
@@ -1184,13 +1189,13 @@ table.la tr:hover td { background: transparent; }
         <div class="toolbar" style="margin-top:10px"><button class="btn" id="push-on">🔔 Turn on alerts on this device</button><button class="btn ghost" id="push-test">Send a test alert</button></div>
         <div id="push-prefs" hidden style="margin-top:12px;background:var(--bg,#f3f6f8);border-radius:10px;padding:10px 12px">
           <div style="font-weight:700;margin-bottom:6px">On this device, tell me when…</div>
-          <label class="pp"><span>someone misses a question on the first try</span><span class="sw"><input type="checkbox" data-pp="followups"><i></i></span></label>
-          <label class="pp"><span>the Clock-in check finds people who skipped the in-service</span><span class="sw"><input type="checkbox" data-pp="clockin"><i></i></span></label>
-          <label class="pp"><span>a makeup quiz comes back (✅ or ❌)</span><span class="sw"><input type="checkbox" data-pp="quiz"><i></i></span></label>
-          <label class="pp"><span>someone not on the roster does an in-service</span><span class="sw"><input type="checkbox" data-pp="unlisted"><i></i></span></label>
-          <label class="pp"><span>the iPad goes quiet (offline, dead, or off the in-service page)</span><span class="sw"><input type="checkbox" data-pp="kiosk"><i></i></span></label>
+          <label class="pp"><span>someone misses a question on the first try</span><input type="checkbox" data-pp="followups"></label>
+          <label class="pp"><span>the Clock-in check finds people who skipped the in-service</span><input type="checkbox" data-pp="clockin"></label>
+          <label class="pp"><span>a makeup quiz comes back (✅ or ❌)</span><input type="checkbox" data-pp="quiz"></label>
+          <label class="pp"><span>someone not on the roster does an in-service</span><input type="checkbox" data-pp="unlisted"></label>
+          <label class="pp"><span>the iPad goes quiet (offline, dead, or off the in-service page)</span><input type="checkbox" data-pp="kiosk"></label>
           <div style="font-weight:700;margin:12px 0 4px">About people in…</div>
-          <label class="pp"><span>Only my departments <span class="muted small">(off = every department)</span></span><span class="sw"><input type="checkbox" id="pp-mine"><i></i></span></label>
+          <label class="pp"><span>Only my departments <span class="muted small">(off = every department)</span></span><input type="checkbox" id="pp-mine"></label>
           <div id="pp-depts" style="margin:2px 0 0 12px"></div>
           <div class="muted small" style="margin-top:8px">The badge number counts open follow-ups for those departments (plus one when the iPad is quiet, if you watch it). <span id="pp-saved"></span></div>
         </div>
@@ -1243,7 +1248,7 @@ table.la tr:hover td { background: transparent; }
         <div><label class="block" for="f-category">Category <span class="hint">optional</span></label><input type="text" id="f-category" style="width:100%" list="category-list"></div>
       </div>
       <datalist id="category-list"></datalist>
-      <label class="block">For <span class="hint">none ticked = all staff</span></label>
+      <label class="block">For <span class="hint">none switched on = all staff</span></label>
       <div class="checks" id="f-depts"></div>
       <label class="block" for="f-lesson">Lesson <span class="hint">keep it short. Blank line = new paragraph, "- " starts a bullet. Use the buttons for bold, italic, underline or strikethrough</span></label>
       <textarea id="f-lesson" rows="8" required></textarea>

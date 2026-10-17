@@ -1228,7 +1228,7 @@
       <label class="block small">Explanation shown after the right answer <span class="hint">optional</span></label>
       <input type="text" class="q-expl" style="width:100%" value="${escapeHtml(q.explanation || '')}">
       <details class="q-only"${(q.departments || []).length ? ' open' : ''}><summary class="small">Only for certain departments <span class="q-only-sum muted"></span></summary>
-        <div class="muted small" style="margin:4px 0 6px">Tick departments and only they get this question. Leave all unticked and everyone the topic is for can get it.</div>
+        <div class="muted small" style="margin:4px 0 6px">Switch on departments and only they get this question. Leave them all off and everyone the topic is for can get it.</div>
         <div class="checks q-depts"></div>
       </details>
       <details class="es q-es"${q.es ? ' open' : ''}><summary>Spanish</summary>
@@ -2559,7 +2559,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     return [...by.values()].filter(p => p.missedDates.length)
       .sort((a, b) => (!a.leader - !b.leader) || a.leader.localeCompare(b.leader) || b.missedDates.length - a.missedDates.length || a.name.localeCompare(b.name));
   }
-  // People unticked here are left off the leader emails.
+  // People switched off here are left off the leader emails.
   const ccKey = p => `${p.last4}|${p.name.toLowerCase()}`;
   const ccLeftOff = new Set();
   function renderClockCheck() {
@@ -3349,7 +3349,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     document.querySelectorAll('#push-prefs [data-pp]').forEach(c => { c.checked = !!prefs[c.dataset.pp]; });
     $('pp-mine').checked = prefs.scope === 'mine';
     const all = [...new Set([...depts(), ...(prefs.depts || [])])];
-    $('pp-depts').innerHTML = all.map(d => `<label class="pp"><span>${escapeHtml(d)}</span><span class="sw"><input type="checkbox" value="${escapeHtml(d)}"${(prefs.depts || []).some(x => sameDept(x, d)) ? ' checked' : ''}><i></i></span></label>`).join('') || '<span class="muted">Add departments in Settings first.</span>';
+    $('pp-depts').innerHTML = all.map(d => `<label class="pp"><span>${escapeHtml(d)}</span><input type="checkbox" value="${escapeHtml(d)}"${(prefs.depts || []).some(x => sameDept(x, d)) ? ' checked' : ''}></label>`).join('') || '<span class="muted">Add departments in Settings first.</span>';
     $('pp-depts').hidden = prefs.scope !== 'mine';
   }
   function prefsFromForm() {
@@ -3758,7 +3758,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     const pick = {};
     $('td-list').querySelectorAll('[data-td]').forEach(c => { if (c.checked) pick[c.dataset.td] = true; });
     if (!Object.keys(pick).length) return alert('Tick what you want to clear first.');
-    if (!await confirm('Clear the ticked test data? This can only be undone by restoring a backup.', 'Clear it')) return;
+    if (!await confirm('Clear the selected test data? This can only be undone by restoring a backup.', 'Clear it')) return;
     try {
       const r = await post('/api/admin/test-data/clear', pick);
       alert(`Cleared. ${r.responses != null ? `${r.responses} answers. ` : ''}${r.sampleStaff != null ? `${r.sampleStaff} sample staff. ` : ''}${r.sampleSchedules != null ? `${r.sampleSchedules} sample schedule. ` : ''}${r.announcements != null ? `${r.announcements} announcements. ` : ''}${r.required != null ? `${r.required} required items. ` : ''}\n\nA copy from before was saved on the server as ${r.backup}.`);
