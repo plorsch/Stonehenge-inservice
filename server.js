@@ -2320,14 +2320,18 @@ async function adminRoutes(req, res, p, m, url) {
     return send(res, 200, { misses: list, breaksStreaks: db.settings.clockMissBreaks !== false });
   }
   if (m === 'POST' && p === '/api/admin/clock-misses/handle') {
+    // One miss ({ employeeId, date }) or several ({ items: [{ employeeId, date }] }), same action for all.
     const b = await readBody(req);
-    const x = db.clockMisses.find(y => y.employeeId === String(b.employeeId || '') && y.date === cleanDate(b.date));
-    if (!x) return send(res, 404, { error: 'Not found.' });
-    if (b.excuse) db.clockMisses = db.clockMisses.filter(y => y !== x);   // not a real miss: gone, and the streak comes back
-    else if (b.undo) { delete x.handledAt; delete x.handledBy; }
-    else if (!x.handledAt) { x.handledAt = nowIso(); x.handledBy = cleanText(b.by, 80) || 'Admin'; }
+    const wanted = (Array.isArray(b.items) ? b.items : [b]).slice(0, 1000).map(i => `${String(i.employeeId || '')}|${cleanDate(i.date)}`);
+    const picked = db.clockMisses.filter(y => wanted.includes(`${y.employeeId}|${y.date}`));
+    if (!picked.length) return send(res, 404, { error: 'Not found.' });
+    if (b.excuse) db.clockMisses = db.clockMisses.filter(y => !picked.includes(y));   // not a real miss: gone, and the streak comes back
+    else for (const x of picked) {
+      if (b.undo) { delete x.handledAt; delete x.handledBy; }
+      else if (!x.handledAt) { x.handledAt = nowIso(); x.handledBy = cleanText(b.by, 80) || 'Admin'; }
+    }
     saveDb();
-    return send(res, 200, { ok: true });
+    return send(res, 200, { ok: true, count: picked.length });
   }
   if (m === 'GET' && p === '/api/admin/followups') {
     return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, ...f }) => f), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30) });

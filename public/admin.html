@@ -985,8 +985,9 @@ table.la tr:hover td { background: transparent; }
         <select id="cm-dept"></select>
         <span class="small muted" id="cm-note"></span>
       </div>
+      <div class="toolbar" id="cm-bulk" hidden style="margin-top:8px"><span class="small"><strong id="cm-picked">0</strong> selected:</span> <button class="btn subtle" id="cm-bulk-done">Talked to</button> <button class="btn subtle" id="cm-bulk-excuse">Excuse</button> <button class="btn subtle" id="cm-bulk-undo">Undo talked to</button></div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Day</th><th>Name</th><th>Dept</th><th>Leader</th><th>Status</th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="cm-all" title="Select all shown"></th><th>Day</th><th>Name</th><th>Dept</th><th>Leader</th><th>Status</th></tr></thead>
         <tbody id="cm-rows"></tbody>
       </table></div>
     </div>

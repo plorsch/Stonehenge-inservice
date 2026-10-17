@@ -3354,14 +3354,35 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       fillSelect($('cm-dept'), [['', 'All departments']], [...new Set(misses.map(x => x.department).filter(Boolean))].sort());
       const fv = $('cm-filter').value, fd = $('cm-dept').value;
       const rows = misses.filter(x => (fv === 'all' || (fv === 'open' ? !x.handledAt : x.handledAt)) && (!fd || x.department === fd));
+      cmPicked.clear(); cmBulk();
       $('cm-rows').innerHTML = rows.slice(0, 400).map(x => `<tr>
+        <td><input type="checkbox" data-cm-pick="${x.employeeId}|${x.date}"></td>
         <td style="white-space:nowrap">${fmtDate(x.date)}</td><td><strong>${personLink(x.employeeId, x.name)}</strong></td><td>${escapeHtml(x.department)}</td><td class="small">${escapeHtml(x.leader || '')}</td>
         <td style="white-space:nowrap">${x.handledAt ? `<span class="pill good">✓ Talked to</span><div class="muted small">${escapeHtml(x.handledBy)}, ${fmtWhen(x.handledAt)}</div><a href="#" class="small" data-cm-undo="${x.employeeId}|${x.date}">Undo</a>`
           : `<button class="btn subtle" data-cm-done="${x.employeeId}|${x.date}">Talked to</button> <button class="btn subtle" data-cm-excuse="${x.employeeId}|${x.date}" title="Not a real miss: remove it and give the streak back">Excuse</button>`}</td></tr>`).join('')
-        || `<tr><td colspan="5" class="muted">${fv === 'open' ? 'Nothing waiting.' : 'None yet.'}</td></tr>`;
+        || `<tr><td colspan="6" class="muted">${fv === 'open' ? 'Nothing waiting.' : 'None yet.'}</td></tr>`;
+      $('cm-all').checked = false;
     } catch (err) { fail(err); }
   }
   ['cm-filter', 'cm-dept'].forEach(id => $(id).addEventListener('change', loadClockMisses));
+  // Tick several rows, then one action for all of them.
+  const cmPicked = new Set();
+  function cmBulk() { $('cm-bulk').hidden = !cmPicked.size; $('cm-picked').textContent = cmPicked.size; }
+  $('cm-rows').addEventListener('change', e => { const c = e.target.closest('[data-cm-pick]'); if (!c) return; if (c.checked) cmPicked.add(c.dataset.cmPick); else cmPicked.delete(c.dataset.cmPick); cmBulk(); });
+  $('cm-all').addEventListener('change', () => { $('cm-rows').querySelectorAll('[data-cm-pick]').forEach(c => { c.checked = $('cm-all').checked; if (c.checked) cmPicked.add(c.dataset.cmPick); else cmPicked.delete(c.dataset.cmPick); }); cmBulk(); });
+  async function cmBulkAction(kind) {
+    const items = [...cmPicked].map(k => { const [employeeId, date] = k.split('|'); return { employeeId, date }; });
+    if (!items.length) return;
+    const body = { items };
+    if (kind === 'done') { const by = await prompt(`Who talked to these ${items.length} people? (your name)`, localStorage.getItem('fu-by') || '', 'Talked to'); if (!by) return; try { localStorage.setItem('fu-by', by); } catch { /* ignore */ } body.by = by; }
+    if (kind === 'excuse' && !await confirm(`Remove these ${items.length} missed days? They will no longer count, and streaks come back.`, 'Excuse')) return;
+    if (kind === 'undo') body.undo = true; if (kind === 'excuse') body.excuse = true;
+    try { const r = await post('/api/admin/clock-misses/handle', body); toast(`${r.count} ${kind === 'excuse' ? 'excused' : kind === 'undo' ? 'undone' : 'recorded'}`); loadClockMisses(); }
+    catch (err) { fail(err); }
+  }
+  $('cm-bulk-done').addEventListener('click', () => cmBulkAction('done'));
+  $('cm-bulk-excuse').addEventListener('click', () => cmBulkAction('excuse'));
+  $('cm-bulk-undo').addEventListener('click', () => cmBulkAction('undo'));
   $('cm-rows').addEventListener('click', async e => {
     const d = e.target.closest('[data-cm-done]'), x = e.target.closest('[data-cm-excuse]'), u = e.target.closest('[data-cm-undo]');
     const b = d || x || u; if (!b) return;
