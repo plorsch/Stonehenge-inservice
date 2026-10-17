@@ -418,7 +418,7 @@
         <img class="lesson-img" id="lesson-img" alt="" hidden>
         <div class="lesson" id="lesson-body"></div>
         <div class="row">
-          <button class="btn secondary" data-action="home" id="lesson-cancel">That's not me</button>
+          <button class="btn secondary" data-action="home" id="lesson-cancel">← Start over</button>
           <button class="btn" id="to-question">I've read this</button>
         </div>
       </div>
@@ -999,7 +999,7 @@
     $('lesson-body').innerHTML = formatLesson(es() ? it.es.lesson : it.topic.lesson);
     $('lesson-img').hidden = !it.topic.image;
     if (it.topic.image) $('lesson-img').src = it.topic.image; else $('lesson-img').removeAttribute('src');
-    $('lesson-cancel').textContent = T("That's not me", 'No soy yo');
+    $('lesson-cancel').textContent = T('← Start over', '← Empezar de nuevo');
     $('to-question').textContent = T("I've read this", 'Ya lo leí');
     $('question-kicker').textContent = T('Question', 'Pregunta') + multi;
     $('select-all').textContent = T('Select all that apply', 'Seleccione todas las correctas');
