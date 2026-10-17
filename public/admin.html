@@ -977,6 +977,19 @@ table.la tr:hover td { background: transparent; }
         <tbody id="fu-rows"></tbody>
       </table></div>
     </div>
+    <div class="card" id="cm-card">
+      <h2>Missed clock-ins <span class="pill warn" id="cm-count" hidden></span></h2>
+      <div class="muted small">Everyone the Clock-in check found who clocked in but didn't do an in-service that shift. Kept from each check you run. "Talked to" records that their leader followed up; "Excuse" removes the miss (for a day that shouldn't count), and their streak comes back.</div>
+      <div class="toolbar" style="margin-top:10px">
+        <select id="cm-filter"><option value="open">Not yet talked to</option><option value="done">Talked to</option><option value="all">All</option></select>
+        <select id="cm-dept"></select>
+        <span class="small muted" id="cm-note"></span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Day</th><th>Name</th><th>Dept</th><th>Leader</th><th>Status</th></tr></thead>
+        <tbody id="cm-rows"></tbody>
+      </table></div>
+    </div>
     <div class="card">
       <h2>Survey sign-in sheet</h2>
       <div class="muted small">A printable page for one topic: the lesson and questions, then everyone who completed it, when, and whether they got it right the first try. Use your browser's print window to print it or save it as a PDF.</div>

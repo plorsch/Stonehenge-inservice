@@ -180,7 +180,7 @@
     try { localStorage.setItem('adminTab', b.dataset.tab); } catch { /* private window */ }
     if (b.dataset.tab === 'responses') { loadResponses(); loadUsage(); }
     if (b.dataset.tab === 'settings') renderSettings();
-    if (b.dataset.tab === 'reports') { loadFollowups(); loadMissed(); loadAnnual(); loadReviews(); }
+    if (b.dataset.tab === 'reports') { loadFollowups(); loadClockMisses(); loadMissed(); loadAnnual(); loadReviews(); }
     // Today's numbers are fetched fresh each time the tab opens, so a follow-up closed elsewhere (or by a leader's email link) shows right away.
     if (b.dataset.tab === 'today') refresh();
   });
@@ -3344,6 +3344,36 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     } catch (err) { fail(err); }
   }
   ['fu-filter', 'fu-dept'].forEach(id => $(id).addEventListener('change', loadFollowups));
+  // ---------- missed clock-ins (from the Clock-in check) ----------
+  async function loadClockMisses() {
+    try {
+      const { misses, breaksStreaks } = await api('/api/admin/clock-misses');
+      const open = misses.filter(x => !x.handledAt).length;
+      $('cm-count').hidden = !open; $('cm-count').textContent = `${open} open`;
+      $('cm-note').textContent = misses.length ? (breaksStreaks ? 'Each of these days broke that person\'s streak.' : 'Streaks are not affected (turned off on the Clock-in check tab).') : 'None recorded yet. Run the Clock-in check on the People tab.';
+      fillSelect($('cm-dept'), [['', 'All departments']], [...new Set(misses.map(x => x.department).filter(Boolean))].sort());
+      const fv = $('cm-filter').value, fd = $('cm-dept').value;
+      const rows = misses.filter(x => (fv === 'all' || (fv === 'open' ? !x.handledAt : x.handledAt)) && (!fd || x.department === fd));
+      $('cm-rows').innerHTML = rows.slice(0, 400).map(x => `<tr>
+        <td style="white-space:nowrap">${fmtDate(x.date)}</td><td><strong>${personLink(x.employeeId, x.name)}</strong></td><td>${escapeHtml(x.department)}</td><td class="small">${escapeHtml(x.leader || '')}</td>
+        <td style="white-space:nowrap">${x.handledAt ? `<span class="pill good">✓ Talked to</span><div class="muted small">${escapeHtml(x.handledBy)}, ${fmtWhen(x.handledAt)}</div><a href="#" class="small" data-cm-undo="${x.employeeId}|${x.date}">Undo</a>`
+          : `<button class="btn subtle" data-cm-done="${x.employeeId}|${x.date}">Talked to</button> <button class="btn subtle" data-cm-excuse="${x.employeeId}|${x.date}" title="Not a real miss: remove it and give the streak back">Excuse</button>`}</td></tr>`).join('')
+        || `<tr><td colspan="5" class="muted">${fv === 'open' ? 'Nothing waiting.' : 'None yet.'}</td></tr>`;
+    } catch (err) { fail(err); }
+  }
+  ['cm-filter', 'cm-dept'].forEach(id => $(id).addEventListener('change', loadClockMisses));
+  $('cm-rows').addEventListener('click', async e => {
+    const d = e.target.closest('[data-cm-done]'), x = e.target.closest('[data-cm-excuse]'), u = e.target.closest('[data-cm-undo]');
+    const b = d || x || u; if (!b) return;
+    e.preventDefault();
+    const [employeeId, date] = (b.dataset.cmDone || b.dataset.cmExcuse || b.dataset.cmUndo).split('|');
+    const body = { employeeId, date };
+    if (d) { const by = await prompt('Who talked to them? (your name)', localStorage.getItem('fu-by') || '', 'Talked to'); if (!by) return; try { localStorage.setItem('fu-by', by); } catch { /* ignore */ } body.by = by; }
+    if (x && !await confirm('Remove this missed day? It will no longer count against them, and their streak comes back.', 'Excuse')) return;
+    if (u) body.undo = true; if (x) body.excuse = true;
+    try { await post('/api/admin/clock-misses/handle', body); toast(x ? 'Excused' : u ? 'Undone' : 'Recorded'); loadClockMisses(); }
+    catch (err) { fail(err); }
+  });
   $('fu-rows').addEventListener('click', e => { const a = e.target.closest('[data-fu-open]'); if (a) { e.preventDefault(); showResponse(a.dataset.fuOpen); } });
   $('fu-remind-all').addEventListener('click', async () => {
     if (!await confirm('Email each department leader one reminder listing everyone still waiting on them?', 'Send reminders')) return;

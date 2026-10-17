@@ -2166,9 +2166,11 @@ async function adminRoutes(req, res, p, m, url) {
       covered.add(`${r.employeeId}|${r.date}`);
       if (r.status !== 'done') stillMissed.add(`${r.employeeId}|${r.date}`);
     }
-    // Days this export covers are replaced; days it doesn't mention are left alone.
+    // Days this export covers are replaced; days it doesn't mention are left alone. A miss that is still a miss keeps
+    // its "talked to" note.
+    const keep = new Map(db.clockMisses.map(x => [`${x.employeeId}|${x.date}`, x]));
     db.clockMisses = db.clockMisses.filter(x => !covered.has(`${x.employeeId}|${x.date}`))
-      .concat([...stillMissed].map(k => { const [employeeId, date] = k.split('|'); return { employeeId, date }; }));
+      .concat([...stillMissed].map(k => keep.get(k) || { employeeId: k.split('|')[0], date: k.split('|')[1] }));
     const added = [...stillMissed].filter(k => !before.has(k)).length;
     const cleared = [...covered].filter(k => before.has(k) && !stillMissed.has(k)).length;
     if (added || cleared) saveDb();
@@ -2308,6 +2310,24 @@ async function adminRoutes(req, res, p, m, url) {
       followupsToday: db.followups.filter(f => !f.attestedAt && (db.responses.find(r => r.id === f.responseId) || {}).date === t).length,
       celebrationsToday: db.settings.celebrations ? todaysCelebrations() : []
     });
+  }
+  // Missed clock-ins kept by the Clock-in check (Reports -> Missed clock-ins): who, when, and whether a leader talked to them.
+  if (m === 'GET' && p === '/api/admin/clock-misses') {
+    const list = db.clockMisses.map(x => {
+      const e = findEmployee(x.employeeId) || {};
+      return { employeeId: x.employeeId, date: x.date, name: e.name || '(removed from roster)', department: e.department || '', leader: leaderName(leaderFor(e.department || '')), handledAt: x.handledAt || null, handledBy: x.handledBy || '' };
+    }).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name));
+    return send(res, 200, { misses: list, breaksStreaks: db.settings.clockMissBreaks !== false });
+  }
+  if (m === 'POST' && p === '/api/admin/clock-misses/handle') {
+    const b = await readBody(req);
+    const x = db.clockMisses.find(y => y.employeeId === String(b.employeeId || '') && y.date === cleanDate(b.date));
+    if (!x) return send(res, 404, { error: 'Not found.' });
+    if (b.excuse) db.clockMisses = db.clockMisses.filter(y => y !== x);   // not a real miss: gone, and the streak comes back
+    else if (b.undo) { delete x.handledAt; delete x.handledBy; }
+    else if (!x.handledAt) { x.handledAt = nowIso(); x.handledBy = cleanText(b.by, 80) || 'Admin'; }
+    saveDb();
+    return send(res, 200, { ok: true });
   }
   if (m === 'GET' && p === '/api/admin/followups') {
     return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, ...f }) => f), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30) });
