@@ -214,14 +214,14 @@
   .preview-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
     background: #222; color: #fff; padding: 8px 12px; font-size: 15px; }
   .preview-bar button { font: inherit; font-size: 14px; border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-  body.previewing main { padding-bottom: 64px; }
-  /* In the admin preview window (opened at 1024 wide) the kiosk is exactly the iPad mini's 1024 × 768, bar underneath. */
-  @media (min-width: 1000px) {
-    body.previewing { overflow: auto; }
-    body.previewing .app { height: 768px; }
-    body.previewing main { padding-bottom: 32px; }
-    body.previewing .preview-bar { min-height: 48px; box-sizing: border-box; }   /* stays fixed at the bottom, under the 768px kiosk */
-  }
+  /* Admin previews: the kiosk is drawn at exactly the wall iPad's size (1024 × 768, sideways) inside #frame, then the
+     whole frame is scaled down to fit whatever screen the admin is on (a phone, a laptop), bar underneath. */
+  body.previewing { overflow: hidden; background: #333; }
+  body.previewing #frame { width: 1024px; height: 768px; position: relative; overflow: hidden; transform-origin: top left; background: var(--bg, #fff); box-shadow: 0 0 0 1px #000, 0 8px 30px rgba(0, 0, 0, .5); }
+  body.previewing .app { height: 768px; }
+  body.previewing main { padding-bottom: 32px; }
+  body.previewing .preview-bar { min-height: 48px; box-sizing: border-box; }   /* stays fixed at the bottom, under the kiosk frame */
+  .preview-bar .tip { width: 100%; text-align: center; font-size: 13px; color: #ccc; }
   .answer.multi .letter { border-radius: 8px; border: 2px solid var(--line); background: #fff; color: #fff; }
   .answer.multi.on .letter { background: var(--brand); border-color: var(--brand); }
   .tryagain { background: var(--warn-soft); color: var(--warn); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; font-size: 18px; }
@@ -289,10 +289,11 @@
 </style>
 </head>
 <body class="on-home">
+<div class="preview-bar" id="preview-bar" hidden><strong>PREVIEW</strong><span>Practice run. Nothing is saved.</span><button id="preview-again">↻ Start over</button><button id="preview-close">← Back</button><span class="tip" id="preview-tip" hidden></span></div>
+<div id="frame">
 <div id="decor" aria-hidden="true"></div>
 <canvas id="confetti" aria-hidden="true" hidden></canvas>
 <div class="floaters" id="floaters" aria-hidden="true"></div>
-<div class="preview-bar" id="preview-bar" hidden><strong>PREVIEW</strong><span>Practice run. Nothing is saved.</span><button id="preview-again">↻ Start over</button><button id="preview-close">← Back</button></div>
 <div class="popup-ov" id="popup" hidden><div class="popup-card">
   <div class="pp-kicker">📣 Announcement</div><h2 id="pp-title"></h2><img id="pp-img" alt="" hidden><div class="pp-text" id="pp-text"></div>
   <div class="pp-btns" id="pp-btns"></div><div class="pp-count" id="pp-count"></div></div></div>
@@ -461,6 +462,7 @@
     </section>
   </main>
 </div>
+</div><!-- /frame -->
 
 <script src="format.js"></script>
 <script>
@@ -507,6 +509,18 @@
   const queueFit = () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitScreen, 30); };
   const refit = () => { fitPasses = 0; document.querySelector('main').style.zoom = ''; fitScreen(); };
   window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(refit, 60); });
+  // Admin previews: draw the kiosk at the wall iPad's 1024 × 768 and shrink the whole frame to fit this screen.
+  function frameFit() {
+    if (!document.body.classList.contains('previewing')) return;
+    const bar = $('preview-bar').getBoundingClientRect().height || 48;
+    const k = Math.min(1, window.innerWidth / 1024, (window.innerHeight - bar) / 768);
+    $('frame').style.transform = `translate(${Math.max(0, (window.innerWidth - 1024 * k) / 2)}px, ${Math.max(0, (window.innerHeight - bar - 768 * k) / 2)}px) scale(${k})`;
+    const tip = $('preview-tip');
+    tip.hidden = !(k < 0.6 && window.innerHeight > window.innerWidth);
+    tip.textContent = 'Turn your phone sideways for a bigger view.';
+  }
+  window.addEventListener('resize', frameFit);
+  window.addEventListener('orientationchange', () => setTimeout(frameFit, 100));
   new ResizeObserver(queueFit).observe(document.querySelector('main'));
   new MutationObserver(queueFit).observe(document.querySelector('main'), { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class', 'src'] });
   function show(name) {
@@ -1227,14 +1241,14 @@
 
   function startPreview() {
     document.body.classList.add('previewing');
-    $('preview-bar').hidden = false;
+    $('preview-bar').hidden = false; frameFit();
     begin({});
   }
   // Admin "preview" of the last screen: ?show=birthday | anniversary | leaders. A pretend person, nothing saved.
   // Unsaved messages typed on the admin page come through localStorage so they can be seen before saving.
   const previewShow = location.pathname.startsWith('/admin/preview') ? new URLSearchParams(location.search).get('show') : null;
   function startShow() {
-    document.body.classList.add('previewing');
+    document.body.classList.add('previewing'); $('preview-bar').hidden = false; frameFit();
     if (previewShow === 'popup') {
       $('preview-bar').hidden = false;
       $('preview-bar').querySelector('span').textContent = 'What staff see after they pick their name. Nothing is saved.';
@@ -1278,6 +1292,7 @@
   if (previewMonth && location.pathname.startsWith('/admin/preview')) {
     document.body.classList.add('previewing'); $('preview-bar').hidden = false; $('preview-again').hidden = true;
     $('preview-bar').querySelector('span').textContent = 'How the iPad looks that month.';
+    frameFit();
   }
   loadConfig().then(() => { if (previewTopic) startPreview(); else if (previewShow) startShow(); });
   setInterval(() => { if ($('s-home').classList.contains('active')) loadConfig(); }, 60000);
