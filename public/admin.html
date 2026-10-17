@@ -917,7 +917,8 @@ table.la tr:hover td { background: transparent; }
   <section class="tab" id="tab-clockcheck">
     <div class="card">
       <h2>Who clocked in but didn't do the in-service</h2>
-      <div class="muted small">Export the time clock from Power BI or Workday (Excel or CSV) and choose the file here. If the workbook has a "Time Clock" tab, that tab is used. Each person's first punch of the day counts as one shift. A shift is covered if they finished an in-service that day, or by noon the next day for clock-ins at 6 pm or later. The export is only compared, never saved.</div>
+      <div class="muted small">Export the time clock from Power BI or Workday (Excel or CSV) and choose the file here. If the workbook has a "Time Clock" tab, that tab is used. Each person's first punch of the day counts as one shift. A shift is covered if they finished an in-service that day, or by noon the next day for clock-ins at 6 pm or later. The export is only compared, never saved; only which roster days were missed is kept.</div>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="cc-breaks" style="margin-top:4px"> <span>A clock-in with no in-service counts as a missed day and breaks that person's streak<br><span class="hint">Applied each time a check is run. Running the check again with a newer export updates it; finishing the in-service later that day clears it.</span></span></label>
       <div class="toolbar" style="margin-top:12px"><input type="file" id="cc-file" accept=".xlsx,.xls,.csv,text/csv"></div>
       <div id="cc-map" hidden>
         <div class="muted small" style="margin:6px 0">Check that these columns are right:</div>

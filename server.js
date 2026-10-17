@@ -150,6 +150,7 @@ function defaultSettings() {
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
     fitScreen: true,          // shrink each kiosk screen a little so it fits the iPad without scrolling
+    clockMissBreaks: true,    // a clock-in with no in-service (found by the Clock-in check) counts as a missed day and breaks the streak
     endLayout: defaultEndLayout(),  // how the last screen is arranged (Settings -> Last screen layout)
     leaders: {},              // { department: leader name and email(s) }, for the Clock-in check lists and follow-up emails
     alertEmails: [],          // emailed when someone not on the roster does an in-service
@@ -217,7 +218,8 @@ function upgradeDb(d) {
   d.schedules = Array.isArray(d.schedules) ? d.schedules : [];
   d.required = Array.isArray(d.required) ? d.required : [];
   d.announcements = Array.isArray(d.announcements) ? d.announcements : [];
-  d.popupSeen = Array.isArray(d.popupSeen) ? d.popupSeen : [];   // [{ id, employeeId, at, choice? }] who tapped "Got it" (or a custom button like "RSVP Yes") on a pop-up
+  d.popupSeen = Array.isArray(d.popupSeen) ? d.popupSeen : [];
+  d.clockMisses = Array.isArray(d.clockMisses) ? d.clockMisses : [];   // [{ employeeId, date }] clocked in, no in-service that shift (from the Clock-in check); breaks streaks   // [{ id, employeeId, at, choice? }] who tapped "Got it" (or a custom button like "RSVP Yes") on a pop-up
   d.followups = Array.isArray(d.followups) ? d.followups : [];
   d.emailLog = Array.isArray(d.emailLog) ? d.emailLog : [];
   d.admins = Array.isArray(d.admins) ? d.admins : [];
@@ -635,17 +637,32 @@ const MILESTONES = [10, 25, 50, 75, 100, 150, 200, 250, 300, 365];
 function streakStats(onlyId) {
   const by = {};
   const date = today(), year = date.slice(0, 4);
+  // Each person's days: the first answer of a day decides the streak (taking it again can't add to or break it),
+  // and a day they clocked in without doing an in-service (from the Clock-in check) breaks it.
+  const days = {};
   for (const r of db.responses) {
     if (!r.employeeId || !r.attempts.length || (onlyId && r.employeeId !== onlyId)) continue;
-    const x = by[r.employeeId] || (by[r.employeeId] = { streak: 0, year: 0, events: [], day: null });
-    // Only the first answer of each day counts, so taking it again can't add to or break the streak.
-    const grew = x.day !== r.date && !!r.firstTryCorrect;
-    if (x.day !== r.date) { x.streak = r.firstTryCorrect ? x.streak + 1 : 0; x.day = r.date; }
-    if (r.completed && r.date.startsWith(year)) {
-      x.year++;
-      if (r.date === date && MILESTONES.includes(x.year)) x.events.push({ type: 'year', n: x.year });
+    const d = days[r.employeeId] || (days[r.employeeId] = new Map());
+    const cur = d.get(r.date);
+    if (!cur) d.set(r.date, { first: !!r.firstTryCorrect, completed: r.completed ? 1 : 0 });
+    else if (r.completed) cur.completed++;
+  }
+  if (db.settings.clockMissBreaks !== false) {
+    for (const m of db.clockMisses) {
+      if (onlyId && m.employeeId !== onlyId) continue;
+      const d = days[m.employeeId] || (days[m.employeeId] = new Map());
+      if (!d.has(m.date)) d.set(m.date, { first: false, completed: 0, missed: true });
     }
-    if (r.date === date && grew && x.streak >= 5 && x.streak % 5 === 0) x.events.push({ type: 'streak', n: x.streak });
+  }
+  for (const [id, d] of Object.entries(days)) {
+    const x = by[id] = { streak: 0, year: 0, events: [], day: null };
+    for (const [dd, v] of [...d.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      x.streak = v.first ? x.streak + 1 : 0; x.day = dd;
+      if (dd.startsWith(year)) {
+        for (let i = 0; i < v.completed; i++) { x.year++; if (dd === date && MILESTONES.includes(x.year)) x.events.push({ type: 'year', n: x.year }); }
+      }
+      if (dd === date && v.first && x.streak >= 5 && x.streak % 5 === 0) x.events.push({ type: 'streak', n: x.streak });
+    }
   }
   return by;
 }
@@ -1282,6 +1299,7 @@ async function kioskRoutes(req, res, p, m) {
     const correct = isRightAnswer(q, chosen);
     if (r.attempts.length === 1) r.firstTryCorrect = correct;
     if (correct) { r.completed = true; r.completedAt = nowIso(); }
+    if (correct && r.employeeId) db.clockMisses = db.clockMisses.filter(x => !(x.employeeId === r.employeeId && x.date === r.date));
     saveDb();
     if (r.attempts.length === 1) alertUnlisted(r);
     if (correct) followUpMiss(r);
@@ -1965,6 +1983,7 @@ async function adminRoutes(req, res, p, m, url) {
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
     if ('fitScreen' in b) s.fitScreen = !!b.fitScreen;
+    if ('clockMissBreaks' in b) s.clockMissBreaks = !!b.clockMissBreaks;
     if (b.endLayout && typeof b.endLayout === 'object') s.endLayout = cleanEndLayout(b.endLayout);
     if ('celebrations' in b) s.celebrations = !!b.celebrations;
     if (b.belated && typeof b.belated === 'object') { const n = Math.round(Number(b.belated.days)); s.belated = { on: !!b.belated.on, days: n >= 1 && n <= 30 ? n : (s.belated || {}).days || 7 }; }
@@ -2127,9 +2146,25 @@ async function adminRoutes(req, res, p, m, url) {
   }
 
   if (m === 'POST' && p === '/api/admin/clock-check') {
-    // Compare a time clock export against completed in-services. Nothing from the export is saved.
+    // Compare a time clock export against completed in-services. Nothing from the export itself is saved, only which
+    // roster days were missed (employee + date), so a clock-in with no in-service breaks that person's streak.
     const punches = ((await readBody(req, 20e6)).punches || []).slice(0, 50000);
-    return send(res, 200, clockCheck(punches));
+    const out = clockCheck(punches);
+    const before = new Set(db.clockMisses.map(x => `${x.employeeId}|${x.date}`));
+    const stillMissed = new Set(), covered = new Set();
+    for (const r of out.results) {
+      if (!r.employeeId) continue;
+      covered.add(`${r.employeeId}|${r.date}`);
+      if (r.status !== 'done') stillMissed.add(`${r.employeeId}|${r.date}`);
+    }
+    // Days this export covers are replaced; days it doesn't mention are left alone.
+    db.clockMisses = db.clockMisses.filter(x => !covered.has(`${x.employeeId}|${x.date}`))
+      .concat([...stillMissed].map(k => { const [employeeId, date] = k.split('|'); return { employeeId, date }; }));
+    const added = [...stillMissed].filter(k => !before.has(k)).length;
+    const cleared = [...covered].filter(k => before.has(k) && !stillMissed.has(k)).length;
+    if (added || cleared) saveDb();
+    const streaksBroken = db.settings.clockMissBreaks !== false ? new Set([...stillMissed].map(k => k.split('|')[0])).size : 0;
+    return send(res, 200, Object.assign(out, { missesSaved: stillMissed.size, missesAdded: added, missesCleared: cleared, streaksBroken }));
   }
 
   if (m === 'GET' && p === '/api/admin/kiosk-status') {

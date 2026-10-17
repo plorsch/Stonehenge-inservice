@@ -2485,6 +2485,10 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       runClockCheck();
     } catch (err) { $('cc-error').textContent = err.message; }
   });
+  $('cc-breaks').addEventListener('change', async () => {
+    try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ clockMissBreaks: $('cc-breaks').checked }) }); toast($('cc-breaks').checked ? 'Missed clock-ins now break streaks' : 'Missed clock-ins no longer affect streaks'); }
+    catch (err) { alert(err.message); }
+  });
   async function runClockCheck() {
     $('cc-error').textContent = ''; $('cc-notes').textContent = '';
     const col = id => Number($(id).value);
@@ -2515,6 +2519,9 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       else if (ccResult.before) notes.push(`${ccResult.before} clock-in${ccResult.before === 1 ? '' : 's'} before the iPad's first in-service (${fmtDate(ccResult.firstDay)}) ${ccResult.before === 1 ? 'was' : 'were'} not counted.`);
       if (ccResult.leave + noTime) notes.push(`${ccResult.leave + noTime} time-off row${ccResult.leave + noTime === 1 ? '' : 's'} (sick, vacation, or no clock-in time) skipped.`);
       if (skipped) notes.push(`${skipped} row${skipped === 1 ? '' : 's'} skipped because the ID or date couldn't be read.`);
+      if (ccResult.missesSaved) notes.push(`${ccResult.missesSaved} missed shift${ccResult.missesSaved === 1 ? '' : 's'} for people on the roster ${ccResult.missesSaved === 1 ? 'is' : 'are'} now on their records${ccResult.streaksBroken ? ` (${ccResult.streaksBroken} ${ccResult.streaksBroken === 1 ? 'person\'s streak is' : 'people\'s streaks are'} reset)` : ''}.`);
+      else if (ccResult.shifts) notes.push('No missed shifts to record.');
+      if (ccResult.missesCleared) notes.push(`${ccResult.missesCleared} earlier-recorded miss${ccResult.missesCleared === 1 ? '' : 'es'} cleared.`);
       $('cc-notes').textContent = notes.join(' ');
       $('cc-results').hidden = false;
       renderClockCheck();
@@ -3011,6 +3018,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('leader-gaps').innerHTML = gap ? '⚠️ Follow-up emails can\'t reach these departments yet.<br>' + gap : '';
     $('set-unlisted').checked = !!s.allowUnlisted;
     $('set-fit').checked = s.fitScreen !== false;
+    $('cc-breaks').checked = s.clockMissBreaks !== false;
     loadEndLayout(s.endLayout || {});
     $('set-closing').innerHTML = '';
     (s.closingMessages || []).forEach(m => addClosingRow(m));
