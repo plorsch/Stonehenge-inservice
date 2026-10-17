@@ -126,6 +126,7 @@ function defaultSettings() {
     // Quiz-only day (0-6, or null for none): no lesson, one question from a topic the person did in the past week.
     quizDay: null,
     quizEvery: 0,             // pop quiz every Nth in-service for each person (0 = off); fair to people who don't work every day
+    quizNoLesson: false,      // on a pop quiz, hide "Read the lesson again" until they miss on the first try
     quizText: { en: 'This checks something you learned this past week.', es: 'Esto repasa algo que aprendió esta semana.' },
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
@@ -1206,7 +1207,7 @@ async function kioskRoutes(req, res, p, m) {
     // Quiz day: one question from their past week instead of a yearly or regular topic.
     if (!items.length && (isQuizDay() || quizDueFor(emp))) {
       const qz = quizFor(emp, who.department, isQuizDay() ? 7 : 21);
-      if (qz) items.push(kioskItem(qz.topic, who.employeeId, { kind: 'quiz', avoid: qz.avoid, quizFrom: qz.from, quizText: db.settings.quizText }, who.department));
+      if (qz) items.push(kioskItem(qz.topic, who.employeeId, { kind: 'quiz', avoid: qz.avoid, quizFrom: qz.from, quizText: db.settings.quizText, noLesson: !!db.settings.quizNoLesson }, who.department));
     }
     if (!items.length && emp) {
       const due = nextAnnualFor(emp);
@@ -1931,6 +1932,7 @@ async function adminRoutes(req, res, p, m, url) {
       if (n && !s.quizEvery) s.quizSince = today();
       s.quizEvery = n;
     }
+    if ('quizNoLesson' in b) s.quizNoLesson = !!b.quizNoLesson;
     if (b.quizText && typeof b.quizText === 'object') s.quizText = { en: cleanText(b.quizText.en, 300) || defaultSettings().quizText.en, es: cleanText(b.quizText.es, 300) || defaultSettings().quizText.es };
     if ('cultureDay' in b) s.cultureDay = Number.isInteger(b.cultureDay) && b.cultureDay >= 0 && b.cultureDay <= 6 ? b.cultureDay : null;
     if ('facilityName' in b) s.facilityName = cleanText(b.facilityName, 100) || 'Stonehenge';

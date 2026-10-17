@@ -656,6 +656,7 @@
     $('quiz-mode').value = Number.isInteger(state.settings.quizDay) ? 'day' : state.settings.quizEvery ? 'every' : 'off';
     quizModeUi();
     const qt = state.settings.quizText || {};
+    $('quiz-no-lesson').checked = !!state.settings.quizNoLesson;
     if (document.activeElement !== $('quiz-text-en')) $('quiz-text-en').value = qt.en || '';
     if (document.activeElement !== $('quiz-text-es')) $('quiz-text-es').value = qt.es || '';
     quizClash();
@@ -840,7 +841,7 @@
     const cd = $('culture-day').value, qd = $('quiz-day').value, qm = $('quiz-mode').value;
     await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ fallbackMode: v.value, cultureDay: cd === '' ? null : Number(cd),
       quizDay: qm === 'day' && qd !== '' ? Number(qd) : null, quizEvery: qm === 'every' ? Math.min(30, Math.max(2, Number($('quiz-every').value) || 4)) : 0,
-      quizText: { en: $('quiz-text-en').value, es: $('quiz-text-es').value } }) });
+      quizNoLesson: $('quiz-no-lesson').checked, quizText: { en: $('quiz-text-en').value, es: $('quiz-text-es').value } }) });
     await refresh();
   }, [$('save-fallback')]);
 

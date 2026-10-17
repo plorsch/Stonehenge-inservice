@@ -960,10 +960,14 @@
     $('select-all-hint').textContent = T('(then tap Submit answer at the bottom)', '(luego toque Enviar respuesta abajo)');
     $('review-lesson').textContent = T('📖 Read the lesson again', '📖 Leer la lección otra vez');
     $('submit').textContent = T('Submit answer', 'Enviar respuesta');
+    lessonButton();
     renderTryAgain();
     renderQuestion();
   }
+  // On a pop quiz with "no peeking" on, the lesson button only appears after a wrong answer.
+  function lessonButton() { const it = item(); $('review-lesson').hidden = !!(it && it.kind === 'quiz' && it.noLesson && !s.hint); }
   function renderTryAgain() {
+    lessonButton();
     if (!s.hint) return;
     const hint = es() ? s.hint.es : s.hint.en;
     $('tryagain').innerHTML = `<strong>${T('Not quite. Please try again.', 'No exactamente. Inténtelo de nuevo.')}</strong>${hint ? T('Hint: ', 'Pista: ') + escapeHtml(hint) : T('The answer choices have been shuffled.', 'Las respuestas se han mezclado.')}`;
