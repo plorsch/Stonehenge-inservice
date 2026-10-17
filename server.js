@@ -1224,6 +1224,12 @@ async function kioskRoutes(req, res, p, m) {
       const rv = nextReviewFor(emp);
       if (rv) items.push(kioskItem(findTopic(rv.topicId), emp.id, { kind: 'review', stage: rv.stage, avoid: rv.missed }, who.department));
     }
+    // A topic scheduled for these dates was put there on purpose, so it comes before pop quizzes and yearly topics
+    // (a yearly topic someone has never done counts as due, which used to crowd a schedule out).
+    if (!items.length) {
+      const sched = activeSchedulesFor(who.department)[0];
+      if (sched && isLive(findTopic(sched.topicId))) items.push(kioskItem(findTopic(sched.topicId), who.employeeId, { kind: 'scheduled', scheduleId: sched.id }, who.department));
+    }
     // Quiz day: one question from their past week instead of a yearly or regular topic.
     if (!items.length && (isQuizDay() || quizDueFor(emp))) {
       const qz = quizFor(emp, who.department, isQuizDay() ? 7 : 21);
