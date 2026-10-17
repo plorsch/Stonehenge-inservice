@@ -408,7 +408,12 @@
     $('hello-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     loadDashboard();
     $('stat-required').textContent = state.required.filter(q => q.active).length;
-    $('stat-staff').textContent = state.employees.filter(e => e.active).length;
+    // Clock-in check tile: when it was last run on this computer, and how many needed follow-up that time.
+    try {
+      const last = JSON.parse(localStorage.getItem('ccLastRun') || 'null');
+      $('stat-cc').textContent = last ? String(last.missed) : '–';
+      $('stat-cc-lbl').textContent = last ? `needed follow-up in the last clock-in check (${fmtDate(last.at.slice(0, 10))})` : 'clock-in check · not run yet on this computer';
+    } catch { /* storage blocked */ }
     // The iPad opens this same site. On a laptop running it locally, list the network addresses instead.
     const local = /^(localhost|127\.|\[::1\])/.test(location.hostname);
     const urls = local && state.kioskUrls.length ? state.kioskUrls : [location.origin + '/'];
@@ -2499,6 +2504,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     if (!punches.length) { $('cc-error').textContent = 'No clock-ins found. Check the columns above.'; $('cc-results').hidden = true; return; }
     try {
       ccResult = await post('/api/admin/clock-check', { punches });
+      try { localStorage.setItem('ccLastRun', JSON.stringify({ at: new Date().toISOString(), missed: ccResult.missed || 0 })); } catch { /* storage blocked */ }
       $('cc-shifts').textContent = ccResult.shifts;
       $('cc-done').textContent = ccResult.done;
       $('cc-missed').textContent = ccResult.missed;
