@@ -1128,6 +1128,18 @@ function alertUnlisted(r) {
   ], { url: siteUrl() + '/admin', label: 'Open the admin page' }), 'not on roster').catch(() => {});
 }
 // A first-try miss: the department leader re-educates the person and attests to it.
+// A missed clock-in that shouldn't count: the miss goes (streak comes back) and so does its open follow-up.
+function excuseMiss(employeeId, date) {
+  db.clockMisses = db.clockMisses.filter(x => !(x.employeeId === employeeId && x.date === date));
+  db.followups = db.followups.filter(f => !(f.kind === 'clockin' && f.employeeId === employeeId && f.date === date && !f.attestedAt));
+}
+// Marking a clock-in follow-up educated also marks the miss itself handled (and undo clears it).
+function syncMissHandled(f) {
+  if (f.kind !== 'clockin') return;
+  const x = db.clockMisses.find(y => y.employeeId === f.employeeId && y.date === f.date);
+  if (!x) return;
+  if (f.attestedAt) { x.handledAt = f.attestedAt; x.handledBy = f.attestedBy; } else { delete x.handledAt; delete x.handledBy; }
+}
 function followUpMiss(r) {
   if (!r.completed || r.firstTryCorrect || !db.settings.missedFollowup || db.followups.some(f => f.responseId === r.id)) return;
   const leader = leaderFor(r.department);
@@ -1139,12 +1151,55 @@ function followUpMiss(r) {
   if (f.emailedTo.length) emailFollowup(f, false).catch(() => {});
 }
 function emailFollowup(f, reminder) {
+  if (f.kind === 'clockin') return sendEmail(f.emailedTo, `${reminder ? 'Reminder: please' : 'Please'} follow up: ${f.name} clocked in without doing the in-service`, clockFollowupHtml(f, reminder), reminder ? 'reminder' : 'follow-up');
   return sendEmail(f.emailedTo, `${reminder ? 'Reminder: please' : 'Please'} follow up: ${f.name} missed an in-service question`,
     emailHtml(`${reminder ? 'Reminder: ' : ''}${f.name} missed a question`, [
       ['Staff', `${f.name}${f.department ? ' (' + f.department + ')' : ''}`], ['Topic', f.topicTitle], ['Question', f.question],
       ['They first answered', f.firstAnswer], ['Correct answer', f.correctAnswer], ['When', when(f.createdAt)],
       ['What to do', 'Take a minute to go over this with them, then tap the button to confirm.']
     ], { url: `${siteUrl()}/attest/${f.token}`, label: "I've educated them" }), reminder ? 'reminder' : 'follow-up');
+}
+// ---- Missed clock-in follow-ups (from the Clock-in check): same list, same leader email and "Educated" button, plus a quiz
+// of the topic their department had that day so the leader can go over it in person.
+function topicForDeptOnDay(dept, date) {
+  const count = {};
+  const rows = db.responses.filter(r => r.date === date && r.completed && !['quiz', 'review', 'required'].includes(r.kind));
+  for (const r of rows.filter(r => sameText(r.department || '', dept || '')).concat(rows)) count[r.topicId] = (count[r.topicId] || 0) + 1;
+  const best = Object.entries(count).sort((a, b) => b[1] - a[1]).map(([id]) => findTopic(id)).find(isLive);
+  return best || regularTopicFor(dept, { peek: true }).topic || null;
+}
+function quizHtml(topic, { answers = true } = {}) {
+  if (!topic) return '';
+  const qs = (topic.questions || []).slice(0, 10);
+  return `<div style="border:1px solid #dbe3e9;border-radius:10px;padding:12px 14px;margin:14px 0;background:#f8fafb">
+    <div style="font-weight:bold;color:#1f5f7a">${esc(topic.title)}</div>
+    ${topic.lesson ? `<div style="margin:6px 0 10px;white-space:pre-line">${esc(plainText(topic.lesson))}</div>` : ''}
+    ${qs.map((q, i) => `<div style="margin-top:10px"><strong>${i + 1}. ${esc(plainText(q.text))}</strong>${q.type === 'multi' ? ' <span style="color:#5b6b78;font-size:13px">(select all that apply)</span>' : ''}
+      <ul style="margin:4px 0 0 18px;padding:0">${[...(q.correctAnswers || []), ...(q.wrongAnswers || [])].map(a => `<li>${esc(a)}${answers && (q.correctAnswers || []).includes(a) ? ' <span style="color:#1e7a4c;font-weight:bold">✓ correct</span>' : ''}</li>`).join('')}</ul></div>`).join('')}
+  </div>`;
+}
+function followUpClockMiss(employeeId, date) {
+  const e = findEmployee(employeeId);
+  if (!e || !db.settings.missedFollowup || db.followups.some(f => f.kind === 'clockin' && f.employeeId === employeeId && f.date === date)) return;
+  const leader = leaderFor(e.department), topic = topicForDeptOnDay(e.department, date);
+  const f = { id: newId(), kind: 'clockin', token: crypto.randomBytes(18).toString('hex'), responseId: null, employeeId, name: e.name, department: e.department, date,
+    topicId: topic ? topic.id : null, topicTitle: topic ? topic.title : '', question: `Clocked in on ${fmtDay(date)} without doing the in-service`, firstAnswer: '', correctAnswer: '',
+    leader: leaderName(leader), emailedTo: emailsIn(leader), createdAt: nowIso(), attestedAt: null, attestedBy: '' };
+  db.followups.push(f);
+  if (f.emailedTo.length) emailFollowup(f, false).catch(() => {});
+}
+const fmtDay = d => { const [y, mo, day] = d.split('-'); return `${Number(mo)}/${Number(day)}/${y}`; };
+function clockFollowupHtml(f, reminder) {
+  const topic = f.topicId && findTopic(f.topicId);
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1d2b36;max-width:600px">
+    <h2 style="color:#1f5f7a;margin:0 0 12px">${reminder ? 'Reminder: ' : ''}${esc(f.name)} clocked in without doing the in-service</h2>
+    <table style="border-collapse:collapse"><tr><td style="padding:4px 14px 4px 0;color:#5b6b78">Staff</td><td style="padding:4px 0">${esc(f.name)}${f.department ? ' (' + esc(f.department) + ')' : ''}</td></tr>
+    <tr><td style="padding:4px 14px 4px 0;color:#5b6b78">Day</td><td style="padding:4px 0">${esc(fmtDay(f.date))}</td></tr>
+    <tr><td style="padding:4px 14px 4px 0;color:#5b6b78">Topic that day</td><td style="padding:4px 0">${esc(f.topicTitle || 'Not known')}</td></tr>
+    <tr><td style="padding:4px 14px 4px 0;color:#5b6b78;vertical-align:top">What to do</td><td style="padding:4px 0">Go over the topic below with them and quiz them in person (or pass the questions along), then tap the button to confirm.</td></tr></table>
+    ${quizHtml(topic)}
+    <p style="margin:22px 0"><a href="${esc(siteUrl() + '/attest/' + f.token)}" style="background:#1f5f7a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">I've educated them</a></p>
+    <p style="color:#5b6b78;font-size:12px;margin-top:24px">Sent by the ${esc(db.settings.facilityName || 'Stonehenge')} in-service kiosk.</p></div>`;
 }
 // One reminder email per leader listing everyone still waiting on them.
 function digestHtml(list) {
@@ -1154,7 +1209,7 @@ function digestHtml(list) {
     ${list.map(f => `<div style="border:1px solid #dbe3e9;border-radius:10px;padding:12px 14px;margin-bottom:10px">
       <strong>${esc(f.name)}</strong>${f.department ? ` <span style="color:#5b6b78">(${esc(f.department)})</span>` : ''} <span style="color:#5b6b78;font-size:13px">· ${esc(when(f.createdAt))}</span>
       <div style="margin-top:4px">${esc(f.question)}</div>
-      <div style="font-size:13px;color:#5b6b78;margin-top:2px">They answered: ${esc(f.firstAnswer)} · Correct: ${esc(f.correctAnswer)}</div>
+      <div style="font-size:13px;color:#5b6b78;margin-top:2px">${f.kind === 'clockin' ? `Topic that day: ${esc(f.topicTitle || 'not known')} · <a href="${esc(siteUrl() + '/attest/' + f.token)}">open the quiz</a>` : `They answered: ${esc(f.firstAnswer)} · Correct: ${esc(f.correctAnswer)}`}</div>
       <div style="margin-top:10px"><a href="${esc(siteUrl() + '/attest/' + f.token)}" style="background:#1f5f7a;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:14px">I've educated ${esc(f.name.split(' ')[0])}</a></div></div>`).join('')}
     <p style="color:#5b6b78;font-size:12px;margin-top:20px">Sent by the ${esc(db.settings.facilityName || 'Stonehenge')} in-service kiosk.</p></div>`;
 }
@@ -1165,9 +1220,11 @@ function attestPage(f) {
   .card{max-width:520px;margin:0 auto;background:#fff;border:1px solid #dbe3e9;border-radius:14px;padding:22px}h1{font-size:21px;color:#1f5f7a;margin:0 0 12px}
   dt{color:#5b6b78;font-size:13px;margin-top:8px}dd{margin:0}input{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #dbe3e9;border-radius:8px;margin-top:4px}
   button{margin-top:14px;width:100%;font:inherit;font-weight:700;background:#1f5f7a;color:#fff;border:0;border-radius:10px;padding:14px;cursor:pointer}.ok{background:#e3f4ea;color:#1e7a4c;border-radius:10px;padding:12px;font-weight:700}</style></head>
-  <body><div class="card"><h1>${esc(f.name)} missed a question</h1><dl>
-  <dt>Department</dt><dd>${esc(f.department || '–')}</dd><dt>Topic</dt><dd>${esc(f.topicTitle)}</dd><dt>Question</dt><dd>${esc(f.question)}</dd>
-  <dt>They first answered</dt><dd>${esc(f.firstAnswer)}</dd><dt>Correct answer</dt><dd>${esc(f.correctAnswer)}</dd></dl>
+  <body><div class="card"><h1>${esc(f.name)} ${f.kind === 'clockin' ? 'clocked in without doing the in-service' : 'missed a question'}</h1><dl>
+  <dt>Department</dt><dd>${esc(f.department || '–')}</dd>${f.kind === 'clockin' ? `<dt>Day</dt><dd>${esc(fmtDay(f.date))}</dd><dt>Topic that day</dt><dd>${esc(f.topicTitle || 'Not known')}</dd></dl>
+  <p style="color:#5b6b78;font-size:14px">Go over this with them and quiz them in person, then confirm below.</p>${quizHtml(f.topicId && findTopic(f.topicId))}`
+    : `<dt>Topic</dt><dd>${esc(f.topicTitle)}</dd><dt>Question</dt><dd>${esc(f.question)}</dd>
+  <dt>They first answered</dt><dd>${esc(f.firstAnswer)}</dd><dt>Correct answer</dt><dd>${esc(f.correctAnswer)}</dd></dl>`}
   <div id="box">${done ? `<p class="ok">✓ Educated. Confirmed by ${esc(f.attestedBy)} on ${esc(when(f.attestedAt))}.</p>`
     : `<label style="display:block;margin-top:16px">Your name<input id="by" autocomplete="name" value="${esc(f.leader)}"></label><button id="go">✓ I've educated them</button>`}</div></div>
   <script>var b=document.getElementById('go');if(b)b.onclick=function(){var n=document.getElementById('by').value.trim();if(!n){alert('Please type your name.');return}b.disabled=true;
@@ -2171,8 +2228,11 @@ async function adminRoutes(req, res, p, m, url) {
     const keep = new Map(db.clockMisses.map(x => [`${x.employeeId}|${x.date}`, x]));
     db.clockMisses = db.clockMisses.filter(x => !covered.has(`${x.employeeId}|${x.date}`))
       .concat([...stillMissed].map(k => keep.get(k) || { employeeId: k.split('|')[0], date: k.split('|')[1] }));
-    const added = [...stillMissed].filter(k => !before.has(k)).length;
-    const cleared = [...covered].filter(k => before.has(k) && !stillMissed.has(k)).length;
+    const addedKeys = [...stillMissed].filter(k => !before.has(k)), clearedKeys = [...covered].filter(k => before.has(k) && !stillMissed.has(k));
+    const added = addedKeys.length, cleared = clearedKeys.length;
+    // Each new miss becomes a Needs follow-up item for the leader; a miss that turned out done drops its open item.
+    for (const k of addedKeys) followUpClockMiss(k.split('|')[0], k.split('|')[1]);
+    for (const k of clearedKeys) db.followups = db.followups.filter(f => !(f.kind === 'clockin' && !f.attestedAt && `${f.employeeId}|${f.date}` === k));
     if (added || cleared) saveDb();
     const streaksBroken = db.settings.clockMissBreaks !== false ? new Set([...stillMissed].map(k => k.split('|')[0])).size : 0;
     return send(res, 200, Object.assign(out, { missesSaved: stillMissed.size, missesAdded: added, missesCleared: cleared, streaksBroken }));
@@ -2307,7 +2367,7 @@ async function adminRoutes(req, res, p, m, url) {
       unlistedToday, unfinishedToday, quizzesToday, quizDay: isQuizDay(), quizEvery: Number(db.settings.quizEvery) || 0,
       followupsOpen: db.followups.filter(f => !f.attestedAt).length,
       // How many of those are from today's misses; the rest are older ones a leader hasn't closed yet.
-      followupsToday: db.followups.filter(f => !f.attestedAt && (db.responses.find(r => r.id === f.responseId) || {}).date === t).length,
+      followupsToday: db.followups.filter(f => !f.attestedAt && (f.kind === 'clockin' ? f.date : (db.responses.find(r => r.id === f.responseId) || {}).date) === t).length,
       celebrationsToday: db.settings.celebrations ? todaysCelebrations() : []
     });
   }
@@ -2325,7 +2385,7 @@ async function adminRoutes(req, res, p, m, url) {
     const wanted = (Array.isArray(b.items) ? b.items : [b]).slice(0, 1000).map(i => `${String(i.employeeId || '')}|${cleanDate(i.date)}`);
     const picked = db.clockMisses.filter(y => wanted.includes(`${y.employeeId}|${y.date}`));
     if (!picked.length) return send(res, 404, { error: 'Not found.' });
-    if (b.excuse) db.clockMisses = db.clockMisses.filter(y => !picked.includes(y));   // not a real miss: gone, and the streak comes back
+    if (b.excuse) picked.forEach(x => excuseMiss(x.employeeId, x.date));   // not a real miss: gone, and the streak comes back
     else for (const x of picked) {
       if (b.undo) { delete x.handledAt; delete x.handledBy; }
       else if (!x.handledAt) { x.handledAt = nowIso(); x.handledBy = cleanText(b.by, 80) || 'Admin'; }
@@ -2342,8 +2402,32 @@ async function adminRoutes(req, res, p, m, url) {
     if (!f) return send(res, 404, { error: 'Not found.' });
     const b = await readBody(req);
     if (b.undo) { f.attestedAt = null; f.attestedBy = ''; } else if (!f.attestedAt) { f.attestedAt = nowIso(); f.attestedBy = cleanText(b.by, 80) || 'Admin'; }
+    syncMissHandled(f);
     saveDb();
     return send(res, 200, { ok: true });
+  }
+  // Several follow-ups at once: attest, undo, remind, or (clock-in ones) excuse.
+  if (m === 'POST' && p === '/api/admin/followups/bulk') {
+    const b = await readBody(req);
+    const ids = cleanList(b.ids, 40, 1000), act = String(b.action || '');
+    const picked = db.followups.filter(f => ids.includes(f.id));
+    if (!picked.length) return send(res, 400, { error: 'Nothing selected.' });
+    let count = 0, failed = '';
+    for (const f of picked) {
+      if (act === 'attest') { if (!f.attestedAt) { f.attestedAt = nowIso(); f.attestedBy = cleanText(b.by, 80) || 'Admin'; syncMissHandled(f); count++; } }
+      else if (act === 'undo') { if (f.attestedAt) { f.attestedAt = null; f.attestedBy = ''; syncMissHandled(f); count++; } }
+      else if (act === 'excuse') { if (f.kind === 'clockin') { excuseMiss(f.employeeId, f.date); count++; } }
+      else if (act === 'remind') {
+        if (f.attestedAt) continue;
+        f.emailedTo = emailsIn(leaderFor(f.department)).length ? emailsIn(leaderFor(f.department)) : f.emailedTo;
+        if (!f.emailedTo.length) { failed = failed || `No leader email for ${f.department || 'some departments'}.`; continue; }
+        const log = await emailFollowup(f, true);
+        if (log.status === 'sent') { f.reminders = (f.reminders || []).concat(nowIso()); count++; } else failed = log.status === 'email not set up' ? 'Email is not connected yet (see Settings → Email alerts).' : (log.error || log.status);
+      } else return send(res, 400, { error: 'Unknown action.' });
+    }
+    saveDb();
+    if (!count && failed) return send(res, 400, { error: failed });
+    return send(res, 200, { ok: true, count, failed });
   }
   // "Remind": email the leader again, for one follow-up or (all) one email per leader with everything still open.
   const fr = m === 'POST' && p.match(/^\/api\/admin\/followups\/([\w-]+)\/remind$/);
@@ -2465,7 +2549,7 @@ async function handle(req, res) {
     if (!f) return send(res, 404, '<p style="font-family:sans-serif">This follow-up link is no longer valid.</p>', 'text/html; charset=utf-8');
     if (m === 'POST') {
       const b = await readBody(req);
-      if (!f.attestedAt) { f.attestedAt = nowIso(); f.attestedBy = cleanText(b.by, 80) || 'Leader'; saveDb(); }
+      if (!f.attestedAt) { f.attestedAt = nowIso(); f.attestedBy = cleanText(b.by, 80) || 'Leader'; syncMissHandled(f); saveDb(); }
       return send(res, 200, { ok: true });
     }
     return send(res, 200, attestPage(f), 'text/html; charset=utf-8');

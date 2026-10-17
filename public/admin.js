@@ -180,7 +180,7 @@
     try { localStorage.setItem('adminTab', b.dataset.tab); } catch { /* private window */ }
     if (b.dataset.tab === 'responses') { loadResponses(); loadUsage(); }
     if (b.dataset.tab === 'settings') renderSettings();
-    if (b.dataset.tab === 'reports') { loadFollowups(); loadClockMisses(); loadMissed(); loadAnnual(); loadReviews(); }
+    if (b.dataset.tab === 'reports') { loadFollowups(); loadMissed(); loadAnnual(); loadReviews(); }
     // Today's numbers are fetched fresh each time the tab opens, so a follow-up closed elsewhere (or by a leader's email link) shows right away.
     if (b.dataset.tab === 'today') refresh();
   });
@@ -3331,70 +3331,41 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       $('fu-remind-all').hidden = !open;
       fillSelect($('fu-dept'), [['', 'All departments']], [...new Set(followups.map(f => f.department).filter(Boolean))].sort());
       $('fu-email-note').textContent = emailReady ? '' : 'Email isn\'t connected yet, so leaders aren\'t emailed. See Settings → Email alerts.';
-      const fv = $('fu-filter').value, fd = $('fu-dept').value;
-      const rows = followups.filter(f => (fv === 'all' || (fv === 'open' ? !f.attestedAt : f.attestedAt)) && (!fd || f.department === fd));
+      const fv = $('fu-filter').value, fd = $('fu-dept').value, fk = $('fu-kind').value;
+      const kindOf = f => f.kind === 'clockin' ? 'clockin' : 'miss';
+      const rows = followups.filter(f => (fv === 'all' || (fv === 'open' ? !f.attestedAt : f.attestedAt)) && (!fd || f.department === fd) && (!fk || kindOf(f) === fk));
+      fuPicked.clear(); fuBulk(); $('fu-all').checked = false;
       $('fu-rows').innerHTML = rows.slice(0, 300).map(f => `<tr>
+        <td><input type="checkbox" data-fu-pick="${f.id}" data-fu-kind="${kindOf(f)}"></td>
         <td style="white-space:nowrap">${fmtWhen(f.createdAt)}</td><td><strong>${f.employeeId ? personLink(f.employeeId, f.name) : escapeHtml(f.name)}</strong></td><td>${escapeHtml(f.department || '')}</td>
-        <td><a href="#" data-fu-open="${f.responseId}">${escapeHtml(f.question)}</a><div class="muted small">${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>
-        <td>${escapeHtml(f.firstAnswer)}</td>
+        ${f.kind === 'clockin' ? `<td><span class="pill warn">Missed clock-in</span> ${escapeHtml(f.question)}<div class="muted small">Topic that day: ${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle || 'not known')}</div></td><td class="muted">–</td>`
+          : `<td><a href="#" data-fu-open="${f.responseId}">${escapeHtml(f.question)}</a><div class="muted small">${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>
+        <td>${escapeHtml(f.firstAnswer)}</td>`}
         <td class="small">${escapeHtml(f.leader || '')}${f.emailedTo.length ? `<div class="muted">✉ ${escapeHtml(f.emailedTo.join(', '))}</div>` : '<div class="muted">No leader email</div>'}</td>
         <td style="white-space:nowrap">${f.attestedAt ? `<span class="pill good">✓ Educated</span><div class="muted small">${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}</div><a href="#" class="small" data-fu-undo="${f.id}">Undo</a>`
-          : `<button class="btn subtle" data-fu-attest="${f.id}">Mark educated</button><button class="btn subtle" data-fu-remind="${f.id}" title="Email the leader a reminder">✉ Remind</button>${(f.reminders || []).length ? `<div class="muted small">Reminded ${f.reminders.length}×, last ${fmtWhen(f.reminders[f.reminders.length - 1])}</div>` : ''}`}</td></tr>`).join('')
-        || `<tr><td colspan="7" class="muted">${fv === 'open' ? 'Nothing waiting. Everyone is caught up. 🎉' : 'None yet.'}</td></tr>`;
+          : `<button class="btn subtle" data-fu-attest="${f.id}">Mark educated</button><button class="btn subtle" data-fu-remind="${f.id}" title="Email the leader a reminder">✉ Remind</button>${f.kind === 'clockin' ? `<button class="btn subtle" data-fu-excuse="${f.id}" title="Not a real miss: remove it and give the streak back">Excuse</button>` : ''}${(f.reminders || []).length ? `<div class="muted small">Reminded ${f.reminders.length}×, last ${fmtWhen(f.reminders[f.reminders.length - 1])}</div>` : ''}`}</td></tr>`).join('')
+        || `<tr><td colspan="8" class="muted">${fv === 'open' ? 'Nothing waiting. Everyone is caught up. 🎉' : 'None yet.'}</td></tr>`;
     } catch (err) { fail(err); }
   }
-  ['fu-filter', 'fu-dept'].forEach(id => $(id).addEventListener('change', loadFollowups));
-  // ---------- missed clock-ins (from the Clock-in check) ----------
-  async function loadClockMisses() {
-    try {
-      const { misses, breaksStreaks } = await api('/api/admin/clock-misses');
-      const open = misses.filter(x => !x.handledAt).length;
-      $('cm-count').hidden = !open; $('cm-count').textContent = `${open} open`;
-      $('cm-note').textContent = misses.length ? (breaksStreaks ? 'Each of these days broke that person\'s streak.' : 'Streaks are not affected (turned off on the Clock-in check tab).') : 'None recorded yet. Run the Clock-in check on the People tab.';
-      fillSelect($('cm-dept'), [['', 'All departments']], [...new Set(misses.map(x => x.department).filter(Boolean))].sort());
-      const fv = $('cm-filter').value, fd = $('cm-dept').value;
-      const rows = misses.filter(x => (fv === 'all' || (fv === 'open' ? !x.handledAt : x.handledAt)) && (!fd || x.department === fd));
-      cmPicked.clear(); cmBulk();
-      $('cm-rows').innerHTML = rows.slice(0, 400).map(x => `<tr>
-        <td><input type="checkbox" data-cm-pick="${x.employeeId}|${x.date}"></td>
-        <td style="white-space:nowrap">${fmtDate(x.date)}</td><td><strong>${personLink(x.employeeId, x.name)}</strong></td><td>${escapeHtml(x.department)}</td><td class="small">${escapeHtml(x.leader || '')}</td>
-        <td style="white-space:nowrap">${x.handledAt ? `<span class="pill good">✓ Talked to</span><div class="muted small">${escapeHtml(x.handledBy)}, ${fmtWhen(x.handledAt)}</div><a href="#" class="small" data-cm-undo="${x.employeeId}|${x.date}">Undo</a>`
-          : `<button class="btn subtle" data-cm-done="${x.employeeId}|${x.date}">Talked to</button> <button class="btn subtle" data-cm-excuse="${x.employeeId}|${x.date}" title="Not a real miss: remove it and give the streak back">Excuse</button>`}</td></tr>`).join('')
-        || `<tr><td colspan="6" class="muted">${fv === 'open' ? 'Nothing waiting.' : 'None yet.'}</td></tr>`;
-      $('cm-all').checked = false;
-    } catch (err) { fail(err); }
-  }
-  ['cm-filter', 'cm-dept'].forEach(id => $(id).addEventListener('change', loadClockMisses));
-  // Tick several rows, then one action for all of them.
-  const cmPicked = new Set();
-  function cmBulk() { $('cm-bulk').hidden = !cmPicked.size; $('cm-picked').textContent = cmPicked.size; }
-  $('cm-rows').addEventListener('change', e => { const c = e.target.closest('[data-cm-pick]'); if (!c) return; if (c.checked) cmPicked.add(c.dataset.cmPick); else cmPicked.delete(c.dataset.cmPick); cmBulk(); });
-  $('cm-all').addEventListener('change', () => { $('cm-rows').querySelectorAll('[data-cm-pick]').forEach(c => { c.checked = $('cm-all').checked; if (c.checked) cmPicked.add(c.dataset.cmPick); else cmPicked.delete(c.dataset.cmPick); }); cmBulk(); });
-  async function cmBulkAction(kind) {
-    const items = [...cmPicked].map(k => { const [employeeId, date] = k.split('|'); return { employeeId, date }; });
-    if (!items.length) return;
-    const body = { items };
-    if (kind === 'done') { const by = await prompt(`Who talked to these ${items.length} people? (your name)`, localStorage.getItem('fu-by') || '', 'Talked to'); if (!by) return; try { localStorage.setItem('fu-by', by); } catch { /* ignore */ } body.by = by; }
-    if (kind === 'excuse' && !await confirm(`Remove these ${items.length} missed days? They will no longer count, and streaks come back.`, 'Excuse')) return;
-    if (kind === 'undo') body.undo = true; if (kind === 'excuse') body.excuse = true;
-    try { const r = await post('/api/admin/clock-misses/handle', body); toast(`${r.count} ${kind === 'excuse' ? 'excused' : kind === 'undo' ? 'undone' : 'recorded'}`); loadClockMisses(); }
+  ['fu-filter', 'fu-dept', 'fu-kind'].forEach(id => $(id).addEventListener('change', loadFollowups));
+  // Tick several follow-ups, then one action for all of them.
+  const fuPicked = new Set();
+  function fuBulk() { $('fu-bulk').hidden = !fuPicked.size; $('fu-picked').textContent = fuPicked.size; }
+  $('fu-rows').addEventListener('change', e => { const c = e.target.closest('[data-fu-pick]'); if (!c) return; if (c.checked) fuPicked.add(c.dataset.fuPick); else fuPicked.delete(c.dataset.fuPick); fuBulk(); });
+  $('fu-all').addEventListener('change', () => { $('fu-rows').querySelectorAll('[data-fu-pick]').forEach(c => { c.checked = $('fu-all').checked; if (c.checked) fuPicked.add(c.dataset.fuPick); else fuPicked.delete(c.dataset.fuPick); }); fuBulk(); });
+  async function fuBulkAction(action) {
+    const ids = [...fuPicked]; if (!ids.length) return;
+    const body = { ids, action };
+    if (action === 'attest') { const by = await prompt(`Who educated these ${ids.length} people? (your name)`, localStorage.getItem('fu-by') || '', 'Mark educated'); if (!by) return; try { localStorage.setItem('fu-by', by); } catch { /* ignore */ } body.by = by; }
+    if (action === 'excuse' && !await confirm(`Remove the selected missed clock-ins? They will no longer count, and streaks come back. (Missed questions in the selection are left alone.)`, 'Excuse')) return;
+    if (action === 'remind' && !await confirm(`Email the leaders about the ${ids.length} selected?`, 'Send reminders')) return;
+    try { const r = await post('/api/admin/followups/bulk', body); toast(`${r.count} ${action === 'excuse' ? 'excused' : action === 'undo' ? 'undone' : action === 'remind' ? 'reminded' : 'marked educated'}${r.failed ? ' · ' + r.failed : ''}`); loadFollowups(); loadDashboard(); }
     catch (err) { fail(err); }
   }
-  $('cm-bulk-done').addEventListener('click', () => cmBulkAction('done'));
-  $('cm-bulk-excuse').addEventListener('click', () => cmBulkAction('excuse'));
-  $('cm-bulk-undo').addEventListener('click', () => cmBulkAction('undo'));
-  $('cm-rows').addEventListener('click', async e => {
-    const d = e.target.closest('[data-cm-done]'), x = e.target.closest('[data-cm-excuse]'), u = e.target.closest('[data-cm-undo]');
-    const b = d || x || u; if (!b) return;
-    e.preventDefault();
-    const [employeeId, date] = (b.dataset.cmDone || b.dataset.cmExcuse || b.dataset.cmUndo).split('|');
-    const body = { employeeId, date };
-    if (d) { const by = await prompt('Who talked to them? (your name)', localStorage.getItem('fu-by') || '', 'Talked to'); if (!by) return; try { localStorage.setItem('fu-by', by); } catch { /* ignore */ } body.by = by; }
-    if (x && !await confirm('Remove this missed day? It will no longer count against them, and their streak comes back.', 'Excuse')) return;
-    if (u) body.undo = true; if (x) body.excuse = true;
-    try { await post('/api/admin/clock-misses/handle', body); toast(x ? 'Excused' : u ? 'Undone' : 'Recorded'); loadClockMisses(); }
-    catch (err) { fail(err); }
-  });
+  $('fu-bulk-attest').addEventListener('click', () => fuBulkAction('attest'));
+  $('fu-bulk-remind').addEventListener('click', () => fuBulkAction('remind'));
+  $('fu-bulk-excuse').addEventListener('click', () => fuBulkAction('excuse'));
+  $('fu-bulk-undo').addEventListener('click', () => fuBulkAction('undo'));
   $('fu-rows').addEventListener('click', e => { const a = e.target.closest('[data-fu-open]'); if (a) { e.preventDefault(); showResponse(a.dataset.fuOpen); } });
   $('fu-remind-all').addEventListener('click', async () => {
     if (!await confirm('Email each department leader one reminder listing everyone still waiting on them?', 'Send reminders')) return;
@@ -3411,6 +3382,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       try { const r = await post(`/api/admin/followups/${rm.dataset.fuRemind}/remind`); toast('Reminder sent to ' + r.to.join(', ')); }
       catch (err) { alert(err.message); }
       return loadFollowups();
+    }
+    const x = e.target.closest('[data-fu-excuse]');
+    if (x) {
+      if (!await confirm('Remove this missed clock-in? It will no longer count against them, and their streak comes back.', 'Excuse')) return;
+      try { await post('/api/admin/followups/bulk', { ids: [x.dataset.fuExcuse], action: 'excuse' }); toast('Excused'); loadFollowups(); loadDashboard(); } catch (err) { fail(err); }
+      return;
     }
     const a = e.target.closest('[data-fu-attest]'), u = e.target.closest('[data-fu-undo]');
     if (!a && !u) return;
