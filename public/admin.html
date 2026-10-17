@@ -752,7 +752,7 @@ table.la tr:hover td { background: transparent; }
             <option value="every">Every Nth in-service for each person</option>
             <option value="day">On one weekday for everyone</option>
           </select>
-          <label id="quiz-every-wrap" hidden>every <input type="number" id="quiz-every" min="2" max="30" value="4" style="width:64px"> in-services <span class="hint">4 means their 4th visit is a quiz, then the 8th, and so on, whatever days they work</span></label>
+          <label id="quiz-every-wrap" hidden>every <input type="number" id="quiz-every" min="2" max="30" value="4" style="width:64px"> in-services <span class="hint" id="quiz-every-hint">4 means their 4th visit is a quiz, then the 8th, and so on, whatever days they work</span></label>
         </div>
         <select id="quiz-day" hidden>
           <option value="">Pick a day</option>

@@ -685,7 +685,14 @@
   const laLabel = { schedule: 'Scheduled', weekly: 'Topic of the week', daily: 'Topic of the day', culture: 'Culture day', random: '', quiz: 'Quiz day' };
   // Quiz day and culture day on the same weekday: say which one wins.
   function quizClash() { $('quiz-clash').hidden = !($('quiz-mode').value === 'day' && $('quiz-day').value !== '' && $('quiz-day').value === $('culture-day').value); }
-  function quizModeUi() { const m = $('quiz-mode').value; $('quiz-every-wrap').hidden = m !== 'every'; $('quiz-day').hidden = m !== 'day'; quizClash(); }
+  // The example under "every N in-services" follows whatever number is typed.
+  function quizEveryHint() {
+    const n = Math.min(30, Math.max(2, Math.round(Number($('quiz-every').value)) || 4));
+    const ord = x => x + (x % 100 >= 11 && x % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][x % 10] || 'th');
+    $('quiz-every-hint').textContent = `${n} means their ${ord(n)} visit is a quiz, then the ${ord(n * 2)}, then the ${ord(n * 3)}, and so on, whatever days they work`;
+  }
+  $('quiz-every').addEventListener('input', quizEveryHint);
+  function quizModeUi() { const m = $('quiz-mode').value; $('quiz-every-wrap').hidden = m !== 'every'; $('quiz-day').hidden = m !== 'day'; quizClash(); quizEveryHint(); }
   ['quiz-day', 'culture-day'].forEach(id => $(id).addEventListener('change', quizClash));
   $('quiz-mode').addEventListener('change', quizModeUi);
   async function loadLookAhead() {
