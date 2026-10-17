@@ -2571,7 +2571,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       $('cc-people-rows').innerHTML = list.map(p => {
         const head = p.leader !== lastLeader ? `<tr class="group"><th colspan="5">${escapeHtml(p.leader || 'No leader set')} <span class="muted small">(${list.filter(x => x.leader === p.leader).length} to follow up)</span></th></tr>` : '';
         lastLeader = p.leader;
-        return head + `<tr class="${ccLeftOff.has(ccKey(p)) ? 'dim' : ''}"><td><input type="checkbox" data-cc-pick="${escapeHtml(ccKey(p))}"${ccLeftOff.has(ccKey(p)) ? '' : ' checked'} title="Include in the leader email"></td><td>${p.employeeId ? personLink(p.employeeId, p.name) : escapeHtml(p.name)}${p.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}<div class="muted small">${escapeHtml(p.last4)}</div></td>
+        return head + `<tr class="${ccLeftOff.has(ccKey(p)) ? 'dim' : ''}"><td><input type="checkbox" data-cc-pick="${escapeHtml(ccKey(p))}"${ccLeftOff.has(ccKey(p)) ? '' : ' checked'} title="Include in the leader email"></td><td>${p.employeeId ? personLink(p.employeeId, p.name) : escapeHtml(p.name)}${p.onRoster ? '' : ` <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span> <button type="button" class="btn subtle" data-cc-add="${escapeHtml(ccKey(p))}">+ Add to roster</button>`}<div class="muted small">${escapeHtml(p.last4)}</div></td>
           <td>${escapeHtml(p.department || '')}</td>
           <td><strong>${p.missedDates.length}</strong> of ${p.shifts}${p.done ? '' : ' <span class="pill warn">Never did it</span>'}</td>
           <td>${p.missedDates.map(shortDay).join(', ')}</td></tr>`;
@@ -2581,11 +2581,28 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     }
     $('cc-rows').innerHTML = ccFiltered().map(r => `<tr>
       <td style="white-space:nowrap">${fmtDate(r.date)}</td><td>${escapeHtml(r.time || '')}</td>
-      <td>${personLink(r.employeeId, r.name)}${r.onRoster ? '' : ' <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span>'}${r.ambiguous ? ' <span class="pill warn" title="Several staff share these last 4 digits">Shared ID</span>' : ''}</td>
+      <td>${personLink(r.employeeId, r.name)}${r.onRoster ? '' : ` <span class="pill" title="This Workday ID is not on the Staff tab">Not on roster</span> <button type="button" class="btn subtle" data-cc-add="${escapeHtml(ccKey(r))}">+ Add to roster</button>`}${r.ambiguous ? ' <span class="pill warn" title="Several staff share these last 4 digits">Shared ID</span>' : ''}</td>
       <td>${escapeHtml(r.last4)}</td><td>${escapeHtml(r.department || '')}</td>
       <td>${ccLabel[r.status]}${r.status === 'done' ? `<div class="muted small">${fmtWhen(r.completedAt)}</div>` : ''}</td></tr>`).join('')
       || '<tr><td colspan="6" class="muted">Nothing to show. Everyone did their in-service.</td></tr>';
   }
+  // "+ Add to roster" on a Not-on-roster row: one tap adds them with the export's name, last 4 and a department guessed
+  // from the job title, then the check re-runs so their shifts count. Details can be fixed on the Staff tab.
+  async function ccAddToRoster(key) {
+    const r = ccResult.results.find(x => ccKey(x) === key);
+    if (!r) return;
+    const nm = r.name.includes(',') ? r.name.split(',').map(x => x.trim()) : [];
+    const name = nm.length === 2 ? `${nm[1].split(/\s+/)[0]} ${nm[0]}` : r.name;
+    const department = depts().find(d => d.toLowerCase() === String(r.department || '').toLowerCase()) || suggestDept(r.department) || '';
+    if (!await confirm(`Add ${name} (${r.last4}) to the roster${department ? ` in ${department}` : ''}? You can change anything on the Staff tab.`, 'Add')) return;
+    try {
+      await post('/api/admin/employees', { name, last4: r.last4, department, jobTitle: r.department || '' });
+      toast(`${name} added to the roster`);
+      await refresh();
+      runClockCheck();
+    } catch (err) { alert(err.message); }
+  }
+  $('cc-results').addEventListener('click', e => { const b = e.target.closest('[data-cc-add]'); if (b) ccAddToRoster(b.dataset.ccAdd); });
   ['cc-col-id', 'cc-col-name', 'cc-col-date', 'cc-col-time', 'cc-col-pay', 'cc-col-job'].forEach(id => $(id).addEventListener('change', runClockCheck));
   $('cc-run').addEventListener('click', runClockCheck);
   $('cc-filter').addEventListener('change', renderClockCheck);
