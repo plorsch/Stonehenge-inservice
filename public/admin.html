@@ -67,6 +67,11 @@
     font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); max-width: 100%;
   }
   textarea { width: 100%; resize: vertical; }
+  .sq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+  @media (max-width: 760px) { .sq-grid { grid-template-columns: 1fr; } }
+  .sq-msg textarea { font-size: 15px; line-height: 1.45; padding: 10px 12px; }
+  .sq-sample { white-space: pre-line; background: var(--bg, #f3f6f8); border-radius: 8px; padding: 10px 12px; margin-top: 4px; font-size: 14px; }
+  .sq-tag { display: inline-block; background: #e4f0f5; color: #1f5f7a; border: 1px solid #bcd5e0; border-radius: 999px; padding: 2px 10px; margin: 3px 4px 0 0; font-size: 13px; cursor: pointer; }
   label.block { display: block; font-weight: 600; margin: 12px 0 5px; }
   .hint { font-weight: 400; color: var(--muted); font-size: 13px; }
   .saved-tick { margin-left: 10px; font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; text-transform: none; vertical-align: middle; }
@@ -994,9 +999,15 @@ table.la tr:hover td { background: transparent; }
         <a class="btn ghost" id="sq-preview" href="/admin/quiz-preview" target="_blank" rel="noopener">👀 Preview the quiz page</a>
         <button class="btn" id="sq-save">Save</button>
       </div>
-      <label style="display:block;margin-top:10px"><span class="small">Friendly reminder in the clock-in message (leave blank for none)</span><input id="sq-reminder" style="width:100%;margin-top:4px" maxlength="300"></label>
-      <div class="small muted" style="margin-top:10px">Sample message for a missed clock-in:</div>
-      <div id="sq-sample" class="small" style="white-space:pre-line;background:var(--bg,#f3f6f8);border-radius:8px;padding:10px 12px;margin-top:4px"></div>
+      <div class="sq-grid">
+        <div class="sq-msg"><div class="toolbar" style="margin-bottom:4px"><strong class="grow">Message for a missed clock-in</strong><button type="button" class="btn subtle" data-sq-reset="clockinMsg">Reset</button></div>
+          <textarea id="sq-clockin" rows="6" maxlength="1200"></textarea>
+          <div class="small muted" style="margin-top:6px">How it will read:</div><div class="sq-sample" id="sq-sample"></div></div>
+        <div class="sq-msg"><div class="toolbar" style="margin-bottom:4px"><strong class="grow">Message for a missed question</strong><button type="button" class="btn subtle" data-sq-reset="missMsg">Reset</button></div>
+          <textarea id="sq-miss" rows="6" maxlength="1200"></textarea>
+          <div class="small muted" style="margin-top:6px">How it will read:</div><div class="sq-sample" id="sq-sample-miss"></div></div>
+      </div>
+      <div class="small muted" style="margin-top:10px">Tap a tag to drop it into the message you're editing (it fills in for each person): <span id="sq-fields"></span></div>
     </div>
     <div class="card">
       <h2>Survey sign-in sheet</h2>

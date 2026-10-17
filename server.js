@@ -161,7 +161,10 @@ function defaultSettings() {
     starter: { topicIds: [], days: 60 },
     // Spaced review: a first-try miss brings the topic back after firstDays, then after secondDays, asked a different way.
     review: { on: true, unit: 'visits', firstDays: 1, secondDays: 3 },
-    selfQuiz: { count: 2, reminder: 'Please remember to always do the in-service when you clock in. 🙂' },   // the employee's own quiz link from a follow-up   // unit 'visits' counts in-services done in between; 'days' counts calendar days
+    // The employee's own quiz link from a follow-up: how many questions, and the two messages a leader sends (placeholders below).
+    selfQuiz: { count: 2,
+      clockinMsg: 'Hi {first}! Looks like the in-service got skipped when you clocked in on {day}. No big deal. Please remember to always do the in-service when you clock in. 🙂 To get caught up, just take this quick {quiz} on "{topic}" (about a minute):\n{link}\nThanks! – {leader}',
+      missMsg: 'Hi {first}! You missed a question on the "{topic}" in-service the other day. Happens to everyone. Here\'s a quick {quiz} so you\'re all set (about a minute):\n{link}\nThanks! – {leader}' },
     decor: defaultDecor(),    // home screen decorations, one set per month
     celebrations: true,       // show staff birthdays and work anniversaries on the kiosk
     // Public streaks: shout-outs in the home screen banner, and a leaderboard ('off', 'home', 'end' or 'both')
@@ -230,6 +233,12 @@ function upgradeDb(d) {
   d.settings = Object.assign(defaultSettings(), old);
   d.settings.review = Object.assign({ on: true, firstDays: 2, secondDays: 7 }, d.settings.review);
   d.settings.selfQuiz = Object.assign({}, defaultSettings().selfQuiz, d.settings.selfQuiz);
+  // An older "reminder line" setting folds into the clock-in message.
+  if ('reminder' in d.settings.selfQuiz) {
+    const r = String(d.settings.selfQuiz.reminder || '').trim();
+    if (!d.settings.selfQuiz.clockinMsg || d.settings.selfQuiz.clockinMsg === defaultSettings().selfQuiz.clockinMsg) d.settings.selfQuiz.clockinMsg = defaultSettings().selfQuiz.clockinMsg.replace('Please remember to always do the in-service when you clock in. 🙂 ', r ? r + ' ' : '');
+    delete d.settings.selfQuiz.reminder;
+  }
   // 2026-10-17: reviews count in-services done in between, not days (the user: "Taylor should have had one in-service
   // in between"). Settings still on the old day defaults move to the new in-service defaults.
   if (!d.settings.review.unit) {
@@ -1180,15 +1189,15 @@ function quizTokenFor(f) {
 const quizUrlFor = f => `${siteUrl()}/quiz/${quizTokenFor(f)}`;
 // A ready-to-send note the leader can paste into a text or Teams message to the employee.
 const selfQuizSettings = () => Object.assign({}, defaultSettings().selfQuiz, db.settings.selfQuiz);
+// Placeholders the admin can use in the two message templates.
+const MSG_FIELDS = [['{first}', 'their first name'], ['{name}', 'their full name'], ['{day}', 'the day they clocked in'], ['{topic}', 'the topic'], ['{quiz}', '"2-question quiz" (matches the quiz length)'], ['{link}', 'the quiz link'], ['{leader}', "the leader's name"]];
 function employeeMessage(f, url) {
-  const first = (f.name || '').split(' ')[0] || 'there';
   const sq = selfQuizSettings();
   const n = Math.min(sq.count, Math.max(1, ((f.topicId && findTopic(f.topicId)) || { questions: [] }).questions.length || 1));
-  const quiz = `${n === 1 ? '1-question' : n + '-question'} quiz${f.kind === 'clockin' && f.topicTitle ? ` on "${f.topicTitle}"` : ''}`;
-  const lines = f.kind === 'clockin'
-    ? [`Hi ${first}! Looks like the in-service got skipped when you clocked in on ${fmtDay(f.date)}. No big deal.`, sq.reminder, `To get caught up, just take this quick ${quiz} (about a minute):`]
-    : [`Hi ${first}! You missed a question on the "${f.topicTitle}" in-service the other day. Happens to everyone.`, `Here's a quick ${quiz} so you're all set (about a minute):`];
-  return `${lines.filter(Boolean).join(' ')}\n${url || quizUrlFor(f)}\nThanks!${f.leader ? ' – ' + f.leader : ''}`;
+  const fill = { first: (f.name || '').split(' ')[0] || 'there', name: f.name || '', day: f.date ? fmtDay(f.date) : '', topic: f.topicTitle || 'this topic',
+    quiz: `${n === 1 ? '1-question' : n + '-question'} quiz`, link: url || quizUrlFor(f), leader: f.leader || '' };
+  const tpl = f.kind === 'clockin' ? sq.clockinMsg : sq.missMsg;
+  return tpl.replace(/\{(\w+)\}/g, (m, k) => k in fill ? fill[k] : m).replace(/ – $/m, '').replace(/[ \t]+\n/g, '\n').trim();
 }
 // A stand-in follow-up for previews and the sample message in Settings.
 function sampleFollowup() {
@@ -2175,7 +2184,9 @@ async function adminRoutes(req, res, p, m, url) {
     if (Array.isArray(b.belatedAnniversaryMessages)) s.belatedAnniversaryMessages = b.belatedAnniversaryMessages.slice(0, 300).map(cleanMessage).filter(Boolean);
     if (b.selfQuiz && typeof b.selfQuiz === 'object') {
       const n = Math.round(Number(b.selfQuiz.count));
-      s.selfQuiz = { count: n >= 1 && n <= 3 ? n : selfQuizSettings().count, reminder: 'reminder' in b.selfQuiz ? cleanText(b.selfQuiz.reminder, 300) : selfQuizSettings().reminder };
+      const cur = selfQuizSettings(), def = defaultSettings().selfQuiz;
+      const tpl = (v, k) => typeof v === 'string' ? (cleanText(v, 1200) || def[k]) : cur[k];
+      s.selfQuiz = { count: n >= 1 && n <= 3 ? n : cur.count, clockinMsg: tpl(b.selfQuiz.clockinMsg, 'clockinMsg'), missMsg: tpl(b.selfQuiz.missMsg, 'missMsg') };
     }
     if (b.review && typeof b.review === 'object') {
       const days = (v, d) => { const n = Math.round(Number(v)); return n >= 1 && n <= 60 ? n : d; };
@@ -2517,7 +2528,8 @@ async function adminRoutes(req, res, p, m, url) {
     return send(res, 200, { ok: true, count: picked.length });
   }
   if (m === 'GET' && p === '/api/admin/followups') {
-    return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, quizToken, ...f }) => Object.assign(f, f.attestedAt ? {} : { message: employeeMessage(db.followups.find(x => x.id === f.id)) })), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30), selfQuiz: selfQuizSettings(), sampleMessage: employeeMessage(sampleFollowup(), siteUrl() + '/quiz/…') });
+    return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, quizToken, ...f }) => Object.assign(f, f.attestedAt ? {} : { message: employeeMessage(db.followups.find(x => x.id === f.id)) })), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30), selfQuiz: selfQuizSettings(), selfQuizDefaults: defaultSettings().selfQuiz, msgFields: MSG_FIELDS,
+      sampleMessage: employeeMessage(sampleFollowup(), siteUrl() + '/quiz/…'), sampleMissMessage: employeeMessage(Object.assign(sampleFollowup(), { kind: 'miss', question: 'x' }), siteUrl() + '/quiz/…') });
   }
   const fa = m === 'POST' && p.match(/^\/api\/admin\/followups\/([\w-]+)\/attest$/);
   if (fa) {

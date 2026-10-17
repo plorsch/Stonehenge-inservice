@@ -3326,12 +3326,16 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   let fuList = [];
   async function loadFollowups() {
     try {
-      const { followups, emailReady, selfQuiz, sampleMessage } = await api('/api/admin/followups');
+      const { followups, emailReady, selfQuiz, selfQuizDefaults, msgFields, sampleMessage, sampleMissMessage } = await api('/api/admin/followups');
       fuList = followups;
       if (selfQuiz) {
+        sqDefaults = selfQuizDefaults || {};
         if (document.activeElement !== $('sq-count')) $('sq-count').value = String(selfQuiz.count || 2);
-        if (document.activeElement !== $('sq-reminder')) $('sq-reminder').value = selfQuiz.reminder || '';
+        if (document.activeElement !== $('sq-clockin')) $('sq-clockin').value = selfQuiz.clockinMsg || '';
+        if (document.activeElement !== $('sq-miss')) $('sq-miss').value = selfQuiz.missMsg || '';
         $('sq-sample').textContent = sampleMessage || '';
+        $('sq-sample-miss').textContent = sampleMissMessage || '';
+        if (!$('sq-fields').children.length) $('sq-fields').innerHTML = (msgFields || []).map(([k, d]) => `<span class="sq-tag" data-sq-tag="${escapeHtml(k)}" title="${escapeHtml(d)}">${escapeHtml(k)}</span>`).join('');
       }
       const open = followups.filter(f => !f.attestedAt).length;
       $('fu-count').hidden = !open; $('fu-count').textContent = `${open} open`;
@@ -3381,10 +3385,26 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     } catch (err) { alert(err.message); }
     loadFollowups();
   });
+  let sqDefaults = {}, sqLast = $('sq-clockin');
+  ['sq-clockin', 'sq-miss'].forEach(id => $(id).addEventListener('focus', () => { sqLast = $(id); }));
   autoSave($('sq-save').closest('.card'), async () => {
-    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ selfQuiz: { count: Number($('sq-count').value), reminder: $('sq-reminder').value } }) });
+    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ selfQuiz: { count: Number($('sq-count').value), clockinMsg: $('sq-clockin').value, missMsg: $('sq-miss').value } }) });
     await loadFollowups();
   }, [$('sq-save')]);
+  $('sq-card').addEventListener('click', async e => {
+    const r = e.target.closest('[data-sq-reset]');
+    if (r) {
+      if (!await confirm('Put the original wording back?', 'Reset')) return;
+      const ta = r.dataset.sqReset === 'missMsg' ? $('sq-miss') : $('sq-clockin');
+      ta.value = sqDefaults[r.dataset.sqReset] || ''; ta.dispatchEvent(new Event('input', { bubbles: true })); return;
+    }
+    const t = e.target.closest('[data-sq-tag]');
+    if (t) {
+      const ta = sqLast, tag = t.dataset.sqTag, a = ta.selectionStart || ta.value.length, b = ta.selectionEnd || a;
+      ta.value = ta.value.slice(0, a) + tag + ta.value.slice(b); ta.focus(); ta.setSelectionRange(a + tag.length, a + tag.length);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
   $('fu-rows').addEventListener('click', async e => {
     const mb = e.target.closest('[data-fu-msg]');
     if (mb) {
