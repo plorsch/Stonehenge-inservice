@@ -1398,11 +1398,12 @@ function clockCheck(punches) {
   const shifts = new Map();
   // Like the old audit sheet: clock-ins before the kiosk's first in-service don't count.
   const firstDay = db.responses.reduce((min, r) => (!min || r.date < min ? r.date : min), '');
-  let leave = 0, before = 0;
+  let leave = 0, before = 0, unreadable = 0;
   for (const raw of punches) {
     const last4 = cleanLast4(raw.last4);
     const date = cleanDate(raw.date);
-    if (!last4 || !date) continue;
+    if (!last4) continue;
+    if (!date) { unreadable++; continue; }
     if (raw.paycode && LEAVE_PAYCODE.test(raw.paycode)) { leave++; continue; }
     if (!firstDay || date < firstDay) { before++; continue; }
     const time = /^\d{2}:\d{2}$/.test(raw.time || '') ? raw.time : '';
@@ -1442,7 +1443,7 @@ function clockCheck(punches) {
   }
   results.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
   const count = st => results.filter(r => r.status === st).length;
-  return { shifts: results.length, done: count('done'), missed: count('missed'), unfinished: count('unfinished'), leave, before, firstDay, results };
+  return { shifts: results.length, done: count('done'), missed: count('missed'), unfinished: count('unfinished'), leave, before, unreadable, firstDay, results };
 }
 
 // ---------- Admin routes ----------

@@ -2440,7 +2440,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     if (v instanceof Date && !isNaN(v)) return { date: isoDay(v), time: (v.getHours() || v.getMinutes()) ? `${pad2(v.getHours())}:${pad2(v.getMinutes())}` : '' };
     const s = String(v || '').trim();
     let date = '', m;
-    if ((m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/))) date = `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
+    // Year first, with dashes or slashes (Power BI writes 2026/10/05), else month/day/year.
+    if ((m = s.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/))) date = `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
     else if ((m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/))) date = `${m[3].length === 2 ? '20' + m[3] : m[3]}-${pad2(m[1])}-${pad2(m[2])}`;
     return { date, time: parseTime(s.replace(m ? m[0] : '', '')) };
   }
@@ -2519,6 +2520,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       else if (ccResult.before) notes.push(`${ccResult.before} clock-in${ccResult.before === 1 ? '' : 's'} before the iPad's first in-service (${fmtDate(ccResult.firstDay)}) ${ccResult.before === 1 ? 'was' : 'were'} not counted.`);
       if (ccResult.leave + noTime) notes.push(`${ccResult.leave + noTime} time-off row${ccResult.leave + noTime === 1 ? '' : 's'} (sick, vacation, or no clock-in time) skipped.`);
       if (skipped) notes.push(`${skipped} row${skipped === 1 ? '' : 's'} skipped because the ID or date couldn't be read.`);
+      if (ccResult.unreadable) notes.push(`${ccResult.unreadable} row${ccResult.unreadable === 1 ? '' : 's'} had a date the site couldn't read and ${ccResult.unreadable === 1 ? 'was' : 'were'} left out. Check the date column.`);
       if (ccResult.missesSaved) notes.push(`${ccResult.missesSaved} missed shift${ccResult.missesSaved === 1 ? '' : 's'} for people on the roster ${ccResult.missesSaved === 1 ? 'is' : 'are'} now on their records${ccResult.streaksBroken ? ` (${ccResult.streaksBroken} ${ccResult.streaksBroken === 1 ? 'person\'s streak is' : 'people\'s streaks are'} reset)` : ''}.`);
       else if (ccResult.shifts) notes.push('No missed shifts to record.');
       if (ccResult.missesCleared) notes.push(`${ccResult.missesCleared} earlier-recorded miss${ccResult.missesCleared === 1 ? '' : 'es'} cleared.`);
