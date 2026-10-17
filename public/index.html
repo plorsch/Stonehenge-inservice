@@ -269,22 +269,21 @@
   .error { color: var(--warn); font-weight: 600; min-height: 28px; margin-top: 10px; text-align: center; }
   .countdown { margin-top: 14px; font-size: 16px; text-align: center; }
 
-  /* iPad mini landscape: keypad beside the instructions */
-  @media (min-width: 900px) and (max-height: 820px) {
-    .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: center; }
-    .home-grid .pin { margin-bottom: 0; }
-    /* Last screen sideways: the message on the left, announcements and streaks on the right, Done across the bottom. */
-    #s-result.with-extras { max-width: 980px; }
-    #s-result.with-extras .card { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: center; }
-    #s-result.with-extras .extras { margin: 0; max-width: none; }
-    #s-result.with-extras .row, #s-result.with-extras .countdown, #s-result.with-extras .helpful { grid-column: 1 / -1; }
-  }
+  /* iPad mini landscape: keypad beside the instructions. Also the admin preview, which is always drawn at the iPad's size
+     (body.sideways, set from script) no matter how small the phone or window showing it is. */
+  body.sideways .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: center; }
+  body.sideways .home-grid .pin { margin-bottom: 0; }
+  /* Last screen sideways: the message on the left, announcements and streaks on the right, Done across the bottom. */
+  body.sideways #s-result.with-extras { max-width: 980px; }
+  body.sideways #s-result.with-extras .card { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: center; }
+  body.sideways #s-result.with-extras .extras { margin: 0; max-width: none; }
+  body.sideways #s-result.with-extras .row, body.sideways #s-result.with-extras .countdown, body.sideways #s-result.with-extras .helpful { grid-column: 1 / -1; }
   @media (max-width: 600px) {
-    body { font-size: 17px; }
-    .card { padding: 22px 18px; }
-    h1 { font-size: 26px; } h2 { font-size: 22px; }
-    .row { flex-direction: column-reverse; }
-    .pin span { width: 54px; height: 66px; }
+    body:not(.previewing) { font-size: 17px; }
+    body:not(.previewing) .card { padding: 22px 18px; }
+    body:not(.previewing) h1 { font-size: 26px; } body:not(.previewing) h2 { font-size: 22px; }
+    body:not(.previewing) .row { flex-direction: column-reverse; }
+    body:not(.previewing) .pin span { width: 54px; height: 66px; }
   }
 </style>
 </head>
@@ -509,9 +508,15 @@
   const queueFit = () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitScreen, 30); };
   const refit = () => { fitPasses = 0; document.querySelector('main').style.zoom = ''; fitScreen(); };
   window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(refit, 60); });
+  // The sideways (landscape iPad) layout: on when the screen is that shape, and always in the admin preview.
+  const sidewaysMQ = matchMedia('(min-width: 900px) and (max-height: 820px)');
+  function setSideways() { document.body.classList.toggle('sideways', sidewaysMQ.matches || document.body.classList.contains('previewing')); }
+  setSideways();
+  if (sidewaysMQ.addEventListener) sidewaysMQ.addEventListener('change', setSideways); else sidewaysMQ.addListener(setSideways);
   // Admin previews: draw the kiosk at the wall iPad's 1024 × 768 and shrink the whole frame to fit this screen.
   function frameFit() {
     if (!document.body.classList.contains('previewing')) return;
+    setSideways();
     const bar = $('preview-bar').getBoundingClientRect().height || 48;
     const k = Math.min(1, window.innerWidth / 1024, (window.innerHeight - bar) / 768);
     $('frame').style.transform = `translate(${Math.max(0, (window.innerWidth - 1024 * k) / 2)}px, ${Math.max(0, (window.innerHeight - bar - 768 * k) / 2)}px) scale(${k})`;
@@ -1121,8 +1126,8 @@
   // Confetti cannons from both bottom corners plus a burst from the top, on a canvas over the page.
   function confetti() {
     const cv = $('confetti'), ctx = cv.getContext('2d'), run = ++confettiRun;
-    const W = cv.width = innerWidth * devicePixelRatio, H = cv.height = innerHeight * devicePixelRatio, k = devicePixelRatio;
     cv.hidden = false;
+    const W = cv.width = (cv.offsetWidth || innerWidth) * devicePixelRatio, H = cv.height = (cv.offsetHeight || innerHeight) * devicePixelRatio, k = devicePixelRatio;
     const colors = ['#ff4d7d', '#ffb020', '#ffe14d', '#3ddc97', '#3aa0ff', '#a66bff', '#ff7ac2'];
     const bits = [];
     const burst = (x, y, angle, spread, n, speed) => {
