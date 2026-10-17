@@ -3051,6 +3051,8 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     loadEndLayout(s.endLayout || {});
     $('set-closing').innerHTML = '';
     (s.closingMessages || []).forEach(m => addClosingRow(m));
+    $('set-special').innerHTML = '';
+    (s.specialDays || []).forEach(d => addSpecialRow(d));
     $('set-news-seconds').value = s.newsSeconds || 3;
     const main = state.isMainAdmin !== false;
     $('pw-env').hidden = !state.passwordFromEnv || !main;
@@ -3177,6 +3179,21 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     return Object.keys(m).length === 1 && m.text ? m.text : m;
   }
   const closingValues = (box = $('set-closing')) => [...box.querySelectorAll('.cm-row')].map(closingFromRow).filter(m => typeof m === 'string' ? m : (m.text || m.gif));
+  // Special days: a date (or range) plus one message row, edited with the same tools as the thank-you lines.
+  function addSpecialRow(d = {}) {
+    const row = reRow($('set-special'), `<div class="sp-row"><div class="sp-dates"><label>Day <input type="date" class="sp-date" value="${escapeHtml(d.date || '')}"></label><label>through <input type="date" class="sp-end" value="${escapeHtml(d.endDate || '')}"></label><span class="sp-today"></span></div><div class="sp-msg"></div></div>`);
+    row.dataset.spId = d.id || '';
+    addClosingRow(d.message || '', row.querySelector('.sp-msg'), 'Happy Nurses Week! Thank you for everything you do.');
+    const mark = () => { const t = state.todayDate, a = row.querySelector('.sp-date').value, b = row.querySelector('.sp-end').value || a; row.querySelector('.sp-today').textContent = a && a <= t && t <= b ? '● Showing today' : ''; };
+    row.addEventListener('input', mark); mark();
+    return row;
+  }
+  const specialValues = () => [...$('set-special').children].map(row => {
+    const date = row.querySelector('.sp-date').value, endDate = row.querySelector('.sp-end').value;
+    const m = closingFromRow(row.querySelector('.cm-row'));
+    const message = typeof m === 'string' ? m : (m.text || m.gif) ? m : '';
+    return date && message ? { id: row.dataset.spId || undefined, date, endDate: endDate || null, message } : null;
+  }).filter(Boolean);
   function addLeaderRow(dept = '', leader = '') {
     const emails = String(leader).match(EMAIL_RE) || [];
     const name = String(leader).replace(EMAIL_RE, '').replace(/[\s,;<>()]+$/, '').replace(/^[\s,;<>()]+/, '').replace(/[\s,;]+(?=[,;])/g, '').trim();
@@ -3188,6 +3205,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   const focusLast = row => row.querySelector('input').focus();
   $('add-dept').addEventListener('click', () => focusLast(addDeptRow()));
   $('add-closing').addEventListener('click', () => focusLast(addClosingRow()));
+  $('add-special').addEventListener('click', () => focusLast(addSpecialRow()));
   $('add-leader').addEventListener('click', () => focusLast(addLeaderRow()));
   // The ✕ on a row asks first, unless the row is still empty (nothing to lose).
   const RE_WHAT = { 'set-depts': 'department', 'set-leaders': 'leader', 'set-closing': 'message', 'an-bday-msgs': 'birthday message', 'an-anniv-msgs': 'anniversary message', 'an-bbday-msgs': 'belated birthday message', 'an-banniv-msgs': 'belated anniversary message' };
@@ -3272,6 +3290,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         fitScreen: $('set-fit').checked,
         endLayout: endLayoutValues(),
         closingMessages: closingValues(),
+        specialDays: specialValues(),
         newsSeconds: Number($('set-news-seconds').value)
       }) });
       $('sc-depts').dataset.init = ''; $('rq-depts').dataset.init = ''; $('an-depts').dataset.init = '';

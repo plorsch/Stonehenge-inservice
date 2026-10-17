@@ -330,6 +330,12 @@ table.la tr:hover td { background: transparent; }
 .dl-grid { display: grid; grid-template-columns: minmax(220px, 1fr) 2.2fr; gap: 24px; }
 @media (max-width: 900px) { .dl-grid { grid-template-columns: 1fr; } }
 .rows-ed { display: grid; gap: 6px; margin: 4px 0 8px; }
+#set-special > .re-row { grid-template-columns: 1fr 34px; align-items: start; background: var(--bg, #f3f6f8); border-radius: 10px; padding: 8px; }
+  .sp-dates { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; font-size: 14px; }
+  .sp-dates input[type=date] { width: auto; }
+  .sp-msg .re-row { grid-template-columns: 1fr 34px; }
+  .sp-msg .re-row > .re-x { display: none; }
+  .sp-today { color: var(--good, #1e7a4c); font-weight: 700; font-size: 13px; }
 .re-row, .re-head { display: grid; grid-template-columns: 1fr 34px; gap: 6px; align-items: center; }
 #set-leaders .re-row, #set-leaders .re-head { grid-template-columns: 1fr 1fr 1.6fr 34px; }
 .re-head { font-size: 12px; color: #6b7a86; font-weight: 600; }
@@ -1120,6 +1126,10 @@ table.la tr:hover td { background: transparent; }
         <div class="muted small">The iPad shows one of these at random after each in-service. Press Enter for a new line. Click 👁 to see it like the iPad shows it, or 🎨 to pick a font, color and size, or add a GIF.</div>
         <div class="rows-ed" id="set-closing"></div>
         <button class="btn subtle" id="add-closing">+ Add a message</button>
+        <h3 style="margin:18px 0 4px">Special days</h3>
+        <div class="muted small">On these days the iPad shows this message (and GIF) instead of a random one, for everyone. Someone's birthday or work anniversary still shows their own party instead. Leave "through" blank for a single day.</div>
+        <div class="rows-ed" id="set-special"></div>
+        <button class="btn subtle" id="add-special">+ Add a special day</button>
         <div style="margin-top:14px"><button class="btn" id="save-closing">Save</button></div>
       </div>
       <div class="card" data-tile="password" data-title="Admin password">

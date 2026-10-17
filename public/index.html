@@ -1088,7 +1088,7 @@
   // Fetch the end-screen GIFs while the iPad sits on the home screen, so they show at once on the last screen.
   const preloaded = new Map();
   function preloadClosingGifs() {
-    ((s.config && s.config.closingMessages) || []).forEach(m => {
+    ((s.config && s.config.closingMessages) || []).concat(s.config && s.config.special ? [s.config.special] : []).forEach(m => {
       const gif = m && typeof m === 'object' && m.gif;
       if (!gif || preloaded.has(gif)) return;
       const img = new Image(); img.src = gif; preloaded.set(gif, img);
@@ -1098,6 +1098,8 @@
   // Pick a sign-off line at random, avoiding the last several shown on this iPad.
   const recentClosings = [];
   function closingLine() {
+    // A special day set in Settings replaces the random line (a birthday or anniversary still wins; see personalLine).
+    if (s.config && s.config.special) return s.config.special;
     const all = (s.config && s.config.closingMessages) || [];
     if (!all.length) return '';
     let pool = all.filter(m => !recentClosings.includes(JSON.stringify(m)));

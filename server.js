@@ -184,6 +184,7 @@ function defaultSettings() {
       'A little late, but just as heartfelt: happy birthday, {name}!'],
     belatedAnniversaryMessages: ['Happy belated {years}-year anniversary, {name}! Thank you for being here.', 'We missed your work anniversary, {name}, so here it is a little late: {years} years. Thank you!'],
     // Sign-off lines shown on the kiosk's final screen; one is picked at random each time.
+    specialDays: [],          // [{id, date, endDate?, message}] a message (and GIF) that replaces the random thank-you on that day; birthdays and anniversaries still win
     closingMessages: ["Have a great shift!", "Thank you for what you do for our residents!", "Go give someone a shout out today, would ya?", "You make a difference!", "Our residents are lucky to have you.", "Thanks for learning something new today.", "Small moments of kindness add up. Thank you!", "You're the reason this place feels like home.", "Go make someone smile today!", "Teamwork makes the dream work. Have a great one!", "Thanks for showing up for our residents today.", "Your care matters more than you know.", "Proud to work alongside you!", "Take a deep breath. You've got this!", "Remember to drink some water today, too!", "Someone's day is better because you're here.", "Thanks for being part of the Stonehenge family.", "Kindness is contagious. Spread some today!", "You did it! Now go be awesome.", "Every resident you greet by name feels at home. Thank you!", "Thanks for keeping our residents safe.", "High five! Have a wonderful shift."],
     dailyPicks: {},           // { department: { date, topicId } }
     weeklyPicks: {}           // { department or 'culture|department': { week, topicId } }
@@ -228,6 +229,7 @@ function upgradeDb(d) {
   d.clockMisses = Array.isArray(d.clockMisses) ? d.clockMisses : [];   // [{ employeeId, date }] clocked in, no in-service that shift (from the Clock-in check); breaks streaks   // [{ id, employeeId, at, choice? }] who tapped "Got it" (or a custom button like "RSVP Yes") on a pop-up
   d.followups = Array.isArray(d.followups) ? d.followups : [];
   d.push = Object.assign({ vapid: null, subs: [] }, d.push || {});
+  if (!Array.isArray(d.settings.specialDays)) d.settings.specialDays = [];
   d.emailLog = Array.isArray(d.emailLog) ? d.emailLog : [];
   d.admins = Array.isArray(d.admins) ? d.admins : [];
   d.sessionSecret = d.sessionSecret || crypto.randomBytes(32).toString('hex');   // signs the admin sign-in cookie
@@ -1463,7 +1465,7 @@ async function kioskRoutes(req, res, p, m) {
     }
     const month = previewMonth || new Date().getMonth() + 1;
     const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
-    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, fitScreen: s.fitScreen !== false, endLayout: Object.assign(defaultEndLayout(), s.endLayout || {}), closingMessages: s.closingMessages, decor,
+    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, fitScreen: s.fitScreen !== false, endLayout: Object.assign(defaultEndLayout(), s.endLayout || {}), closingMessages: s.closingMessages, special: specialToday(), decor,
       announcements: todaysAnnouncements(), newsSeconds: s.newsSeconds || 3, streaks: publicStreaks(), birthdayMessages: s.birthdayMessages, anniversaryMessages: s.anniversaryMessages, belatedBirthdayMessages: s.belatedBirthdayMessages, belatedAnniversaryMessages: s.belatedAnniversaryMessages, celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
   }
 
@@ -1810,6 +1812,19 @@ function newHireList() {
 }
 
 // An end-screen message: plain text, or { text, font, color, size, gif } when it has a style or a GIF.
+// A special day: the end-screen message for one date (or a short range).
+function cleanSpecialDay(d) {
+  if (!d || typeof d !== 'object') return null;
+  const date = cleanDate(d.date), endDate = cleanDate(d.endDate);
+  const message = cleanMessage(d.message);
+  if (!date || !message) return null;
+  return { id: /^[\w-]{1,20}$/.test(d.id || '') ? d.id : newId(), date, endDate: endDate && endDate > date ? endDate : null, message };
+}
+// Today's special message, if a special day covers today.
+function specialToday(date = today()) {
+  const hit = (db.settings.specialDays || []).find(x => x.date <= date && date <= (x.endDate || x.date));
+  return hit ? hit.message : null;
+}
 function cleanMessage(m) {
   if (typeof m === 'string') return cleanText(m, 300);
   if (!m || typeof m !== 'object') return '';
@@ -2294,6 +2309,7 @@ async function adminRoutes(req, res, p, m, url) {
     if ('kioskQuietMin' in b && [0, 30, 60, 120, 240, 480].includes(Number(b.kioskQuietMin))) s.kioskQuietMin = Number(b.kioskQuietMin);
     if ('newsSeconds' in b) { const n = Number(b.newsSeconds); if (n >= 1 && n <= 60) s.newsSeconds = Math.round(n); }
     if (Array.isArray(b.closingMessages)) s.closingMessages = b.closingMessages.slice(0, 100).map(cleanMessage).filter(Boolean);
+    if (Array.isArray(b.specialDays)) s.specialDays = b.specialDays.slice(0, 100).map(cleanSpecialDay).filter(Boolean).sort((a, c) => a.date.localeCompare(c.date));
     if (b.decor && typeof b.decor === 'object' && Array.isArray(b.decor.months) && b.decor.months.length === 12) {
       s.decor = { on: !!b.decor.on, months: b.decor.months.map(x => ({
         emoji: cleanText(x && x.emoji, 60), message: cleanText(x && x.message, 100),
