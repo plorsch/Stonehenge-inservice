@@ -582,7 +582,7 @@ table.la tr:hover td { background: transparent; }
     </div>
     <div class="card">
       <div class="toolbar"><h2 style="margin:0" class="grow">What each department gets today</h2><a href="#" data-go="look-ahead" class="small">📅 See the weeks ahead →</a></div>
-      <div class="muted small" style="margin-bottom:8px">Required education always comes first, then a new hire's starter topics, then a spaced review that's due. Next is their department's scheduled topic if one is running. Otherwise a pop quiz if one is due, then one yearly topic if it's due, then a topic from the rotation, with a different question from that topic each shift.</div>
+      <div class="muted small" style="margin-bottom:8px">Required education always comes first, then a new hire's starter topics, then a spaced review that's due. Next is their department's scheduled topic if one is running (once they've done it, a pop quiz that's due slots in on their next visit, then the schedule resumes). Otherwise a pop quiz if one is due, then one yearly topic if it's due, then a topic from the rotation, with a different question from that topic each shift.</div>
       <div id="today-rows" class="dt-grid"></div>
     </div>
     <div class="card">
@@ -918,6 +918,7 @@ table.la tr:hover td { background: transparent; }
     <div class="card">
       <h2>Who clocked in but didn't do the in-service</h2>
       <div class="muted small">Export the time clock from Power BI or Workday (Excel or CSV) and choose the file here. If the workbook has a "Time Clock" tab, that tab is used. Each person's first punch of the day counts as one shift. A shift is covered if they finished an in-service that day, or by noon the next day for clock-ins at 6 pm or later. The export is only compared, never saved; only which roster days were missed is kept.</div>
+      <label class="block" for="cc-from" style="margin-top:10px">Count clock-ins from <input type="date" id="cc-from"> <span class="hint">clock-ins before this day are ignored, for the rough first days. Blank means from the iPad's first in-service.</span></label>
       <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="cc-breaks" style="margin-top:4px"> <span>A clock-in with no in-service counts as a missed day and breaks that person's streak<br><span class="hint">Applied each time a check is run. Running the check again with a newer export updates it; finishing the in-service later that day clears it.</span></span></label>
       <div class="toolbar" style="margin-top:12px"><input type="file" id="cc-file" accept=".xlsx,.xls,.csv,text/csv"></div>
       <div id="cc-map" hidden>

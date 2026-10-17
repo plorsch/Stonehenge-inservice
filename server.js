@@ -151,6 +151,7 @@ function defaultSettings() {
     allowUnlisted: true,      // staff not on the roster can type their name instead
     fitScreen: true,          // shrink each kiosk screen a little so it fits the iPad without scrolling
     clockMissBreaks: true,    // a clock-in with no in-service (found by the Clock-in check) counts as a missed day and breaks the streak
+    clockCheckFrom: null,     // 'YYYY-MM-DD': clock-ins before this day are ignored by the Clock-in check (e.g. the rough first days)
     endLayout: defaultEndLayout(),  // how the last screen is arranged (Settings -> Last screen layout)
     leaders: {},              // { department: leader name and email(s) }, for the Clock-in check lists and follow-up emails
     alertEmails: [],          // emailed when someone not on the roster does an in-service
@@ -1242,13 +1243,16 @@ async function kioskRoutes(req, res, p, m) {
       if (rv) items.push(kioskItem(findTopic(rv.topicId), emp.id, { kind: 'review', stage: rv.stage, avoid: rv.missed }, who.department));
     }
     // A topic scheduled for these dates was put there on purpose, so it comes before pop quizzes and yearly topics
-    // (a yearly topic someone has never done counts as due, which used to crowd a schedule out).
+    // (a yearly topic someone has never done counts as due, which used to crowd a schedule out). Once the person has
+    // done the scheduled topic once, a pop quiz that's due slots in on their next visit, then the schedule resumes.
+    const quizDue = isQuizDay() || quizDueFor(emp);
     if (!items.length) {
       const sched = activeSchedulesFor(who.department)[0];
-      if (sched && isLive(findTopic(sched.topicId))) items.push(kioskItem(findTopic(sched.topicId), who.employeeId, { kind: 'scheduled', scheduleId: sched.id }, who.department));
+      const doneOnce = sched && emp && db.responses.some(r => r.employeeId === emp.id && r.completed && r.topicId === sched.topicId && r.date >= sched.startDate);
+      if (sched && isLive(findTopic(sched.topicId)) && !(quizDue && doneOnce)) items.push(kioskItem(findTopic(sched.topicId), who.employeeId, { kind: 'scheduled', scheduleId: sched.id }, who.department));
     }
     // Quiz day: one question from their past week instead of a yearly or regular topic.
-    if (!items.length && (isQuizDay() || quizDueFor(emp))) {
+    if (!items.length && quizDue) {
       const qz = quizFor(emp, who.department, isQuizDay() ? 7 : 21);
       if (qz) items.push(kioskItem(qz.topic, who.employeeId, { kind: 'quiz', avoid: qz.avoid, quizFrom: qz.from, quizText: db.settings.quizText, noLesson: !!db.settings.quizNoLesson }, who.department));
     }
@@ -1397,7 +1401,10 @@ const LEAVE_PAYCODE = /sick|vacation|\bpto\b|paid time off|holiday|bereave|jury|
 function clockCheck(punches) {
   const shifts = new Map();
   // Like the old audit sheet: clock-ins before the kiosk's first in-service don't count.
-  const firstDay = db.responses.reduce((min, r) => (!min || r.date < min ? r.date : min), '');
+  // ...and neither do days before the "count clock-ins from" date set in admin (rough first days, iPad trouble).
+  const firstResp = db.responses.reduce((min, r) => (!min || r.date < min ? r.date : min), '');
+  const from = cleanDate(db.settings.clockCheckFrom);
+  const firstDay = [firstResp, from].filter(Boolean).sort().pop() || '';
   let leave = 0, before = 0, unreadable = 0;
   for (const raw of punches) {
     const last4 = cleanLast4(raw.last4);
@@ -1985,6 +1992,7 @@ async function adminRoutes(req, res, p, m, url) {
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
     if ('fitScreen' in b) s.fitScreen = !!b.fitScreen;
     if ('clockMissBreaks' in b) s.clockMissBreaks = !!b.clockMissBreaks;
+    if ('clockCheckFrom' in b) s.clockCheckFrom = cleanDate(b.clockCheckFrom);
     if (b.endLayout && typeof b.endLayout === 'object') s.endLayout = cleanEndLayout(b.endLayout);
     if ('celebrations' in b) s.celebrations = !!b.celebrations;
     if (b.belated && typeof b.belated === 'object') { const n = Math.round(Number(b.belated.days)); s.belated = { on: !!b.belated.on, days: n >= 1 && n <= 30 ? n : (s.belated || {}).days || 7 }; }

@@ -372,7 +372,7 @@
     state = await api('/api/admin/state');
     const y = window.scrollY, act = document.activeElement;
     const key = act && act !== document.body && act.closest('main') ? [...act.attributes].filter(x => x.name === 'id' || x.name.startsWith('data-')).map(x => `[${x.name}="${CSS.escape(x.value)}"]`).join('') : '';
-    renderToday(); renderSchedule(); renderRequired(); renderStarter(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters(); renderReportFilters(); setTimeout(() => fitAllText(), 30); layouts.forEach(l => l.apply());
+    renderToday(); renderSchedule(); renderRequired(); renderStarter(); renderAnnouncements(); renderTopics(); renderStaff(); renderFilters(); renderReportFilters(); renderClockSettings(); setTimeout(() => fitAllText(), 30); layouts.forEach(l => l.apply());
     if (key && !document.contains(act)) { const again = document.querySelector(key); if (again) again.focus({ preventScroll: true }); }
     if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
     requestAnimationFrame(() => { if (Math.abs(window.scrollY - y) > 2 && window.scrollY < 5) window.scrollTo(0, y); });
@@ -2490,6 +2490,16 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ clockMissBreaks: $('cc-breaks').checked }) }); toast($('cc-breaks').checked ? 'Missed clock-ins now break streaks' : 'Missed clock-ins no longer affect streaks'); }
     catch (err) { alert(err.message); }
   });
+  $('cc-from').addEventListener('change', async () => {
+    try { await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ clockCheckFrom: $('cc-from').value || null }) }); toast($('cc-from').value ? `Counting clock-ins from ${fmtDate($('cc-from').value)}` : 'Counting from the iPad\'s first in-service'); if (ccRows && ccRows.length) runClockCheck(); }
+    catch (err) { alert(err.message); }
+  });
+  // The two Clock-in check settings live on that tab, so they're filled on every refresh, not only when Settings opens.
+  function renderClockSettings() {
+    const s = state.settings || {};
+    if (document.activeElement !== $('cc-from')) $('cc-from').value = s.clockCheckFrom || '';
+    $('cc-breaks').checked = s.clockMissBreaks !== false;
+  }
   async function runClockCheck() {
     $('cc-error').textContent = ''; $('cc-notes').textContent = '';
     const col = id => Number($(id).value);
@@ -2517,7 +2527,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       $('cc-never').textContent = ccPeople().filter(x => !x.done).length;
       const notes = [];
       if (!ccResult.firstDay) notes.push('Nobody has done an in-service on the iPad yet, so there is nothing to compare.');
-      else if (ccResult.before) notes.push(`${ccResult.before} clock-in${ccResult.before === 1 ? '' : 's'} before the iPad's first in-service (${fmtDate(ccResult.firstDay)}) ${ccResult.before === 1 ? 'was' : 'were'} not counted.`);
+      else if (ccResult.before) notes.push(`${ccResult.before} clock-in${ccResult.before === 1 ? '' : 's'} before ${fmtDate(ccResult.firstDay)} ${ccResult.before === 1 ? 'was' : 'were'} not counted${$('cc-from').value ? ' (your "count from" date)' : " (the iPad's first in-service)"}.`);
       if (ccResult.leave + noTime) notes.push(`${ccResult.leave + noTime} time-off row${ccResult.leave + noTime === 1 ? '' : 's'} (sick, vacation, or no clock-in time) skipped.`);
       if (skipped) notes.push(`${skipped} row${skipped === 1 ? '' : 's'} skipped because the ID or date couldn't be read.`);
       if (ccResult.unreadable) notes.push(`${ccResult.unreadable} row${ccResult.unreadable === 1 ? '' : 's'} had a date the site couldn't read and ${ccResult.unreadable === 1 ? 'was' : 'were'} left out. Check the date column.`);
@@ -3020,7 +3030,6 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('leader-gaps').innerHTML = gap ? '⚠️ Follow-up emails can\'t reach these departments yet.<br>' + gap : '';
     $('set-unlisted').checked = !!s.allowUnlisted;
     $('set-fit').checked = s.fitScreen !== false;
-    $('cc-breaks').checked = s.clockMissBreaks !== false;
     loadEndLayout(s.endLayout || {});
     $('set-closing').innerHTML = '';
     (s.closingMessages || []).forEach(m => addClosingRow(m));
