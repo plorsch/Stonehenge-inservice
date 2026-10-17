@@ -215,6 +215,13 @@
     background: #222; color: #fff; padding: 8px 12px; font-size: 15px; }
   .preview-bar button { font: inherit; font-size: 14px; border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
   body.previewing main { padding-bottom: 64px; }
+  /* In the admin preview window (opened at 1024 wide) the kiosk is exactly the iPad mini's 1024 × 768, bar underneath. */
+  @media (min-width: 1000px) {
+    body.previewing { overflow: auto; }
+    body.previewing .app { height: 768px; }
+    body.previewing main { padding-bottom: 32px; }
+    body.previewing .preview-bar { min-height: 48px; box-sizing: border-box; }   /* stays fixed at the bottom, under the 768px kiosk */
+  }
   .answer.multi .letter { border-radius: 8px; border: 2px solid var(--line); background: #fff; color: #fff; }
   .answer.multi.on .letter { background: var(--brand); border-color: var(--brand); }
   .tryagain { background: var(--warn-soft); color: var(--warn); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; font-size: 18px; }

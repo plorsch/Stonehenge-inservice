@@ -1063,12 +1063,14 @@
   });
 
   // "Preview" opens the real kiosk screens in a new window, in practice mode (nothing is saved).
+  // Every iPad preview opens at the iPad mini's sideways size (1024 × 768) with the preview bar underneath.
+  const IPAD_WIN = 'width=1024,height=' + (768 + 48) + ',resizable=yes';
+  function openIpadPreview(url) { const w = window.open(url, 'inservice-preview', IPAD_WIN); if (w) { w.focus(); try { w.resizeTo(w.outerWidth - w.innerWidth + 1024, w.outerHeight - w.innerHeight + 768 + 48); } catch { /* fine */ } } return w; }
   function showPreview(t) {
     if (!t) return;
     if (!t.questions.length) return showDetails(t);
-    const w = window.open('/admin/preview?topic=' + encodeURIComponent(t.id), 'inservice-preview', 'width=820,height=1080');
+    const w = openIpadPreview('/admin/preview?topic=' + encodeURIComponent(t.id));
     if (!w) return alert('Your browser blocked the preview window. Allow pop-ups for this site and try again.');
-    w.focus();
   }
   // A topic's name at the top of a pop-up opens it in the editor.
   function vwTopicTitle(t) {
@@ -3399,8 +3401,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   // a regular one on the last screen (where it's listed after an in-service).
   function previewAnnouncement(a) {
     try { localStorage.setItem('previewDraft', JSON.stringify(a.popup ? { popup: { title: a.title, text: a.text, image: a.image, buttons: a.buttons || [], confirm: !!a.confirm } } : { news: a.text })); } catch { /* private window */ }
-    const w = window.open('/admin/preview?show=' + (a.popup ? 'popup' : 'news'), 'inservice-preview', 'width=820,height=1080');
-    if (w) w.focus();
+    openIpadPreview('/admin/preview?show=' + (a.popup ? 'popup' : 'news'));
   }
   $('an-popup-preview').addEventListener('click', () => previewAnnouncement({ popup: $('an-popup').checked, title: $('an-title').value, text: $('an-text').value, image: $('an-image').value,
     buttons: annButtons(), confirm: $('an-confirm').checked }));
@@ -3455,10 +3456,10 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     try { localStorage.setItem('previewDraft', JSON.stringify({ messages: { birthdayMessages: closingValues($('an-bday-msgs')), anniversaryMessages: closingValues($('an-anniv-msgs')),
       belatedBirthdayMessages: closingValues($('an-bbday-msgs')), belatedAnniversaryMessages: closingValues($('an-banniv-msgs')) },
       streaks: { board: $('sk-board').value, top: Number($('sk-top').value) } })); } catch { /* preview uses saved messages */ }
-    const w = window.open('/admin/preview?show=' + show, 'inservice-preview', 'width=820,height=1080');
-    if (w) w.focus();
+    openIpadPreview('/admin/preview?show=' + show);
   }
   document.addEventListener('click', e => { const b = e.target.closest('[data-show-preview]'); if (b) previewLastScreen(b.dataset.showPreview); });
+  document.addEventListener('click', e => { const a = e.target.closest('a[data-ipad-preview]'); if (a) { e.preventDefault(); openIpadPreview(a.getAttribute('href')); } });
   autoSave($('an-save-msgs').closest('.card'), async () => {
     await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ celebrations: $('an-celebrate').checked,
       belated: { on: $('an-belated').checked, days: Number($('an-belated-days').value) || 7 },
@@ -3511,7 +3512,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         <td><input type="text" data-decor="emoji" value="${escapeHtml(x.emoji || '')}" style="width:150px;font-size:20px"></td>
         <td><input type="text" data-decor="message" value="${escapeHtml(x.message || '')}" style="width:100%;min-width:220px"></td>
         <td><select data-decor="color">${DECOR_COLORS.map(c => `<option${c === (x.color || 'none') ? ' selected' : ''}>${c}</option>`).join('')}</select></td>
-        <td><a href="/admin/preview?month=${i + 1}" target="_blank" rel="noopener">Preview</a></td></tr>`;
+        <td><a href="/admin/preview?month=${i + 1}" target="_blank" rel="noopener" data-ipad-preview>Preview</a></td></tr>`;
     }).join('');
   }
   autoSave($('save-decor').closest('.card'), async () => {
