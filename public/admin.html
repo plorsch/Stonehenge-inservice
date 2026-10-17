@@ -333,8 +333,8 @@ table.la tr:hover td { background: transparent; }
 #set-special > .re-row { grid-template-columns: 1fr 34px; align-items: start; background: var(--bg, #f3f6f8); border-radius: 10px; padding: 8px; }
   .sp-dates { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; font-size: 14px; }
   .sp-dates input[type=date] { width: auto; }
-  .sp-msg .re-row { grid-template-columns: 1fr 34px; }
-  .sp-msg .re-row > .re-x { display: none; }
+.sp-msg .cm-row { grid-template-columns: 1fr 34px 34px !important; }
+.sp-msg .cm-row > .re-x:last-child { display: none; }
   .sp-today { color: var(--good, #1e7a4c); font-weight: 700; font-size: 13px; }
 .re-row, .re-head { display: grid; grid-template-columns: 1fr 34px; gap: 6px; align-items: center; }
 #set-leaders .re-row, #set-leaders .re-head { grid-template-columns: 1fr 1fr 1.6fr 34px; }
