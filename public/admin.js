@@ -3149,7 +3149,15 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   $('add-dept').addEventListener('click', () => focusLast(addDeptRow()));
   $('add-closing').addEventListener('click', () => focusLast(addClosingRow()));
   $('add-leader').addEventListener('click', () => focusLast(addLeaderRow()));
-  ['set-depts', 'set-leaders', 'set-closing', 'an-bday-msgs', 'an-anniv-msgs', 'an-bbday-msgs', 'an-banniv-msgs'].forEach(id => $(id).addEventListener('click', e => { const x = e.target.closest('.re-x:not(.cm-toggle):not(.cm-look)'); if (x) x.closest('.re-row').remove(); }));
+  // The ✕ on a row asks first, unless the row is still empty (nothing to lose).
+  const RE_WHAT = { 'set-depts': 'department', 'set-leaders': 'leader', 'set-closing': 'message', 'an-bday-msgs': 'birthday message', 'an-anniv-msgs': 'anniversary message', 'an-bbday-msgs': 'belated birthday message', 'an-banniv-msgs': 'belated anniversary message' };
+  Object.keys(RE_WHAT).forEach(id => $(id).addEventListener('click', async e => {
+    const x = e.target.closest('.re-x:not(.cm-toggle):not(.cm-look)'); if (!x) return;
+    const row = x.closest('.re-row');
+    const text = [...row.querySelectorAll('input[type=text], textarea')].map(i => i.value.trim()).filter(Boolean).join(' ');
+    if (text && !await confirm(`Remove this ${RE_WHAT[id]}?\n\n"${text.length > 80 ? text.slice(0, 80) + '…' : text}"`, 'Remove')) return;
+    row.remove();
+  }));
   $('set-leaders').addEventListener('input', e => {
     const i = e.target;
     if ((i.placeholder || '').includes('@')) i.classList.toggle('bad', !!i.value.trim() && (i.value.replace(EMAIL_RE, '').replace(/[\s,;]/g, '') !== ''));
