@@ -3326,8 +3326,13 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   let fuList = [];
   async function loadFollowups() {
     try {
-      const { followups, emailReady } = await api('/api/admin/followups');
+      const { followups, emailReady, selfQuiz, sampleMessage } = await api('/api/admin/followups');
       fuList = followups;
+      if (selfQuiz) {
+        if (document.activeElement !== $('sq-count')) $('sq-count').value = String(selfQuiz.count || 2);
+        if (document.activeElement !== $('sq-reminder')) $('sq-reminder').value = selfQuiz.reminder || '';
+        $('sq-sample').textContent = sampleMessage || '';
+      }
       const open = followups.filter(f => !f.attestedAt).length;
       $('fu-count').hidden = !open; $('fu-count').textContent = `${open} open`;
       $('fu-remind-all').hidden = !open;
@@ -3376,6 +3381,10 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     } catch (err) { alert(err.message); }
     loadFollowups();
   });
+  autoSave($('sq-save').closest('.card'), async () => {
+    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ selfQuiz: { count: Number($('sq-count').value), reminder: $('sq-reminder').value } }) });
+    await loadFollowups();
+  }, [$('sq-save')]);
   $('fu-rows').addEventListener('click', async e => {
     const mb = e.target.closest('[data-fu-msg]');
     if (mb) {

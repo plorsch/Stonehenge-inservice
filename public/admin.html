@@ -986,6 +986,18 @@ table.la tr:hover td { background: transparent; }
         <tbody id="fu-rows"></tbody>
       </table></div>
     </div>
+    <div class="card" id="sq-card">
+      <h2>Employee quiz link</h2>
+      <div class="muted small">Every follow-up comes with a message you can send the person (📋 Message on the row, and in the leader's email). The link opens a short quiz on their phone: the lesson, then a question or two with no answers shown. Passing it marks them educated. This is what the message says and how long the quiz is.</div>
+      <div class="toolbar" style="margin-top:10px">
+        <label>Quiz length <select id="sq-count"><option value="1">1 question</option><option value="2">2 questions</option><option value="3">3 questions</option></select></label>
+        <a class="btn ghost" id="sq-preview" href="/admin/quiz-preview" target="_blank" rel="noopener">👀 Preview the quiz page</a>
+        <button class="btn" id="sq-save">Save</button>
+      </div>
+      <label style="display:block;margin-top:10px"><span class="small">Friendly reminder in the clock-in message (leave blank for none)</span><input id="sq-reminder" style="width:100%;margin-top:4px" maxlength="300"></label>
+      <div class="small muted" style="margin-top:10px">Sample message for a missed clock-in:</div>
+      <div id="sq-sample" class="small" style="white-space:pre-line;background:var(--bg,#f3f6f8);border-radius:8px;padding:10px 12px;margin-top:4px"></div>
+    </div>
     <div class="card">
       <h2>Survey sign-in sheet</h2>
       <div class="muted small">A printable page for one topic: the lesson and questions, then everyone who completed it, when, and whether they got it right the first try. Use your browser's print window to print it or save it as a PDF.</div>

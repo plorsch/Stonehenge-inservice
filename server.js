@@ -160,7 +160,8 @@ function defaultSettings() {
     // New hire starter set: topics given one per visit, in this order, for this many days after the hire date.
     starter: { topicIds: [], days: 60 },
     // Spaced review: a first-try miss brings the topic back after firstDays, then after secondDays, asked a different way.
-    review: { on: true, unit: 'visits', firstDays: 1, secondDays: 3 },   // unit 'visits' counts in-services done in between; 'days' counts calendar days
+    review: { on: true, unit: 'visits', firstDays: 1, secondDays: 3 },
+    selfQuiz: { count: 2, reminder: 'Please remember to always do the in-service when you clock in. 🙂' },   // the employee's own quiz link from a follow-up   // unit 'visits' counts in-services done in between; 'days' counts calendar days
     decor: defaultDecor(),    // home screen decorations, one set per month
     celebrations: true,       // show staff birthdays and work anniversaries on the kiosk
     // Public streaks: shout-outs in the home screen banner, and a leaderboard ('off', 'home', 'end' or 'both')
@@ -228,6 +229,7 @@ function upgradeDb(d) {
   const old = d.settings || {};
   d.settings = Object.assign(defaultSettings(), old);
   d.settings.review = Object.assign({ on: true, firstDays: 2, secondDays: 7 }, d.settings.review);
+  d.settings.selfQuiz = Object.assign({}, defaultSettings().selfQuiz, d.settings.selfQuiz);
   // 2026-10-17: reviews count in-services done in between, not days (the user: "Taylor should have had one in-service
   // in between"). Settings still on the old day defaults move to the new in-service defaults.
   if (!d.settings.review.unit) {
@@ -1177,11 +1179,21 @@ function quizTokenFor(f) {
 }
 const quizUrlFor = f => `${siteUrl()}/quiz/${quizTokenFor(f)}`;
 // A ready-to-send note the leader can paste into a text or Teams message to the employee.
-function employeeMessage(f) {
+const selfQuizSettings = () => Object.assign({}, defaultSettings().selfQuiz, db.settings.selfQuiz);
+function employeeMessage(f, url) {
   const first = (f.name || '').split(' ')[0] || 'there';
-  const why = f.kind === 'clockin' ? `you clocked in on ${fmtDay(f.date)} without doing the in-service` : `you missed a question on the "${f.topicTitle}" in-service`;
-  const topic = f.topicTitle ? ` on "${f.topicTitle}"` : '';
-  return `Hi ${first}, ${why}. Please take this quick quiz${f.kind === 'clockin' ? topic : ''} when you get a minute (about 2 minutes) and you'll be all caught up:\n${quizUrlFor(f)}\nThanks!${f.leader ? ' – ' + f.leader : ''}`;
+  const sq = selfQuizSettings();
+  const n = Math.min(sq.count, Math.max(1, ((f.topicId && findTopic(f.topicId)) || { questions: [] }).questions.length || 1));
+  const quiz = `${n === 1 ? '1-question' : n + '-question'} quiz${f.kind === 'clockin' && f.topicTitle ? ` on "${f.topicTitle}"` : ''}`;
+  const lines = f.kind === 'clockin'
+    ? [`Hi ${first}! Looks like the in-service got skipped when you clocked in on ${fmtDay(f.date)}. No big deal.`, sq.reminder, `To get caught up, just take this quick ${quiz} (about a minute):`]
+    : [`Hi ${first}! You missed a question on the "${f.topicTitle}" in-service the other day. Happens to everyone.`, `Here's a quick ${quiz} so you're all set (about a minute):`];
+  return `${lines.filter(Boolean).join(' ')}\n${url || quizUrlFor(f)}\nThanks!${f.leader ? ' – ' + f.leader : ''}`;
+}
+// A stand-in follow-up for previews and the sample message in Settings.
+function sampleFollowup() {
+  const topic = db.topics.find(t => isLive(t) && (t.questions || []).some(q => q.correctAnswers && q.correctAnswers.length)) || db.topics[0] || null;
+  return { id: 'sample', kind: 'clockin', name: 'Taylor Sample', department: '', date: today(), topicId: topic ? topic.id : null, topicTitle: topic ? topic.title : 'Hand hygiene', question: '', leader: 'Your name', attestedAt: null };
 }
 function messageBlockHtml(f) {
   return `<div style="border:1px dashed #9fb3c0;border-radius:10px;padding:12px 14px;margin:14px 0;background:#fff">
@@ -1288,37 +1300,53 @@ function quizQuestionsFor(f) {
   let qs = (topic.questions || []).filter(q => q.correctAnswers && q.correctAnswers.length);
   const missed = f.question && qs.find(q => plainText(q.text) === f.question);
   if (missed) qs = [missed, ...qs.filter(q => q !== missed)];
-  return { topic, qs: qs.slice(0, 3) };
+  return { topic, qs: qs.slice(0, selfQuizSettings().count) };
 }
-function quizPage(f) {
+function quizPage(f, { preview = false } = {}) {
   const { topic, qs } = quizQuestionsFor(f);
-  const first = esc((f.name || '').split(' ')[0]);
+  const first = esc((f.name || '').split(' ')[0] || 'there');
   const facility = esc(db.settings.facilityName || 'Stonehenge');
-  const body = f.attestedAt ? `<p class="ok">✓ All set, ${first}. This one is already marked done${f.attestedBy ? ' (' + esc(f.attestedBy) + ')' : ''}.</p>`
-    : !topic || !qs.length ? `<p class="ok" style="background:#fff3df;color:#8a5a00">This topic isn't available any more. Please check with ${esc(f.leader || 'your leader')}.</p>`
-    : `<h1>${esc(topic.title)}</h1><p class="sub">Hi ${first}! Read this, then answer the ${qs.length === 1 ? 'question' : qs.length + ' questions'} below.</p>
-  ${topic.lesson ? `<div class="lesson">${esc(plainText(topic.lesson))}</div>` : ''}
-  <form id="qf">${qs.map((q, i) => `<fieldset data-q="${esc(q.id)}"><legend>${i + 1}. ${esc(plainText(q.text))}${q.type === 'multi' ? ' <span class="sub">(select all that apply)</span>' : ''}</legend>
-    ${shuffle(choicesFor(q).map(a => a.en)).map(a => `<label><input type="${q.type === 'multi' ? 'checkbox' : 'radio'}" name="q${i}" value="${esc(a)}"> <span>${esc(a)}</span></label>`).join('')}
+  const sq = selfQuizSettings();
+  const n = qs.length;
+  const body = f.attestedAt ? `<div class="done"><div class="big">🎉</div><h1>All set, ${first}!</h1><p>This one is already marked done${f.attestedBy ? ' (' + esc(f.attestedBy) + ')' : ''}. Nothing else to do.</p></div>`
+    : !topic || !n ? `<div class="done"><div class="big">🤔</div><h1>Hmm.</h1><p>This topic isn't available any more. Please check with ${esc(f.leader || 'your leader')}.</p></div>`
+    : `<div class="hello"><div class="kicker">${f.kind === 'clockin' ? 'Quick catch-up' : 'Quick refresher'}</div><h1>Hi ${first}! 👋</h1>
+    <p>${f.kind === 'clockin' ? `Looks like the in-service got skipped on ${esc(fmtDay(f.date))}. No big deal.` : `You missed one on this topic the other day. Happens to everyone.`}
+    Read the short lesson, answer ${n === 1 ? 'the question' : `the ${n} questions`} below, and you're all caught up. It takes about a minute.</p></div>
+  <div class="lesson"><div class="kicker">📖 ${esc(topic.title)}</div>${topic.lesson ? `<div class="lesson-text">${esc(plainText(topic.lesson))}</div>` : ''}</div>
+  <form id="qf">${qs.map((q, i) => `<fieldset data-q="${esc(q.id)}"><div class="qhead"><span class="qnum">${i + 1}</span><legend>${esc(plainText(q.text))}${q.type === 'multi' ? ' <span class="multi">Select all that apply</span>' : ''}</legend></div>
+    ${shuffle(choicesFor(q).map(a => a.en)).map(a => `<label><input type="${q.type === 'multi' ? 'checkbox' : 'radio'}" name="q${i}" value="${esc(a)}"><span class="mark"></span><span class="txt">${esc(a)}</span></label>`).join('')}
     <div class="hint" hidden></div></fieldset>`).join('')}
   <button id="go" type="submit">Check my answers</button></form>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>In-service quiz</title>
-  <style>body{font:17px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f3f6f8;color:#1d2b36;margin:0;padding:20px 14px}
-  .card{max-width:560px;margin:0 auto;background:#fff;border:1px solid #dbe3e9;border-radius:14px;padding:22px}h1{font-size:22px;color:#1f5f7a;margin:0 0 6px}.sub{color:#5b6b78;font-size:14px;margin:0 0 12px}
-  .lesson{white-space:pre-line;background:#f8fafb;border:1px solid #dbe3e9;border-radius:10px;padding:12px 14px;margin:0 0 16px}
-  fieldset{border:0;padding:0;margin:0 0 18px}legend{font-weight:700;margin-bottom:6px;padding:0}label{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #dbe3e9;border-radius:10px;margin:6px 0;cursor:pointer}
-  label input{margin-top:5px;width:18px;height:18px}fieldset.wrong legend{color:#b23b3b}fieldset.right legend{color:#1e7a4c}.hint{background:#fff3df;color:#8a5a00;border-radius:8px;padding:8px 12px;font-size:14px;margin-top:6px}
-  button{width:100%;font:inherit;font-weight:700;background:#1f5f7a;color:#fff;border:0;border-radius:10px;padding:14px;cursor:pointer}button[disabled]{opacity:.6}.ok{background:#e3f4ea;color:#1e7a4c;border-radius:10px;padding:12px;font-weight:700}
-  .foot{color:#5b6b78;font-size:12px;margin-top:18px;text-align:center}</style></head>
-  <body><div class="card">${body}</div><p class="foot">${facility} in-service</p>
+  const doneHtml = `<div class="done"><div class="big">🎉</div><h1>Nice work, ${first}!</h1><p>You got ${n === 1 ? 'it' : 'them all'} right and you're all caught up.${f.kind === 'clockin' && sq.reminder ? ' ' + esc(sq.reminder) : ''}</p><p class="small">You can close this page.</p></div>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${facility} in-service quiz</title><link rel="icon" href="/admin-icon-192.png">
+  <style>:root{--brand:#1f5f7a;--brand-dark:#174a60;--soft:#e4f0f5;--ink:#1d2b36;--muted:#5b6b78;--line:#dbe3e9;--good:#1e7a4c;--good-soft:#e3f4ea;--warn:#a4521b;--warn-soft:#fbeee2}
+  *{box-sizing:border-box}body{font:17px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,var(--soft) 0,#f3f6f8 260px);color:var(--ink);margin:0;min-height:100vh}
+  header{background:#fff;border-bottom:1px solid var(--line);padding:14px 18px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;justify-content:center;gap:12px}header img{height:46px;width:auto}
+  header .fac{font-weight:700;color:var(--brand);font-size:15px;letter-spacing:.3px}${preview ? 'header .fac::after{content:" · PREVIEW";color:var(--warn)}' : ''}
+  main{max-width:560px;margin:0 auto;padding:18px 14px 40px}.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px 20px;box-shadow:0 6px 24px rgba(31,95,122,.08)}
+  .kicker{text-transform:uppercase;letter-spacing:1.4px;font-size:12px;font-weight:700;color:var(--brand);margin-bottom:6px}h1{font-size:26px;color:var(--brand);margin:0 0 8px;line-height:1.2}.hello p{margin:0;color:var(--ink)}
+  .lesson{background:var(--soft);border-radius:14px;padding:14px 16px;margin:18px 0 22px}.lesson .kicker{margin-bottom:4px}.lesson-text{white-space:pre-line}
+  fieldset{border:0;padding:0;margin:0 0 22px}.qhead{display:flex;gap:10px;align-items:flex-start;margin-bottom:8px}.qnum{flex:none;width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  legend{font-weight:700;padding:0;float:left}.multi{display:inline-block;background:#fff3c4;color:#6b4e00;font-size:12px;font-weight:700;border-radius:999px;padding:1px 10px;margin-left:6px;vertical-align:middle;text-transform:uppercase;letter-spacing:.6px}
+  label{display:flex;gap:12px;align-items:center;padding:12px 14px;border:2px solid var(--line);border-radius:14px;margin:8px 0;cursor:pointer;background:#fff;transition:border-color .12s,background .12s}
+  label:has(input:checked){border-color:var(--brand);background:var(--soft)}label input{position:absolute;opacity:0;width:0;height:0}
+  .mark{flex:none;width:22px;height:22px;border:2px solid #9fb3c0;border-radius:50%;position:relative}input[type=checkbox]+.mark{border-radius:6px}
+  label:has(input:checked) .mark{border-color:var(--brand);background:var(--brand)}label:has(input:checked) .mark::after{content:"";position:absolute;left:6px;top:2px;width:6px;height:11px;border:solid #fff;border-width:0 3px 3px 0;transform:rotate(45deg)}
+  fieldset.wrong .qnum{background:#b23b3b}fieldset.right .qnum{background:var(--good)}fieldset.right .qnum::before{content:"✓"}fieldset.right .qnum{font-size:0}fieldset.right .qnum::before{font-size:15px}
+  .hint{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:10px 14px;font-size:15px;margin-top:8px}
+  button{width:100%;font:inherit;font-size:18px;font-weight:700;background:var(--brand);color:#fff;border:0;border-radius:14px;padding:16px;cursor:pointer;box-shadow:0 4px 14px rgba(31,95,122,.25)}button:active{background:var(--brand-dark);transform:scale(.99)}button[disabled]{opacity:.6}
+  .done{text-align:center;padding:10px 0}.done .big{font-size:64px;line-height:1;margin-bottom:10px}.done p{margin:6px 0}.done .small{color:var(--muted);font-size:14px}
+  .foot{color:var(--muted);font-size:12px;margin-top:18px;text-align:center}</style></head>
+  <body><header><img src="/logo.png" alt=""><span class="fac">${facility} in-service</span></header><main><div class="card">${body}</div><p class="foot">Questions? Ask ${esc(f.leader || 'your department leader')}.</p></main>
   <script>var f=document.getElementById('qf');if(f)f.onsubmit=function(e){e.preventDefault();var sets=[].slice.call(f.querySelectorAll('fieldset')),answers=[];
-  for(var i=0;i<sets.length;i++){var picked=[].slice.call(sets[i].querySelectorAll('input:checked')).map(function(x){return x.value});if(!picked.length){alert('Please answer question '+(i+1)+'.');return}answers.push({questionId:sets[i].dataset.q,answer:picked})}
+  for(var i=0;i<sets.length;i++){var picked=[].slice.call(sets[i].querySelectorAll('input:checked')).map(function(x){return x.value});if(!picked.length){sets[i].scrollIntoView({behavior:'smooth',block:'center'});var h0=sets[i].querySelector('.hint');h0.hidden=false;h0.textContent='Pick an answer for this one.';return}answers.push({questionId:sets[i].dataset.q,answer:picked})}
   var b=document.getElementById('go');b.disabled=true;
   fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:answers})}).then(function(r){return r.json()}).then(function(d){
   if(d.error){alert(d.error);b.disabled=false;return}
-  if(d.passed){f.outerHTML='<p class="ok">✓ Nice work, '+${JSON.stringify(first)}+'! You got them all right and you are all caught up. You can close this page.</p>';return}
+  if(d.passed){document.querySelector('.card').innerHTML=${JSON.stringify(doneHtml)};window.scrollTo(0,0);return}
   sets.forEach(function(s,i){var r=d.results[i];s.classList.toggle('wrong',!r.correct);s.classList.toggle('right',r.correct);var h=s.querySelector('.hint');
-  if(r.correct){h.hidden=true}else{h.hidden=false;h.textContent='Not quite.'+(r.hint?' Hint: '+r.hint:' Have another look at the lesson and try again.');s.querySelectorAll('input').forEach(function(x){x.checked=false})}});
+  if(r.correct){h.hidden=true;s.querySelectorAll('input').forEach(function(x){x.disabled=true})}else{h.hidden=false;h.textContent='Not quite. '+(r.hint?'Hint: '+r.hint:'Have another look at the lesson and try again.');s.querySelectorAll('input').forEach(function(x){x.checked=false})}});
   b.disabled=false;b.textContent='Try again';var w=f.querySelector('fieldset.wrong');if(w)w.scrollIntoView({behavior:'smooth',block:'center'})}).catch(function(){b.disabled=false;alert('Could not check. Please try again.')})}</script></body></html>`;
 }
 
@@ -2145,6 +2173,10 @@ async function adminRoutes(req, res, p, m, url) {
     if (b.belated && typeof b.belated === 'object') { const n = Math.round(Number(b.belated.days)); s.belated = { on: !!b.belated.on, days: n >= 1 && n <= 30 ? n : (s.belated || {}).days || 7 }; }
     if (Array.isArray(b.belatedBirthdayMessages)) s.belatedBirthdayMessages = b.belatedBirthdayMessages.slice(0, 300).map(cleanMessage).filter(Boolean);
     if (Array.isArray(b.belatedAnniversaryMessages)) s.belatedAnniversaryMessages = b.belatedAnniversaryMessages.slice(0, 300).map(cleanMessage).filter(Boolean);
+    if (b.selfQuiz && typeof b.selfQuiz === 'object') {
+      const n = Math.round(Number(b.selfQuiz.count));
+      s.selfQuiz = { count: n >= 1 && n <= 3 ? n : selfQuizSettings().count, reminder: 'reminder' in b.selfQuiz ? cleanText(b.selfQuiz.reminder, 300) : selfQuizSettings().reminder };
+    }
     if (b.review && typeof b.review === 'object') {
       const days = (v, d) => { const n = Math.round(Number(v)); return n >= 1 && n <= 60 ? n : d; };
       s.review = { on: !!b.review.on, unit: b.review.unit === 'days' ? 'days' : 'visits', firstDays: days(b.review.firstDays, s.review.firstDays), secondDays: days(b.review.secondDays, s.review.secondDays) };
@@ -2485,7 +2517,7 @@ async function adminRoutes(req, res, p, m, url) {
     return send(res, 200, { ok: true, count: picked.length });
   }
   if (m === 'GET' && p === '/api/admin/followups') {
-    return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, quizToken, ...f }) => Object.assign(f, f.attestedAt ? {} : { message: employeeMessage(db.followups.find(x => x.id === f.id)) })), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30) });
+    return send(res, 200, { followups: db.followups.slice().reverse().map(({ token, quizToken, ...f }) => Object.assign(f, f.attestedAt ? {} : { message: employeeMessage(db.followups.find(x => x.id === f.id)) })), emailReady: emailReady(), mailFrom: MAIL.from, emailLog: (db.emailLog || []).slice(0, 30), selfQuiz: selfQuizSettings(), sampleMessage: employeeMessage(sampleFollowup(), siteUrl() + '/quiz/…') });
   }
   const fa = m === 'POST' && p.match(/^\/api\/admin\/followups\/([\w-]+)\/attest$/);
   if (fa) {
@@ -2706,6 +2738,17 @@ async function handle(req, res) {
         if (err) return send(res, 404, 'Not found', 'text/plain');
         send(res, 200, html.replace('<head>', '<head><base href="/">'), 'text/html; charset=utf-8');
       });
+    }
+    // "Preview" of the employee quiz page from Settings → Employee quiz link. Graded, nothing saved.
+    if (p === '/admin/quiz-preview') {
+      const f = sampleFollowup();
+      if (m === 'POST') {
+        const b = await readBody(req); const { qs } = quizQuestionsFor(f); const given = Array.isArray(b.answers) ? b.answers : [];
+        if (!qs.length || given.length !== qs.length) return send(res, 400, { error: 'This quiz was changed. Please reload the page.' });
+        const results = qs.map((q, i) => { const chosen = cleanList(Array.isArray(given[i].answer) ? given[i].answer : [given[i].answer], 500, 8); const correct = isRightAnswer(q, chosen); return { correct, hint: correct ? '' : (q.hint || '') }; });
+        return send(res, 200, { passed: results.every(r => r.correct), results });
+      }
+      return send(res, 200, quizPage(f, { preview: true }), 'text/html; charset=utf-8');
     }
     if ((await adminRoutes(req, res, p, m, url)) !== false) return;
   }
