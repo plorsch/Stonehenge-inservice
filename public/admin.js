@@ -3337,14 +3337,13 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
       fuPicked.clear(); fuBulk(); $('fu-all').checked = false;
       $('fu-rows').innerHTML = rows.slice(0, 300).map(f => `<tr>
         <td><input type="checkbox" data-fu-pick="${f.id}" data-fu-kind="${kindOf(f)}"></td>
-        <td style="white-space:nowrap">${fmtWhen(f.createdAt)}</td><td><strong>${f.employeeId ? personLink(f.employeeId, f.name) : escapeHtml(f.name)}</strong></td><td>${escapeHtml(f.department || '')}</td>
-        ${f.kind === 'clockin' ? `<td><span class="pill warn">Missed clock-in</span> ${escapeHtml(f.question)}<div class="muted small">Topic that day: ${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle || 'not known')}</div></td><td class="muted">–</td>`
-          : `<td><a href="#" data-fu-open="${f.responseId}">${escapeHtml(f.question)}</a><div class="muted small">${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>
-        <td>${escapeHtml(f.firstAnswer)}</td>`}
+        <td class="fu-when">${fmtDate(f.createdAt.slice(0, 10))}</td><td><strong>${f.employeeId ? personLink(f.employeeId, f.name) : escapeHtml(f.name)}</strong><div class="muted small">${escapeHtml(f.department || '')}</div></td>
+        ${f.kind === 'clockin' ? `<td><span class="pill warn">Missed clock-in</span> ${escapeHtml(f.question)}<div class="muted small">Topic that day: ${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle || 'not known')}</div></td>`
+          : `<td><a href="#" data-fu-open="${f.responseId}">${escapeHtml(f.question)}</a><div class="muted small">${f.topicId ? topicLink(f.topicId, f.topicTitle) : escapeHtml(f.topicTitle)}</div><div class="fu-first">Answered: ${escapeHtml(f.firstAnswer)} · Correct: ${escapeHtml(f.correctAnswer)}</div></td>`}
         <td class="small">${escapeHtml(f.leader || '')}${f.emailedTo.length ? `<div class="muted">✉ ${escapeHtml(f.emailedTo.join(', '))}</div>` : '<div class="muted">No leader email</div>'}</td>
-        <td style="white-space:nowrap">${f.attestedAt ? `<span class="pill good">✓ Educated</span><div class="muted small">${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}</div><a href="#" class="small" data-fu-undo="${f.id}">Undo</a>`
-          : `<button class="btn subtle" data-fu-attest="${f.id}">Mark educated</button><button class="btn subtle" data-fu-remind="${f.id}" title="Email the leader a reminder">✉ Remind</button>${f.kind === 'clockin' ? `<button class="btn subtle" data-fu-excuse="${f.id}" title="Not a real miss: remove it and give the streak back">Excuse</button>` : ''}${(f.reminders || []).length ? `<div class="muted small">Reminded ${f.reminders.length}×, last ${fmtWhen(f.reminders[f.reminders.length - 1])}</div>` : ''}`}</td></tr>`).join('')
-        || `<tr><td colspan="8" class="muted">${fv === 'open' ? 'Nothing waiting. Everyone is caught up. 🎉' : 'None yet.'}</td></tr>`;
+        <td>${f.attestedAt ? `<span class="pill good">✓ Educated</span><div class="muted small">${escapeHtml(f.attestedBy)}, ${fmtWhen(f.attestedAt)}</div><a href="#" class="small" data-fu-undo="${f.id}">Undo</a>`
+          : `<div class="fu-acts"><button class="btn subtle" data-fu-attest="${f.id}">✓ Mark educated</button><button class="btn subtle" data-fu-remind="${f.id}" title="Email the leader a reminder">✉ Remind</button>${f.kind === 'clockin' ? `<button class="btn subtle" data-fu-excuse="${f.id}" title="Not a real miss: remove it and give the streak back">Excuse</button>` : ''}</div>${(f.reminders || []).length ? `<div class="muted small">Reminded ${f.reminders.length}×, last ${fmtWhen(f.reminders[f.reminders.length - 1])}</div>` : ''}`}</td></tr>`).join('')
+        || `<tr><td colspan="6" class="muted">${fv === 'open' ? 'Nothing waiting. Everyone is caught up. 🎉' : 'None yet.'}</td></tr>`;
     } catch (err) { fail(err); }
   }
   ['fu-filter', 'fu-dept', 'fu-kind'].forEach(id => $(id).addEventListener('change', loadFollowups));

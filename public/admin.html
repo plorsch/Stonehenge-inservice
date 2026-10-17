@@ -102,6 +102,13 @@
   tr.group th { background: var(--bg, #f3f6f8); color: var(--ink, #1d2b36); font-size: 14px; text-transform: none; letter-spacing: 0; padding-top: 14px; }
   tr.dim td { color: var(--muted); }
   .table-wrap { overflow-x: auto; }
+  /* Needs follow-up: everything fits without sideways scrolling; the buttons stack in a narrow column. */
+  #fu-card table { table-layout: auto; }
+  #fu-card td, #fu-card th { padding: 8px 6px; }
+  #fu-card .fu-when { white-space: nowrap; font-size: 13px; color: var(--muted); }
+  #fu-card .fu-acts { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+  #fu-card .fu-acts .btn.subtle { padding: 3px 6px; font-size: 13px; white-space: nowrap; }
+  #fu-card .fu-first { font-size: 13px; color: var(--muted); }
   .sk-head { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; }
   .sk-icon { width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg,#ffb36b,#ff6b6b); display: grid; place-items: center; font-size: 24px; flex: none; }
   .sk-grid { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 18px; }
@@ -975,7 +982,7 @@ table.la tr:hover td { background: transparent; }
       </div>
       <div class="toolbar" id="fu-bulk" hidden style="margin-top:8px"><span class="small"><strong id="fu-picked">0</strong> selected:</span> <button class="btn subtle" id="fu-bulk-attest">Mark educated</button> <button class="btn subtle" id="fu-bulk-remind">✉ Remind</button> <button class="btn subtle" id="fu-bulk-excuse" title="Clock-in rows only">Excuse</button> <button class="btn subtle" id="fu-bulk-undo">Undo educated</button></div>
       <div class="table-wrap"><table>
-        <thead><tr><th><input type="checkbox" id="fu-all" title="Select all shown"></th><th>When</th><th>Name</th><th>Dept</th><th>What happened</th><th>First answer</th><th>Leader</th><th>Status</th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="fu-all" title="Select all shown"></th><th>When</th><th>Name</th><th>What happened</th><th>Leader</th><th>Status</th></tr></thead>
         <tbody id="fu-rows"></tbody>
       </table></div>
     </div>
