@@ -1174,23 +1174,58 @@ function pushKeys() {
   if (!db.push.vapid) { db.push.vapid = webpush.generateVapidKeys(); saveDb(); }
   return db.push.vapid;
 }
-// What the badge should say: open follow-ups, plus one if the iPad has gone quiet.
-function badgeCount() {
-  return db.followups.filter(f => !f.attestedAt).length + (kioskIsQuiet() ? 1 : 0);
+// Each device chooses what it hears about (Settings → Phone alerts): which kinds, and whose departments.
+const PUSH_KINDS = ['followups', 'clockin', 'quiz', 'unlisted', 'kiosk'];
+function defaultPushPrefs(user) {
+  const main = !user || user === config.adminUser;
+  const name = main ? (db.settings.adminName || '') : ((db.admins.find(a => a.username === user) || {}).name || user);
+  const first = String(name).split(' ')[0].toLowerCase();
+  // A department leader's phone starts out hearing only about their own departments (matched by the leader's first name).
+  const depts = main || !first ? [] : Object.keys(db.settings.leaders || {}).filter(d => leaderName(db.settings.leaders[d]).toLowerCase().split(/\s+/)[0] === first);
+  return { followups: true, clockin: true, quiz: true, unlisted: main, kiosk: main, scope: main || !depts.length ? 'all' : 'mine', depts };
 }
+function cleanPushPrefs(p, user) {
+  const d = defaultPushPrefs(user);
+  if (!p || typeof p !== 'object') return d;
+  const out = {};
+  for (const k of PUSH_KINDS) out[k] = k in p ? !!p[k] : d[k];
+  out.scope = p.scope === 'mine' ? 'mine' : 'all';
+  out.depts = cleanList(Array.isArray(p.depts) ? p.depts : d.depts, 60, 40);
+  return out;
+}
+const subPrefs = s => s.prefs || (s.prefs = defaultPushPrefs(s.user));
+// Does this device want this kind of alert, about this department?
+function subWants(s, kind, dept) {
+  const p = subPrefs(s);
+  if (kind !== 'test' && !p[kind]) return false;
+  if (dept === undefined || p.scope !== 'mine') return true;
+  return p.depts.some(d => sameText(d, dept || ''));
+}
+// What the badge should say for this device: its open follow-ups, plus one if it watches the iPad and the iPad has gone quiet.
+function badgeFor(s) {
+  const p = s ? subPrefs(s) : null;
+  const open = db.followups.filter(f => !f.attestedAt && (!p || p.scope !== 'mine' || p.depts.some(d => sameText(d, f.department || ''))));
+  return open.length + ((!p || p.kiosk) && kioskIsQuiet() ? 1 : 0);
+}
+const badgeCount = () => badgeFor(null);
 function kioskIsQuiet() {
   const limit = Number(db.settings.kioskQuietMin) || 0;
   if (!limit) return false;
   const last = kioskSeen && kioskSeen.at ? Date.parse(kioskSeen.at) : Date.parse(serverStartedAt);
   return Date.now() - last > Math.max(5, limit) * 60000;
 }
-async function notifyAdmins(title, body, { tag = 'inservice', url = '/admin', badge } = {}) {
+// kind: one of PUSH_KINDS (or 'test'); dept: the department it is about (undefined = everyone's business);
+// perSub(s): optional, returns { title, body } tailored to that device, or null to skip it.
+async function notifyAdmins(kind, title, body, { tag = 'inservice', url = '/admin', dept, perSub } = {}) {
   const subs = db.push.subs || [];
   if (!subs.length) return { sent: 0 };
   const keys = pushKeys();
-  const payload = { title, body, tag, url, badge: badge == null ? badgeCount() : badge };
   let sent = 0, dropped = false;
   for (const s of subs.slice()) {
+    if (!subWants(s, kind, dept)) continue;
+    const own = perSub ? perSub(s) : { title, body };
+    if (!own) continue;
+    const payload = { title: own.title, body: own.body, tag, url, badge: badgeFor(s) };
     const r = await webpush.sendPush(s, payload, keys, { subject: 'mailto:' + (MAIL.from || 'admin@example.com') });
     if (r.ok) { sent++; s.lastOk = nowIso(); delete s.lastError; }
     else { s.lastError = `${r.status || ''} ${r.error || ''}`.trim().slice(0, 120); if (r.gone) { db.push.subs = db.push.subs.filter(x => x !== s); dropped = true; } }
@@ -1202,14 +1237,14 @@ async function notifyAdmins(title, body, { tag = 'inservice', url = '/admin', ba
 let quietAlerted = false;
 setInterval(() => {
   const quiet = kioskIsQuiet();
-  if (quiet && !quietAlerted) { quietAlerted = true; notifyAdmins('iPad has gone quiet', `The in-service iPad hasn't checked in for over ${db.settings.kioskQuietMin} minutes. Check that it's charged, on Wi-Fi, and showing the in-service page.`, { tag: 'kiosk-quiet', url: '/admin#today' }).catch(() => {}); }
+  if (quiet && !quietAlerted) { quietAlerted = true; notifyAdmins('kiosk', 'iPad has gone quiet', `The in-service iPad hasn't checked in for over ${db.settings.kioskQuietMin} minutes. Check that it's charged, on Wi-Fi, and showing the in-service page.`, { tag: 'kiosk-quiet', url: '/admin#today' }).catch(() => {}); }
   if (!quiet) quietAlerted = false;
 }, 3 * 60000).unref();
 function alertUnlisted(r) {
   if (r.verified || r.alerted || !(db.settings.alertEmails || []).length) return;
   r.alerted = true;
   if (db.responses.some(x => x !== r && !x.verified && x.date === r.date && sameText(x.name, r.name))) return;
-  notifyAdmins('Not on the roster', `${r.name} (${r.department || 'no department'}) did an in-service but isn't on the staff list.`, { tag: 'unlisted', url: '/admin#staff' }).catch(() => {});
+  notifyAdmins('unlisted', 'Not on the roster', `${r.name} (${r.department || 'no department'}) did an in-service but isn't on the staff list.`, { tag: 'unlisted', url: '/admin#staff' }).catch(() => {});
   sendEmail(db.settings.alertEmails, `Not on the roster: ${r.name} did an in-service`, emailHtml(`${r.name} isn't on the staff roster`, [
     ['Name typed', r.name], ['Last 4 typed', r.last4], ['Department', r.department], ['Topic', r.topicTitle], ['When', when(r.submittedAt)],
     ['What to do', 'Add them on the Staff tab of the admin page so their in-services count toward their record.']
@@ -1237,7 +1272,7 @@ function followUpMiss(r) {
   db.followups.push(f);
   saveDb();
   if (f.emailedTo.length && db.settings.missedFollowup) emailFollowup(f, false).catch(() => {});
-  notifyAdmins('Needs follow-up', `${f.name} missed "${plainText(f.question)}" on the first try. ${f.leader ? f.leader + ' has been asked to follow up.' : 'No leader is set for ' + (f.department || 'their department') + '.'}`, { tag: 'followup', url: '/admin#reports' }).catch(() => {});
+  notifyAdmins('followups', 'Needs follow-up', `${f.name} missed "${plainText(f.question)}" on the first try. ${f.leader ? f.leader + ' has been asked to follow up.' : 'No leader is set for ' + (f.department || 'their department') + '.'}`, { tag: 'followup', url: '/admin#reports', dept: f.department }).catch(() => {});
 }
 // The employee's own quiz link: a separate token from the leader's attest link, so the employee can't mark themselves
 // educated without actually passing. Made on demand so older follow-ups get one too.
@@ -1301,7 +1336,7 @@ function emailQuizResult(f) {
         <div style="margin-top:10px"><a href="${esc(siteUrl() + '/attest/' + o.token)}" style="display:inline-block;background:#1f5f7a;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px">I've educated ${esc(o.name.split(' ')[0])}</a> <a href="${esc(siteUrl() + '/attest/' + o.token)}" style="display:inline-block;color:#1f5f7a;padding:8px 10px;font-size:13px;text-decoration:underline">message to send them</a></div></div>`).join('')}</div>`
     : `<div style="margin-top:22px;background:#e3f4ea;color:#1e7a4c;border-radius:12px;padding:14px;text-align:center;font-weight:bold">🎉 Nobody else is waiting on you. All caught up!</div>`;
   const subject = ok ? `✅ ${f.name} got the makeup quiz right` : `❌ ${f.name} missed the makeup quiz`;
-  notifyAdmins(subject, ok ? `${n === 1 ? 'The question' : `All ${n} questions`} right on the first try.` : `Missed ${miss} of ${n} on the first try. It will come back as a spaced review.`, { tag: 'quiz', url: '/admin#reports' }).catch(() => {});
+  notifyAdmins('quiz', subject, ok ? `${n === 1 ? 'The question' : `All ${n} questions`} right on the first try.` : `Missed ${miss} of ${n} on the first try. It will come back as a spaced review.`, { tag: 'quiz', url: '/admin#reports', dept: f.department }).catch(() => {});
   return sendEmail(f.emailedTo, subject, emailShell(banner + details + missed + list, { preheader: subject }), 'quiz result');
 }
 function emailFollowup(f, reminder) {
@@ -2477,7 +2512,16 @@ async function adminRoutes(req, res, p, m, url) {
     for (const k of stillMissed) followUpClockMiss(k.split('|')[0], k.split('|')[1]);
     for (const k of clearedKeys) db.followups = db.followups.filter(f => !(f.kind === 'clockin' && !f.attestedAt && `${f.employeeId}|${f.date}` === k));
     if (added || cleared) saveDb();
-    if (added) notifyAdmins('Missed clock-ins', `${added} ${added === 1 ? 'person' : 'people'} clocked in without doing the in-service. Their leaders have follow-ups.`, { tag: 'clockin', url: '/admin#reports' }).catch(() => {});
+    if (added) {
+      // Each phone hears about its own people: "2 of your people" with names, or everyone for an all-departments device.
+      const people = addedKeys.map(k => findEmployee(k.split('|')[0])).filter(Boolean);
+      notifyAdmins('clockin', 'Missed clock-ins', '', { tag: 'clockin', url: '/admin#reports', perSub: s => {
+        const p = subPrefs(s), mine = p.scope === 'mine' ? people.filter(e => p.depts.some(d => sameText(d, e.department || ''))) : people;
+        if (!mine.length) return null;
+        const names = mine.slice(0, 4).map(e => e.name).join(', ') + (mine.length > 4 ? ` and ${mine.length - 4} more` : '');
+        return { title: 'Missed clock-ins', body: `${mine.length} ${mine.length === 1 ? 'person' : 'people'}${p.scope === 'mine' ? ' in your departments' : ''} clocked in without doing the in-service: ${names}. ${mine.length === 1 ? 'A follow-up is' : 'Follow-ups are'} on Reports.` };
+      } }).catch(() => {});
+    }
     const streaksBroken = db.settings.clockMissBreaks !== false ? new Set([...stillMissed].map(k => k.split('|')[0])).size : 0;
     return send(res, 200, Object.assign(out, { missesSaved: stillMissed.size, missesAdded: added, missesCleared: cleared, streaksBroken }));
   }
@@ -2639,16 +2683,30 @@ async function adminRoutes(req, res, p, m, url) {
   }
   // Phone alerts: the browser subscribes with our public key; we keep the subscription and push to it.
   if (m === 'GET' && p === '/api/admin/push') {
-    return send(res, 200, { publicKey: pushKeys().publicKey, badge: badgeCount(), subs: (db.push.subs || []).map(s => ({ id: s.id, device: s.device, user: s.user, createdAt: s.createdAt, lastOk: s.lastOk || null, lastError: s.lastError || '' })) });
+    return send(res, 200, { publicKey: pushKeys().publicKey, badge: badgeCount(), kinds: PUSH_KINDS, subs: (db.push.subs || []).map(s => ({ id: s.id, key: s.endpoint.slice(-24), device: s.device, user: s.user, createdAt: s.createdAt, lastOk: s.lastOk || null, lastError: s.lastError || '', prefs: subPrefs(s) })) });
   }
   if (m === 'POST' && p === '/api/admin/push/subscribe') {
     const b = await readBody(req), sub = b.subscription || {};
     if (!sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth || !/^https:\/\//.test(sub.endpoint)) return send(res, 400, { error: 'That subscription is not valid.' });
     db.push.subs = (db.push.subs || []).filter(s => s.endpoint !== sub.endpoint);
-    const s = { id: newId(), endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth) }, device: cleanText(b.device, 80) || 'Device', user: req.adminUser || 'admin', createdAt: nowIso() };
+    const user = req.adminUser || config.adminUser;
+    const s = { id: newId(), endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth) }, device: cleanText(b.device, 80) || 'Device', user, createdAt: nowIso(), prefs: defaultPushPrefs(user) };
     db.push.subs.push(s); saveDb();
-    const r = await webpush.sendPush(s, { title: 'Alerts are on 🔔', body: "You'll get a badge and a note here when someone needs a follow-up or the iPad goes quiet.", tag: 'hello', url: '/admin', badge: badgeCount() }, pushKeys(), { subject: 'mailto:' + (MAIL.from || 'admin@example.com') });
-    return send(res, 200, { ok: true, id: s.id, hello: r.ok, error: r.ok ? '' : r.error });
+    const r = await webpush.sendPush(s, { title: 'Alerts are on 🔔', body: "You'll get a badge and a note here when something needs you. Pick what you hear about under Settings → Phone alerts.", tag: 'hello', url: '/admin', badge: badgeFor(s) }, pushKeys(), { subject: 'mailto:' + (MAIL.from || 'admin@example.com') });
+    return send(res, 200, { ok: true, id: s.id, hello: r.ok, error: r.ok ? '' : r.error, prefs: s.prefs });
+  }
+  // This device's own alert choices (matched by its subscription endpoint, which only that browser knows).
+  if (m === 'POST' && p === '/api/admin/push/prefs') {
+    const b = await readBody(req);
+    const s = (db.push.subs || []).find(x => x.endpoint === String(b.endpoint || '') || (b.id && x.id === String(b.id)));
+    if (!s) return send(res, 404, { error: 'This device is not set up for alerts.' });
+    s.prefs = cleanPushPrefs(b.prefs, s.user); saveDb();
+    return send(res, 200, { ok: true, prefs: s.prefs, badge: badgeFor(s) });
+  }
+  if (m === 'POST' && p === '/api/admin/push/badge') {
+    const b = await readBody(req);
+    const s = (db.push.subs || []).find(x => x.endpoint === String(b.endpoint || ''));
+    return send(res, 200, { badge: badgeFor(s || null), mine: s ? { id: s.id, prefs: subPrefs(s) } : null });
   }
   if (m === 'POST' && p === '/api/admin/push/unsubscribe') {
     const b = await readBody(req);
@@ -2656,7 +2714,7 @@ async function adminRoutes(req, res, p, m, url) {
     return send(res, 200, { ok: true });
   }
   if (m === 'POST' && p === '/api/admin/push/test') {
-    const r = await notifyAdmins('Test alert', `This is what an alert looks like. Right now ${badgeCount()} ${badgeCount() === 1 ? 'thing needs' : 'things need'} attention.`, { tag: 'test' });
+    const r = await notifyAdmins('test', 'Test alert', '', { tag: 'test', perSub: s => ({ title: 'Test alert', body: `This is what an alert looks like. Right now ${badgeFor(s)} ${badgeFor(s) === 1 ? 'thing needs' : 'things need'} your attention.` }) });
     return send(res, 200, r);
   }
   if (m === 'GET' && p === '/api/admin/followups') {

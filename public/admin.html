@@ -336,6 +336,8 @@ table.la tr:hover td { background: transparent; }
 .sp-msg .cm-row { grid-template-columns: 1fr 34px 34px !important; }
 .sp-msg .cm-row > .re-x:last-child { display: none; }
   .sp-today { color: var(--good, #1e7a4c); font-weight: 700; font-size: 13px; }
+  #push-prefs .pp { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0; font-size: 14px; }
+  #push-prefs .pp input { margin-top: 3px; }
 .re-row, .re-head { display: grid; grid-template-columns: 1fr 34px; gap: 6px; align-items: center; }
 #set-leaders .re-row, #set-leaders .re-head { grid-template-columns: 1fr 1fr 1.6fr 34px; }
 .re-head { font-size: 12px; color: #6b7a86; font-weight: 600; }
@@ -1168,9 +1170,22 @@ table.la tr:hover td { background: transparent; }
       </div>
       <div class="card" data-tile="push" data-title="Phone alerts">
         <h2>Phone alerts</h2>
-        <div class="muted small">A red badge on the app icon and a notification on your phone when someone needs a follow-up, someone not on the roster does an in-service, a makeup quiz comes back, or the iPad goes quiet. On iPhone, first add this page to your home screen (📲 at the top), open it from there, then tap the button.</div>
+        <div class="muted small">A red badge on the app icon and a notification on your phone. Each phone picks what it hears about. On iPhone, first add this page to your home screen (📲 at the top), open it from there, then tap the button.</div>
         <div id="push-status" class="small" style="margin-top:8px"></div>
         <div class="toolbar" style="margin-top:10px"><button class="btn" id="push-on">🔔 Turn on alerts on this device</button><button class="btn ghost" id="push-test">Send a test alert</button></div>
+        <div id="push-prefs" hidden style="margin-top:12px;background:var(--bg,#f3f6f8);border-radius:10px;padding:10px 12px">
+          <div style="font-weight:700;margin-bottom:6px">On this device, tell me when…</div>
+          <label class="pp"><input type="checkbox" data-pp="followups"> someone misses a question on the first try</label>
+          <label class="pp"><input type="checkbox" data-pp="clockin"> the Clock-in check finds people who skipped the in-service</label>
+          <label class="pp"><input type="checkbox" data-pp="quiz"> a makeup quiz comes back (✅ or ❌)</label>
+          <label class="pp"><input type="checkbox" data-pp="unlisted"> someone not on the roster does an in-service</label>
+          <label class="pp"><input type="checkbox" data-pp="kiosk"> the iPad goes quiet (offline, dead, or off the in-service page)</label>
+          <div style="font-weight:700;margin:10px 0 4px">About people in…</div>
+          <label class="pp"><input type="radio" name="pp-scope" value="all"> every department</label>
+          <label class="pp"><input type="radio" name="pp-scope" value="mine"> only these departments:</label>
+          <div id="pp-depts" class="checks" style="margin:4px 0 0 24px"></div>
+          <div class="muted small" style="margin-top:8px">The badge number counts open follow-ups for those departments (plus one when the iPad is quiet, if you watch it). <span id="pp-saved"></span></div>
+        </div>
         <div id="push-devices" class="small" style="margin-top:10px"></div>
       </div>
       <div class="card" data-tile="backup" data-title="Backup">

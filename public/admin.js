@@ -467,7 +467,7 @@
     const older = dash.followupsOpen - (dash.followupsToday || 0);
     $('tile-fu').querySelector('.lbl').textContent = dash.followupsOpen && older ? `waiting on a leader follow-up (${dash.followupsToday || 0} from today, ${older} older)` : 'waiting on a leader follow-up';
     $('tile-fu').classList.toggle('alert', dash.followupsOpen > 0);
-    setBadge(dash.badge);
+    refreshBadge(dash.badge);
     $('tile-missed').classList.toggle('alert', state.missedToday > 0);
     drawDays(dash.days);
     drawDepts(dash.departments);
@@ -3332,6 +3332,42 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
   }
   const pushStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  // The badge is per device (its own departments), so ask with this device's subscription when it has one.
+  let myEndpoint = null;
+  async function refreshBadge(fallback) {
+    if (!('setAppBadge' in navigator)) return;
+    try {
+      if (myEndpoint === null) { const reg = await navigator.serviceWorker.getRegistration('/admin'); const s = reg && await reg.pushManager.getSubscription(); myEndpoint = s ? s.endpoint : ''; }
+      if (myEndpoint) { const r = await post('/api/admin/push/badge', { endpoint: myEndpoint }); setBadge(r.badge); return; }
+    } catch { /* fall through */ }
+    if (fallback != null) setBadge(fallback);
+  }
+  const PP_LABEL = { followups: 'missed questions', clockin: 'missed clock-ins', quiz: 'makeup quizzes', unlisted: 'not on roster', kiosk: 'iPad offline' };
+  function fillPrefs(prefs) {
+    $('push-prefs').hidden = !prefs;
+    if (!prefs) return;
+    document.querySelectorAll('#push-prefs [data-pp]').forEach(c => { c.checked = !!prefs[c.dataset.pp]; });
+    document.querySelectorAll('#push-prefs [name=pp-scope]').forEach(r => { r.checked = r.value === (prefs.scope === 'mine' ? 'mine' : 'all'); });
+    const all = [...new Set([...depts(), ...(prefs.depts || [])])];
+    $('pp-depts').innerHTML = all.map(d => `<label><input type="checkbox" value="${escapeHtml(d)}"${(prefs.depts || []).some(x => sameDept(x, d)) ? ' checked' : ''}> ${escapeHtml(d)}</label>`).join('') || '<span class="muted">Add departments in Settings first.</span>';
+    $('pp-depts').style.opacity = prefs.scope === 'mine' ? '' : '.5';
+  }
+  function prefsFromForm() {
+    const p = { scope: (document.querySelector('#push-prefs [name=pp-scope]:checked') || {}).value || 'all', depts: checked($('pp-depts')) };
+    document.querySelectorAll('#push-prefs [data-pp]').forEach(c => { p[c.dataset.pp] = c.checked; });
+    return p;
+  }
+  let ppTimer = null;
+  $('push-prefs').addEventListener('change', e => {
+    if (e.target.closest('#pp-depts') && !document.querySelector('#push-prefs [name=pp-scope][value=mine]').checked) document.querySelector('#push-prefs [name=pp-scope][value=mine]').checked = true;
+    $('pp-depts').style.opacity = document.querySelector('#push-prefs [name=pp-scope][value=mine]').checked ? '' : '.5';
+    clearTimeout(ppTimer);
+    ppTimer = setTimeout(async () => {
+      try { $('pp-saved').textContent = 'Saving…'; const r = await post('/api/admin/push/prefs', { endpoint: myEndpoint, prefs: prefsFromForm() }); $('pp-saved').textContent = 'Saved ✓'; setBadge(r.badge); loadPush(); }
+      catch (err) { $('pp-saved').textContent = err.message; }
+    }, 400);
+  });
+  const prefsSummary = p => !p ? '' : [Object.keys(PP_LABEL).filter(k => p[k]).map(k => PP_LABEL[k]).join(', ') || 'nothing', p.scope === 'mine' ? `for ${p.depts.join(', ') || 'no departments'}` : 'all departments'].join(' · ');
   const pushReg = () => 'serviceWorker' in navigator ? navigator.serviceWorker.register('/admin-sw.js', { scope: '/admin' }) : Promise.reject(new Error('no sw'));
   if ('serviceWorker' in navigator) pushReg().catch(() => {});
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -3346,8 +3382,11 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         : Notification.permission === 'denied' ? '<span class="pill warn">Blocked</span> <span class="muted">Alerts were turned off in this device\'s settings for this site.</span>'
         : mine ? '<span class="pill good">On for this device</span>' : '<span class="muted">Not on for this device yet.</span>';
       $('push-on').hidden = !supported || !!mine; $('push-test').hidden = !r.subs.length;
-      $('push-devices').innerHTML = r.subs.length ? '<div class="muted" style="margin-bottom:4px">Devices getting alerts:</div>' + r.subs.map(s => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:3px 0"><span>📱 <strong>${escapeHtml(s.device)}</strong> <span class="muted">${escapeHtml(s.user)} · since ${fmtDate(s.createdAt.slice(0, 10))}${s.lastError ? ' · <span class="pill warn" title="' + escapeHtml(s.lastError) + '">last push failed</span>' : ''}</span></span><button class="btn subtle" data-push-rm="${s.id}">Remove</button></div>`).join('') : '';
-      if (r.badge != null) setBadge(r.badge);
+      myEndpoint = mine ? mine.endpoint : '';
+      const me = mine && r.subs.find(s => mine.endpoint.endsWith(s.key));
+      if (!document.activeElement || !document.activeElement.closest('#push-prefs')) fillPrefs(me ? me.prefs : null);
+      $('push-devices').innerHTML = r.subs.length ? '<div class="muted" style="margin-bottom:4px">Devices getting alerts:</div>' + r.subs.map(s => `<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;margin:5px 0"><span>📱 <strong>${escapeHtml(s.device)}</strong>${me && s.id === me.id ? ' <span class="pill good">this device</span>' : ''} <span class="muted">${escapeHtml(s.user)} · since ${fmtDate(s.createdAt.slice(0, 10))}${s.lastError ? ' · <span class="pill warn" title="' + escapeHtml(s.lastError) + '">last push failed</span>' : ''}</span><div class="muted">${escapeHtml(prefsSummary(s.prefs))}</div></span><button class="btn subtle" data-push-rm="${s.id}">Remove</button></div>`).join('') : '';
+      refreshBadge(r.badge);
     } catch { /* leave as is */ }
   }
   $('push-on').addEventListener('click', async () => {
