@@ -113,6 +113,25 @@ function defaultDecor() {
   ] };
 }
 
+// The last screen's arrangement. Every piece is optional so old settings fall back to the original look.
+function defaultEndLayout() {
+  return { columns: 'side', extrasSide: 'right', split: 'even', order: 'news', extrasSize: 'normal', showCheck: true, showHelpful: true, bigDone: false, seconds: 15 };
+}
+function cleanEndLayout(b) {
+  const d = defaultEndLayout(), pick = (v, ok) => ok.includes(v) ? v : null;
+  const n = Math.round(Number(b.seconds));
+  return {
+    columns: pick(b.columns, ['side', 'stacked']) || d.columns,
+    extrasSide: pick(b.extrasSide, ['right', 'left']) || d.extrasSide,
+    split: pick(b.split, ['even', 'message', 'extras']) || d.split,
+    order: pick(b.order, ['news', 'streaks']) || d.order,
+    extrasSize: pick(b.extrasSize, ['small', 'normal', 'large']) || d.extrasSize,
+    showCheck: 'showCheck' in b ? !!b.showCheck : d.showCheck,
+    showHelpful: 'showHelpful' in b ? !!b.showHelpful : d.showHelpful,
+    bigDone: !!b.bigDone,
+    seconds: n >= 5 && n <= 120 ? n : d.seconds
+  };
+}
 function defaultSettings() {
   return {
     facilityName: 'Stonehenge',
@@ -131,6 +150,7 @@ function defaultSettings() {
     departments: ['CNA', 'Nursing', 'Dietary', 'Housekeeping', 'Therapy', 'Activities', 'Social Services', 'Administration'],
     allowUnlisted: true,      // staff not on the roster can type their name instead
     fitScreen: true,          // shrink each kiosk screen a little so it fits the iPad without scrolling
+    endLayout: defaultEndLayout(),  // how the last screen is arranged (Settings -> Last screen layout)
     leaders: {},              // { department: leader name and email(s) }, for the Clock-in check lists and follow-up emails
     alertEmails: [],          // emailed when someone not on the roster does an in-service
     missedFollowup: true,     // a first-try miss asks the department leader to re-educate and attest
@@ -1148,7 +1168,7 @@ async function kioskRoutes(req, res, p, m) {
     }
     const month = previewMonth || new Date().getMonth() + 1;
     const decor = s.decor && s.decor.on && month >= 1 && month <= 12 ? s.decor.months[month - 1] : null;
-    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, fitScreen: s.fitScreen !== false, closingMessages: s.closingMessages, decor,
+    return send(res, 200, { facilityName: s.facilityName, departments: s.departments, allowUnlisted: s.allowUnlisted, fitScreen: s.fitScreen !== false, endLayout: Object.assign(defaultEndLayout(), s.endLayout || {}), closingMessages: s.closingMessages, decor,
       announcements: todaysAnnouncements(), newsSeconds: s.newsSeconds || 3, streaks: publicStreaks(), birthdayMessages: s.birthdayMessages, anniversaryMessages: s.anniversaryMessages, belatedBirthdayMessages: s.belatedBirthdayMessages, belatedAnniversaryMessages: s.belatedAnniversaryMessages, celebrations: s.celebrations ? todaysCelebrations() : [], build: BUILD_ID });
   }
 
@@ -1939,6 +1959,7 @@ async function adminRoutes(req, res, p, m, url) {
     if (Array.isArray(b.departments)) s.departments = cleanList(b.departments, 60, 30);
     if ('allowUnlisted' in b) s.allowUnlisted = !!b.allowUnlisted;
     if ('fitScreen' in b) s.fitScreen = !!b.fitScreen;
+    if (b.endLayout && typeof b.endLayout === 'object') s.endLayout = cleanEndLayout(b.endLayout);
     if ('celebrations' in b) s.celebrations = !!b.celebrations;
     if (b.belated && typeof b.belated === 'object') { const n = Math.round(Number(b.belated.days)); s.belated = { on: !!b.belated.on, days: n >= 1 && n <= 30 ? n : (s.belated || {}).days || 7 }; }
     if (Array.isArray(b.belatedBirthdayMessages)) s.belatedBirthdayMessages = b.belatedBirthdayMessages.slice(0, 300).map(cleanMessage).filter(Boolean);

@@ -274,10 +274,28 @@
   body.sideways .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: center; }
   body.sideways .home-grid .pin { margin-bottom: 0; }
   /* Last screen sideways: the message on the left, announcements and streaks on the right, Done across the bottom. */
-  body.sideways #s-result.with-extras { max-width: 980px; }
-  body.sideways #s-result.with-extras .card { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: center; }
-  body.sideways #s-result.with-extras .extras { margin: 0; max-width: none; }
-  body.sideways #s-result.with-extras .row, body.sideways #s-result.with-extras .countdown, body.sideways #s-result.with-extras .helpful { grid-column: 1 / -1; }
+  body.sideways #s-result.with-extras:not(.stacked) { max-width: 980px; }
+  body.sideways #s-result.with-extras:not(.stacked) .card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 28px; align-items: center; }
+  body.sideways #s-result.with-extras:not(.stacked) .extras { margin: 0; max-width: none; }
+  body.sideways #s-result.with-extras:not(.stacked) .row, body.sideways #s-result.with-extras:not(.stacked) .countdown, body.sideways #s-result.with-extras:not(.stacked) .helpful { grid-column: 1 / -1; }
+  /* Last screen layout choices (Settings -> Last screen layout). */
+  body.sideways #s-result.with-extras:not(.stacked).split-message .card { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  body.sideways #s-result.with-extras:not(.stacked).split-extras .card { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+  body.sideways #s-result.with-extras:not(.stacked).split-message.extras-left .card { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+  body.sideways #s-result.with-extras:not(.stacked).split-extras.extras-left .card { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  body.sideways #s-result.with-extras:not(.stacked).extras-left .extras { grid-column: 1; grid-row: 1; }
+  body.sideways #s-result.with-extras:not(.stacked).extras-left .result-main { grid-column: 2; grid-row: 1; }
+  #s-result .extras { display: flex; flex-direction: column; }
+  #s-result .extras > div[hidden] { display: none; }
+  #s-result.streaks-first .news-list { order: 2; border-top: 1px solid var(--line); }
+  #s-result.streaks-first .leaders { border-top: 0; }
+  /* In a narrow column the streak rows wrap instead of spilling out of their box. */
+  #s-result .leaders div { flex-wrap: wrap; row-gap: 2px; }
+  #s-result .leaders .nm { white-space: normal; flex: 1 1 110px; }
+  #s-result.extras-large .extras { zoom: 1.18; }
+  #s-result.extras-small .extras { zoom: .86; }
+  #s-result.no-check #result-badge, #s-result.no-check #result-title { display: none; }
+  #s-result.big-done #result-next { font-size: 26px; padding: 20px 24px; }
   @media (max-width: 600px) {
     body:not(.previewing) { font-size: 17px; }
     body:not(.previewing) .card { padding: 22px 18px; }
@@ -517,7 +535,9 @@
   function frameFit() {
     if (!document.body.classList.contains('previewing')) return;
     setSideways();
-    const bar = $('preview-bar').getBoundingClientRect().height || 48;
+    // Inside the admin page's own picture (?embed=1) there is no bar: the picture is just the iPad.
+    if (new URLSearchParams(location.search).has('embed')) $('preview-bar').hidden = true;
+    const bar = $('preview-bar').hidden ? 0 : $('preview-bar').getBoundingClientRect().height || 48;
     const k = Math.min(1, window.innerWidth / 1024, (window.innerHeight - bar) / 768);
     $('frame').style.transform = `translate(${Math.max(0, (window.innerWidth - 1024 * k) / 2)}px, ${Math.max(0, (window.innerHeight - bar - 768 * k) / 2)}px) scale(${k})`;
     const tip = $('preview-tip');
@@ -1195,6 +1215,13 @@
     $('result-closing').classList.toggle('celebrating', !!party.length);
     $('result-party').hidden = !party.length;
     $('result-badge').hidden = !!party.length;
+    const L = Object.assign({ columns: 'side', extrasSide: 'right', split: 'even', order: 'news', extrasSize: 'normal', showCheck: true, showHelpful: true, bigDone: false, seconds: RESULT_RESET_S }, s.config.endLayout || {});
+    const sr = $('s-result').classList;
+    sr.toggle('stacked', L.columns === 'stacked'); sr.toggle('extras-left', L.extrasSide === 'left');
+    sr.toggle('split-message', L.split === 'message'); sr.toggle('split-extras', L.split === 'extras');
+    sr.toggle('streaks-first', L.order === 'streaks'); sr.toggle('extras-large', L.extrasSize === 'large'); sr.toggle('extras-small', L.extrasSize === 'small');
+    sr.toggle('no-check', !L.showCheck && !party.length); sr.toggle('big-done', !!L.bigDone);
+    if (!L.showHelpful) $('helpful').hidden = true;
     const str = st(r.streaks ? { streaks: r.streaks } : s.config);
     const showBoard = !more && ['end', 'both'].includes(str.leadersOn);
     const board = showBoard ? str.leaders : [];
@@ -1211,7 +1238,7 @@
     show('result');
     if (more) return;
     if (party.length) celebrate(party);
-    let left = RESULT_RESET_S + (news.length ? 5 : 0) + (party.length ? 10 : 0);
+    let left = (Number(L.seconds) || RESULT_RESET_S) + (news.length ? 5 : 0) + (party.length ? 10 : 0);
     const spanish = es();
     const tick = () => { $('countdown').textContent = spanish ? `Volviendo al inicio en ${left} segundos` : `Returning to start in ${left} seconds`; };
     tick();
@@ -1266,6 +1293,7 @@
     clearInterval(countdownTimer); stopParty();
     let draft = {}; try { draft = JSON.parse(localStorage.getItem('previewDraft') || '{}'); } catch { /* none */ }
     const cfg = s.config = Object.assign({}, s.config, draft.messages || {});
+    if (draft.layout) cfg.endLayout = Object.assign({}, cfg.endLayout || {}, draft.layout);
     const dept = (cfg.departments || [])[0] || '';
     s.who = { employeeId: 'preview', name: 'Maria Lopez', department: dept, last4: '0000' };
     s.lang = 'en';
@@ -1277,6 +1305,13 @@
       : previewShow === 'anniversary' ? [{ type: 'anniversary', id: 'preview', name: 'Maria L', department: dept, years: 5 }] : [];
     s.who.belated = previewShow === 'belated-birthday' ? [{ type: 'birthday', id: 'preview', name: 'Maria L', department: dept, belated: true, daysAgo: 3 }]
       : previewShow === 'belated-anniversary' ? [{ type: 'anniversary', id: 'preview', name: 'Maria L', department: dept, years: 5, belated: true, daysAgo: 3 }] : [];
+    if (previewShow === 'layout') {
+      // The layout editor: every piece of the last screen at once, so the choices can be seen.
+      $('preview-bar').querySelector('span').textContent = 'The last screen with every piece showing. Nothing is saved.';
+      cfg.announcements = (cfg.announcements || []).length ? cfg.announcements : [{ text: 'Flu shots in the break room Thursday 2-4pm.', departments: [] }, { text: 'Welcome our new CNAs, Jordan and Priya!', departments: [] }];
+      const k = st(cfg);
+      cfg.streaks = Object.assign({}, k, { leadersOn: 'end', leaders: k.leaders.length ? k.leaders : [{ id: 'p1', name: 'Jasmine R', department: 'Nursing', streak: 14 }, { id: 'preview', name: 'Maria L', department: dept, streak: 9 }, { id: 'p3', name: 'Tom B', department: 'Dietary', streak: 6 }], deptLeaders: [] });
+    }
     if (previewShow === 'leaders') {
       const k = st(cfg);
       const demo = [{ id: 'p1', name: 'Jasmine R', department: 'Nursing', streak: 14 }, { id: 'preview', name: 'Maria L', department: dept, streak: 9 }, { id: 'p3', name: 'Tom B', department: 'Dietary', streak: 6 }];
@@ -1289,6 +1324,7 @@
     }
     s.items = [{ kind: 'regular', topic: { id: 'preview', title: 'Preview' }, question: {} }]; s.idx = 0;
     showResult({ correct: true, firstTryCorrect: true, explanation: '', responseId: null, offline: true });
+    frameFit();
   }
   $('preview-again').addEventListener('click', () => { if (s.busy) return; clearInterval(countdownTimer); if (previewShow) startShow(); else startPreview(); });
   // On the iPhone home-screen app the window can't close, so go back to the admin page instead.

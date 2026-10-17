@@ -350,6 +350,10 @@ table.la tr:hover td { background: transparent; }
 .layout-bar .lay-edit.ghost { opacity: .7; font-size: 13px; } .layout-bar .lay-edit.ghost:hover { opacity: 1; }
 @media (max-width: 760px) { .layout-bar { display: none; } }
 .lay-help { margin-right: auto; font-size: 13px; color: #17485d; background: #e9f3f7; padding: 6px 12px; border-radius: 999px; }
+.el-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 18px; }
+.el-grid select { width: 100%; }
+.el-preview { margin-top: 14px; border-radius: 12px; overflow: hidden; background: #333; aspect-ratio: 1024 / 768; }
+.el-preview iframe { width: 100%; height: 100%; border: 0; display: block; }
 .tiles-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; align-items: stretch; }
 .tiles-grid > .card { grid-column: span var(--span, 6); margin: 0; min-width: 0; position: relative; }
 @media (max-width: 760px) { .tiles-grid > .card { grid-column: 1 / -1 !important; } }
@@ -1054,6 +1058,24 @@ table.la tr:hover td { background: transparent; }
           </div>
         </div>
         <div style="margin-top:14px"><button class="btn" id="save-depts">Save</button></div>
+      </div>
+      <div class="card" id="layout-card" data-tile="endlayout" data-title="Last screen layout">
+        <h2>Last screen layout</h2>
+        <div class="muted small">How the screen after the question is arranged on the iPad. Changes show in the picture right away and save on their own.</div>
+        <div class="el-grid">
+          <label class="block">Arrangement <select id="el-columns"><option value="side">Side by side</option><option value="stacked">Stacked top to bottom</option></select></label>
+          <label class="block">Which side <span class="hint">extras = announcements and streaks</span> <select id="el-side"><option value="right">Message left, extras right</option><option value="left">Extras left, message right</option></select></label>
+          <label class="block">Column widths <select id="el-split"><option value="even">Even</option><option value="message">Message wider</option><option value="extras">Extras wider</option></select></label>
+          <label class="block">Order on that side <select id="el-order"><option value="news">Announcements, then streaks</option><option value="streaks">Streaks, then announcements</option></select></label>
+          <label class="block">Announcements and streaks size <select id="el-size"><option value="small">Small</option><option value="normal">Normal</option><option value="large">Large</option></select></label>
+          <label class="block">Back to the keypad after <span style="white-space:nowrap"><input type="number" id="el-seconds" min="5" max="120" style="width:70px"> seconds</span> <span class="hint">plus a little extra when there are announcements or a celebration</span></label>
+        </div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="el-check"> Show the ✓ and "Correct!"</label>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="el-helpful"> Ask "Was this lesson helpful?" with 👍 👎</label>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="el-bigdone"> Bigger Done button</label>
+        <div class="el-preview"><iframe id="el-frame" title="Last screen preview" loading="lazy"></iframe></div>
+        <div style="margin-top:8px"><a href="/admin/preview?show=layout" target="_blank" rel="noopener" data-ipad-preview class="small">Open the preview full size</a> · <button type="button" class="btn subtle" id="el-reset">Back to the original layout</button></div>
+        <div style="margin-top:14px"><button class="btn" id="save-layout">Save</button></div>
       </div>
       <div class="card" id="closing-card" data-tile="closing" data-title="End-screen messages">
         <h2>End-screen messages</h2>

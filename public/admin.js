@@ -3011,6 +3011,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     $('leader-gaps').innerHTML = gap ? '⚠️ Follow-up emails can\'t reach these departments yet.<br>' + gap : '';
     $('set-unlisted').checked = !!s.allowUnlisted;
     $('set-fit').checked = s.fitScreen !== false;
+    loadEndLayout(s.endLayout || {});
     $('set-closing').innerHTML = '';
     (s.closingMessages || []).forEach(m => addClosingRow(m));
     $('set-news-seconds').value = s.newsSeconds || 3;
@@ -3039,6 +3040,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     ['🔥', 'Streaks and leaderboard', 'Shout-outs and the 🏆 button', () => document.querySelector('.sk-card')],
     ['🔁', 'Spaced review', 'Missed topics come back a few days later', () => $('rv-on')],
     ['💬', 'End-screen messages', 'The thank-you line after each in-service', () => $('closing-card')],
+    ['🧩', 'Last screen layout', 'Side by side or stacked, sizes, the Done button', () => $('layout-card')],
     ['🍂', 'Home screen decor', 'Seasonal decorations, message and color', () => $('decor-on')],
     ['🏷️', 'Facility name and banner speed', 'Plus staff who aren\'t on the roster', () => $('set-facility')],
     ['👥', 'Departments', 'Used everywhere a department is picked', () => $('dept-card')],
@@ -3230,6 +3232,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
         leaders: lv.out,
         allowUnlisted: $('set-unlisted').checked,
         fitScreen: $('set-fit').checked,
+        endLayout: endLayoutValues(),
         closingMessages: closingValues(),
         newsSeconds: Number($('set-news-seconds').value)
       }) });
@@ -3240,6 +3243,31 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   autoSave($('save-settings').closest('.card'), saveSettings, [$('save-settings')]);
   const deptSave = autoSave($('save-depts').closest('.card'), saveSettings, [$('save-depts')]);
   autoSave($('save-closing').closest('.card'), saveSettings, [$('save-closing')]);
+  // ---------- last screen layout ----------
+  const EL_DEFAULT = { columns: 'side', extrasSide: 'right', split: 'even', order: 'news', extrasSize: 'normal', showCheck: true, showHelpful: true, bigDone: false, seconds: 15 };
+  function loadEndLayout(l) {
+    const v = Object.assign({}, EL_DEFAULT, l);
+    $('el-columns').value = v.columns; $('el-side').value = v.extrasSide; $('el-split').value = v.split; $('el-order').value = v.order; $('el-size').value = v.extrasSize;
+    $('el-seconds').value = v.seconds; $('el-check').checked = v.showCheck; $('el-helpful').checked = v.showHelpful; $('el-bigdone').checked = v.bigDone;
+    endLayoutPreview();
+  }
+  function endLayoutValues() {
+    return { columns: $('el-columns').value, extrasSide: $('el-side').value, split: $('el-split').value, order: $('el-order').value, extrasSize: $('el-size').value,
+      seconds: Number($('el-seconds').value) || 15, showCheck: $('el-check').checked, showHelpful: $('el-helpful').checked, bigDone: $('el-bigdone').checked };
+  }
+  // The picture in the card is the real kiosk page in preview mode, reading the unsaved choices through localStorage.
+  let elTimer = null, elLast = '';
+  function endLayoutPreview() {
+    const json = JSON.stringify({ layout: endLayoutValues() });
+    try { localStorage.setItem('previewDraft', json); } catch { /* private window */ }
+    clearTimeout(elTimer);
+    elTimer = setTimeout(() => { const f = $('el-frame'); if (f.offsetParent && (json !== elLast || !f.src)) { elLast = json; f.src = '/admin/preview?show=layout&embed=1&t=' + Date.now(); } }, 250);
+  }
+  $('layout-card').addEventListener('change', endLayoutPreview);
+  $('el-reset').addEventListener('click', () => { loadEndLayout({}); $('el-columns').dispatchEvent(new Event('change', { bubbles: true })); });
+  // Hidden tabs can't lay out the frame, so it loads when Settings is opened.
+  document.getElementById('nav').addEventListener('click', () => setTimeout(() => { const f = $('el-frame'); if (f.offsetParent && !f.src) endLayoutPreview(); }, 50));
+  autoSave($('save-layout').closest('.card'), saveSettings, [$('save-layout')]);
   // ---------- email alerts and follow-ups ----------
   async function loadEmailStatus() {
     try {
