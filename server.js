@@ -659,7 +659,7 @@ function streakStats(onlyId) {
   // and a day they clocked in without doing an in-service (from the Clock-in check) breaks it.
   const days = {};
   for (const r of db.responses) {
-    if (!r.employeeId || !r.attempts.length || (onlyId && r.employeeId !== onlyId)) continue;
+    if (!r.employeeId || !r.attempts.length || r.kind === 'makeup' || (onlyId && r.employeeId !== onlyId)) continue;
     const d = days[r.employeeId] || (days[r.employeeId] = new Map());
     const cur = d.get(r.date);
     if (!cur) d.set(r.date, { first: !!r.firstTryCorrect, completed: r.completed ? 1 : 0 });
@@ -1222,32 +1222,42 @@ function sampleFollowup() {
 function messageBlockHtml(f) {
   return `<div style="border:1px dashed #9fb3c0;border-radius:10px;padding:12px 14px;margin:14px 0;background:#fff">
     <div style="font-weight:bold;color:#1f5f7a">Or let them do it themselves</div>
-    <div style="color:#5b6b78;font-size:13px;margin:2px 0 8px">Copy this and send it to ${esc(f.name.split(' ')[0])}. If they get it right on the first try, this follow-up is marked educated for you. If they miss, you get an email to follow up in person.</div>
+    <div style="color:#5b6b78;font-size:13px;margin:2px 0 8px">Copy this and send it to ${esc(f.name.split(' ')[0])}. When they finish, this follow-up is marked done and you get an email saying whether they got it right. A miss counts like any kiosk miss and comes back as a spaced review.</div>
     <div style="white-space:pre-line;background:#f3f6f8;border-radius:8px;padding:10px 12px;font-size:14px">${esc(employeeMessage(f))}</div></div>`;
 }
 // After the employee finishes the makeup quiz: one email to the leader, green or red at a glance.
+// A nicer shell for emails: logo header, white card, soft background.
+function emailShell(inner, { preheader = '' } = {}) {
+  const fac = esc(db.settings.facilityName || 'Stonehenge');
+  return `<div style="background:#eef3f6;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1d2b36;font-size:15px;line-height:1.5">
+    ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(preheader)}</div>` : ''}
+    <div style="max-width:600px;margin:0 auto">
+      <div style="text-align:center;padding:4px 0 14px"><img src="${esc(siteUrl() + '/logo.png')}" alt="${fac}" style="height:44px;width:auto;vertical-align:middle"><div style="color:#1f5f7a;font-weight:bold;font-size:13px;letter-spacing:1.2px;text-transform:uppercase;margin-top:6px">${fac} in-service</div></div>
+      <div style="background:#fff;border:1px solid #dbe3e9;border-radius:16px;padding:22px 22px 18px;box-shadow:0 4px 18px rgba(31,95,122,.08)">${inner}</div>
+      <p style="color:#8a98a4;font-size:12px;text-align:center;margin:16px 0 0">Sent automatically by the ${fac} in-service kiosk.</p>
+    </div></div>`;
+}
+// After the employee finishes the makeup quiz: one email to the leader, green or red at a glance.
+// Either way the follow-up is closed: a miss is recorded like any other miss and comes back as a spaced review.
 function emailQuizResult(f) {
   const q = f.quiz, first = f.name.split(' ')[0], ok = q.firstTry;
   const n = q.total, miss = (q.missed || []).length;
   // Everyone else this leader still owes a follow-up, so one email is the whole to-do list.
   const others = db.followups.filter(o => o !== f && !o.attestedAt && (o.emailedTo || []).some(e => f.emailedTo.includes(e))).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const banner = ok
-    ? `<div style="background:#1e7a4c;color:#fff;border-radius:12px;padding:18px 20px;font-size:20px;font-weight:bold">✅ ${esc(f.name)} got the makeup quiz right<div style="font-size:14px;font-weight:normal;margin-top:4px;opacity:.9">${n === 1 ? 'The question' : `All ${n} questions`} right on the first try. Marked educated, nothing more to do.</div></div>`
-    : `<div style="background:#b23b3b;color:#fff;border-radius:12px;padding:18px 20px;font-size:20px;font-weight:bold">❌ ${esc(f.name)} missed the makeup quiz<div style="font-size:14px;font-weight:normal;margin-top:4px;opacity:.9">Missed ${miss} of ${n} on the first try (they got it right after ${q.tries} tries). Please follow up with ${esc(first)} in person, then tap the button below.</div></div>`;
-  const missed = ok ? '' : `<div style="margin:16px 0"><div style="font-weight:bold;color:#1f5f7a;margin-bottom:6px">What ${esc(first)} missed</div>${q.missed.map(x => `<div style="border:1px solid #dbe3e9;border-radius:10px;padding:10px 12px;margin-bottom:8px"><div><strong>${esc(x.question)}</strong></div><div style="color:#b23b3b">They answered: ${esc(x.answered)}</div><div style="color:#1e7a4c">Correct: ${esc(x.correct)}</div></div>`).join('')}</div>`;
-  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1d2b36;max-width:600px">${banner}
-    <table style="border-collapse:collapse;margin-top:14px"><tr><td style="padding:4px 14px 4px 0;color:#5b6b78">Staff</td><td style="padding:4px 0">${esc(f.name)}${f.department ? ' (' + esc(f.department) + ')' : ''}</td></tr>
-    <tr><td style="padding:4px 14px 4px 0;color:#5b6b78">Topic</td><td style="padding:4px 0">${esc(f.topicTitle || 'Not known')}</td></tr>
-    <tr><td style="padding:4px 14px 4px 0;color:#5b6b78">About</td><td style="padding:4px 0">${esc(f.question)}</td></tr>
-    <tr><td style="padding:4px 14px 4px 0;color:#5b6b78">Finished</td><td style="padding:4px 0">${esc(when(q.finishedAt))}</td></tr></table>
-    ${missed}
-    ${ok ? '' : `<p style="margin:22px 0"><a href="${esc(siteUrl() + '/attest/' + f.token)}" style="background:#1f5f7a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">I've followed up with ${esc(first)}</a></p>`}
-    ${others.length ? `<div style="margin-top:22px;border-top:1px solid #dbe3e9;padding-top:14px"><div style="font-weight:bold;color:#1f5f7a;margin-bottom:6px">Still waiting on you: ${others.length} ${others.length === 1 ? 'person' : 'people'}</div>
-      ${others.map(o => `<div style="border:1px solid #dbe3e9;border-radius:10px;padding:10px 12px;margin-bottom:8px"><strong>${esc(o.name)}</strong>${o.department ? ` <span style="color:#5b6b78">(${esc(o.department)})</span>` : ''} <span style="color:#5b6b78;font-size:13px">· ${esc(when(o.createdAt))}</span>
-        <div style="font-size:14px;margin-top:2px">${esc(o.question)}${o.quiz && o.quiz.finishedAt ? (o.quiz.firstTry ? '' : ' <span style="color:#b23b3b;font-weight:bold">· missed the makeup quiz</span>') : ''}</div>
-        <div style="margin-top:8px;font-size:14px"><a href="${esc(siteUrl() + '/attest/' + o.token)}" style="color:#1f5f7a;font-weight:bold">I've educated ${esc(o.name.split(' ')[0])}</a> · <a href="${esc(siteUrl() + '/attest/' + o.token)}" style="color:#5b6b78">message to send them</a></div></div>`).join('')}</div>` : `<p style="color:#1e7a4c;font-weight:bold;margin-top:22px">🎉 Nobody else is waiting on you. All caught up!</p>`}
-    <p style="color:#5b6b78;font-size:12px;margin-top:24px">Sent by the ${esc(db.settings.facilityName || 'Stonehenge')} in-service kiosk.</p></div>`;
-  return sendEmail(f.emailedTo, ok ? `✅ ${f.name} got the makeup quiz right` : `❌ ${f.name} missed the makeup quiz, please follow up`, html, 'quiz result');
+    ? `<div style="background:linear-gradient(135deg,#1e7a4c,#2a9a62);color:#fff;border-radius:14px;padding:22px 22px;text-align:center"><div style="font-size:44px;line-height:1">✅</div><div style="font-size:22px;font-weight:bold;margin-top:8px">${esc(f.name)} got it right</div><div style="font-size:14px;margin-top:6px;opacity:.95">${n === 1 ? 'The question' : `All ${n} questions`} right on the first try. Marked educated, nothing more to do.</div></div>`
+    : `<div style="background:linear-gradient(135deg,#b23b3b,#d14f4f);color:#fff;border-radius:14px;padding:22px 22px;text-align:center"><div style="font-size:44px;line-height:1">❌</div><div style="font-size:22px;font-weight:bold;margin-top:8px">${esc(f.name)} missed the makeup quiz</div><div style="font-size:14px;margin-top:6px;opacity:.95">Missed ${miss} of ${n} on the first try, then got ${n === 1 ? 'it' : 'them'} right after ${q.tries} tries. Worth a quick word with ${esc(first)} when you see them.</div></div>`;
+  const row = (k, v) => `<tr><td style="padding:6px 14px 6px 0;color:#5b6b78;font-size:13px;white-space:nowrap;vertical-align:top">${esc(k)}</td><td style="padding:6px 0">${v}</td></tr>`;
+  const details = `<table style="border-collapse:collapse;margin:18px 0 4px;width:100%">${row('Staff', `<strong>${esc(f.name)}</strong>${f.department ? ` <span style="color:#5b6b78">(${esc(f.department)})</span>` : ''}`)}${row('Topic', esc(f.topicTitle || 'Not known'))}${row('About', esc(f.question))}${row('Finished', esc(when(q.finishedAt)))}</table>`;
+  const missed = ok ? '' : `<div style="margin:16px 0 6px"><div style="font-weight:bold;color:#1f5f7a;margin-bottom:8px">What ${esc(first)} missed</div>${q.missed.map(x => `<div style="border-left:4px solid #b23b3b;background:#fbeeee;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:8px"><div style="font-weight:bold">${esc(x.question)}</div><div style="color:#b23b3b;margin-top:4px">✗ They answered: ${esc(x.answered)}</div><div style="color:#1e7a4c">✓ Correct: ${esc(x.correct)}</div></div>`).join('')}
+    <div style="color:#5b6b78;font-size:13px">This counts as a miss on their record and will come back for them as a spaced review on the iPad. No follow-up needed.</div></div>`;
+  const list = others.length ? `<div style="margin-top:22px;border-top:1px solid #dbe3e9;padding-top:16px"><div style="font-weight:bold;color:#1f5f7a;margin-bottom:8px">Still waiting on you: ${others.length} ${others.length === 1 ? 'person' : 'people'}</div>
+      ${others.map(o => `<div style="border:1px solid #dbe3e9;border-radius:12px;padding:12px 14px;margin-bottom:8px;background:#fafcfd"><strong>${esc(o.name)}</strong>${o.department ? ` <span style="color:#5b6b78">(${esc(o.department)})</span>` : ''} <span style="color:#8a98a4;font-size:13px">· ${esc(when(o.createdAt))}</span>
+        <div style="font-size:14px;margin-top:2px">${esc(o.question)}</div>
+        <div style="margin-top:10px"><a href="${esc(siteUrl() + '/attest/' + o.token)}" style="display:inline-block;background:#1f5f7a;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px">I've educated ${esc(o.name.split(' ')[0])}</a> <a href="${esc(siteUrl() + '/attest/' + o.token)}" style="display:inline-block;color:#1f5f7a;padding:8px 10px;font-size:13px;text-decoration:underline">message to send them</a></div></div>`).join('')}</div>`
+    : `<div style="margin-top:22px;background:#e3f4ea;color:#1e7a4c;border-radius:12px;padding:14px;text-align:center;font-weight:bold">🎉 Nobody else is waiting on you. All caught up!</div>`;
+  const subject = ok ? `✅ ${f.name} got the makeup quiz right` : `❌ ${f.name} missed the makeup quiz`;
+  return sendEmail(f.emailedTo, subject, emailShell(banner + details + missed + list, { preheader: subject }), 'quiz result');
 }
 function emailFollowup(f, reminder) {
   if (f.kind === 'clockin') return sendEmail(f.emailedTo, `${reminder ? 'Reminder: please' : 'Please'} follow up: ${f.name} clocked in without doing the in-service`, clockFollowupHtml(f, reminder), reminder ? 'reminder' : 'follow-up');
@@ -1262,7 +1272,7 @@ function emailFollowup(f, reminder) {
 // of the topic their department had that day so the leader can go over it in person.
 function topicForDeptOnDay(dept, date) {
   const count = {};
-  const rows = db.responses.filter(r => r.date === date && r.completed && !['quiz', 'review', 'required'].includes(r.kind));
+  const rows = db.responses.filter(r => r.date === date && r.completed && !['quiz', 'review', 'required', 'makeup'].includes(r.kind));
   for (const r of rows.filter(r => sameText(r.department || '', dept || '')).concat(rows)) count[r.topicId] = (count[r.topicId] || 0) + 1;
   const best = Object.entries(count).sort((a, b) => b[1] - a[1]).map(([id]) => findTopic(id)).find(isLive);
   return best || regularTopicFor(dept, { peek: true }).topic || null;
@@ -1329,7 +1339,7 @@ function attestPage(f) {
   <div id="box">${done ? `<p class="ok">✓ Educated. Confirmed by ${esc(f.attestedBy)} on ${esc(when(f.attestedAt))}.</p>`
     : `<label style="display:block;margin-top:16px">Your name<input id="by" autocomplete="name" value="${esc(f.leader)}"></label><button id="go">✓ I've educated them</button>
   <div style="border:1px dashed #9fb3c0;border-radius:10px;padding:12px 14px;margin-top:18px"><div style="font-weight:700;color:#1f5f7a">Or let them do it themselves</div>
-  <div style="color:#5b6b78;font-size:13px;margin:2px 0 8px">Send ${esc(f.name.split(' ')[0])} this message. Right on the first try marks this educated; a miss emails you to follow up in person.</div>
+  <div style="color:#5b6b78;font-size:13px;margin:2px 0 8px">Send ${esc(f.name.split(' ')[0])} this message. Finishing it closes this; you get an email with their result.</div>
   <div id="msg" style="white-space:pre-line;background:#f3f6f8;border-radius:8px;padding:10px 12px;font-size:14px">${esc(employeeMessage(f))}</div>
   <button id="copy" type="button" style="background:#fff;color:#1f5f7a;border:1px solid #1f5f7a;margin-top:10px">📋 Copy message</button></div>`}</div></div>
   <script>var c=document.getElementById('copy');if(c)c.onclick=function(){var t=document.getElementById('msg').innerText;function ok(){c.textContent='✓ Copied'}
@@ -2748,13 +2758,27 @@ async function handle(req, res) {
       const passed = results.every(r => r.correct);
       // The first submit is the one that counts: right on the first try = educated; a miss = the leader follows up again.
       if (!f.quiz) {
-        f.quiz = { startedAt: nowIso(), firstTry: passed, total: qs.length,
+        f.quiz = { startedAt: nowIso(), firstTry: passed, total: qs.length, answers: {},
           missed: results.filter(r => !r.correct).map(r => ({ question: plainText(r.q.text), answered: r.chosen.join(', '), correct: r.q.correctAnswers.join(', ') })) };
       }
       f.quiz.tries = (f.quiz.tries || 0) + 1;
+      // Every try per question, so the record reads like a kiosk answer (first pick, retries, final).
+      for (const r of results) { const list = f.quiz.answers[r.q.id] || (f.quiz.answers[r.q.id] = []); if (!list.done) { list.push(r.chosen.join('; ')); if (r.correct) list.done = true; } }
       if (passed) {
         f.quiz.finishedAt = nowIso();
-        if (f.quiz.firstTry) { f.attestedAt = f.quiz.finishedAt; f.attestedBy = `${f.name} (passed the makeup quiz on the first try)`; syncMissHandled(f); }
+        // Closed either way. A miss is saved like any kiosk miss, so it shows on the sign-in sheet and comes back as a spaced review,
+        // without opening another follow-up (no "follow-up on a follow-up").
+        f.attestedAt = f.quiz.finishedAt;
+        f.attestedBy = f.quiz.firstTry ? `${f.name} (passed the makeup quiz on the first try)` : `${f.name} (took the makeup quiz, missed ${f.quiz.missed.length} of ${f.quiz.total} on the first try)`;
+        syncMissHandled(f);
+        const at = new Date(), emp = f.employeeId && findEmployee(f.employeeId);
+        for (const q of qs) {
+          const attempts = (f.quiz.answers[q.id] || []).slice();
+          db.responses.push({ id: newId(), submittedAt: at.toISOString(), date: today(at), employeeId: emp ? emp.id : null, name: f.name, last4: emp ? emp.last4 : '',
+            department: emp ? emp.department : (f.department || ''), verified: !!emp, kind: 'makeup', requiredId: null, scheduleId: null, followupId: f.id,
+            topicId: q.topicId || f.topicId, topicTitle: f.topicTitle, questionId: q.id, question: q.text, correctAnswer: q.correctAnswers.join('; '),
+            attempts, firstTryCorrect: attempts.length ? isRightAnswer(q, attempts[0].split('; ')) : false, completed: true, completedAt: at.toISOString(), lang: 'en' });
+        }
         saveDb();
         if (f.emailedTo.length) emailQuizResult(f).catch(() => {});
       } else saveDb();

@@ -904,7 +904,7 @@ table.la tr:hover td { background: transparent; }
         <select id="resp-dept"><option value="">All departments</option></select>
         <select id="resp-topic"><option value="">All topics</option></select>
         <label><input type="checkbox" id="resp-missed"> Missed first try only</label>
-        <select id="resp-kind"><option value="">All types</option><option value="noquiz">In-services only</option><option value="quiz">🧠 Quizzes only</option><option value="review">Spaced reviews only</option><option value="required">Required only</option></select>
+        <select id="resp-kind"><option value="">All types</option><option value="noquiz">In-services only</option><option value="quiz">🧠 Quizzes only</option><option value="review">Spaced reviews only</option><option value="makeup">📱 Makeup quizzes only</option><option value="required">Required only</option></select>
         <select id="resp-helpful"><option value="">Any lesson rating</option><option value="any">Rated 👍 or 👎</option><option value="up">👍 Helpful</option><option value="down">👎 Not helpful</option></select>
         <span class="emp-pick"><input type="search" id="resp-emp" placeholder="🔍 Everyone (type a name)" autocomplete="off" style="width:230px"><div class="emp-results" id="resp-emp-results" hidden></div></span>
         <span class="pill" id="resp-person" hidden></span>
@@ -996,7 +996,7 @@ table.la tr:hover td { background: transparent; }
     </div>
     <div class="card" id="sq-card">
       <h2>Employee quiz link</h2>
-      <div class="muted small">Every follow-up comes with a message you can send the person (📋 Message on the row, and in the leader's email). The link opens a short quiz on their phone: the lesson, then a question or two with no answers shown. Right on the first try marks them educated and emails the leader a green result; a miss emails the leader a red one to follow up in person. This is what the message says and how long the quiz is.</div>
+      <div class="muted small">Every follow-up comes with a message you can send the person (📋 Message on the row, and in the leader's email). The link opens a short quiz on their phone: the lesson, then a question or two with no answers shown. Finishing it marks them educated and emails the leader a green (right first try) or red (missed) result. A miss is recorded like a kiosk miss and comes back as a spaced review, with no second follow-up. This is what the message says and how long the quiz is.</div>
       <div class="toolbar" style="margin-top:10px">
         <label>Quiz length <select id="sq-count"><option value="1">1 question</option><option value="2">2 questions</option><option value="3">3 questions</option></select></label>
         <a class="btn ghost" id="sq-preview" href="/admin/quiz-preview" target="_blank" rel="noopener">👀 Preview the quiz page</a>
