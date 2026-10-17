@@ -659,9 +659,11 @@ function streakStats(onlyId) {
   // and a day they clocked in without doing an in-service (from the Clock-in check) breaks it.
   const days = {};
   for (const r of db.responses) {
-    if (!r.employeeId || !r.attempts.length || r.kind === 'makeup' || (onlyId && r.employeeId !== onlyId)) continue;
+    if (!r.employeeId || !r.attempts.length || (onlyId && r.employeeId !== onlyId)) continue;
     const d = days[r.employeeId] || (days[r.employeeId] = new Map());
     const cur = d.get(r.date);
+    // A makeup quiz (done on their phone) can only hurt: a first-try miss breaks the streak that day, a pass adds nothing.
+    if (r.kind === 'makeup') { if (!r.firstTryCorrect) { if (cur) cur.first = false; else d.set(r.date, { first: false, completed: 0, missed: true }); } continue; }
     if (!cur) d.set(r.date, { first: !!r.firstTryCorrect, completed: r.completed ? 1 : 0 });
     else if (r.completed) cur.completed++;
   }
