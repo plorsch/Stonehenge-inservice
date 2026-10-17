@@ -160,7 +160,7 @@ function defaultSettings() {
     // New hire starter set: topics given one per visit, in this order, for this many days after the hire date.
     starter: { topicIds: [], days: 60 },
     // Spaced review: a first-try miss brings the topic back after firstDays, then after secondDays, asked a different way.
-    review: { on: true, firstDays: 2, secondDays: 7 },
+    review: { on: true, unit: 'visits', firstDays: 1, secondDays: 3 },   // unit 'visits' counts in-services done in between; 'days' counts calendar days
     decor: defaultDecor(),    // home screen decorations, one set per month
     celebrations: true,       // show staff birthdays and work anniversaries on the kiosk
     // Public streaks: shout-outs in the home screen banner, and a leaderboard ('off', 'home', 'end' or 'both')
@@ -228,6 +228,12 @@ function upgradeDb(d) {
   const old = d.settings || {};
   d.settings = Object.assign(defaultSettings(), old);
   d.settings.review = Object.assign({ on: true, firstDays: 2, secondDays: 7 }, d.settings.review);
+  // 2026-10-17: reviews count in-services done in between, not days (the user: "Taylor should have had one in-service
+  // in between"). Settings still on the old day defaults move to the new in-service defaults.
+  if (!d.settings.review.unit) {
+    d.settings.review.unit = 'visits';
+    if (d.settings.review.firstDays === 2 && d.settings.review.secondDays === 7) { d.settings.review.firstDays = 1; d.settings.review.secondDays = 3; }
+  }
   const st = d.settings.starter;
   d.settings.starter = { topicIds: st && Array.isArray(st.topicIds) ? st.topicIds : [], days: st && st.days > 0 ? st.days : 60 };
   if (Array.isArray(old.roles) && !old.departments) d.settings.departments = old.roles;
@@ -767,22 +773,35 @@ function nextAnnualFor(emp) {
 // a first-try miss starts a review (check-in 1, due firstDays later). A first-try right answer on that topic,
 // on or after the due date, moves it to check-in 2 (due secondDays later), and then clears it.
 // Another first-try miss starts it over. Answers before the due date don't move it either way, except misses.
+// With unit 'visits' (the default) "N" means N in-services done in between, on other days: a miss on Monday, an
+// in-service Tuesday, and the review is due from Wednesday on. With unit 'days' it is N calendar days.
 function reviewStates(employeeId) {
-  const cfg = db.settings.review;
-  const states = {}; // 'employeeId|topicId' -> { employeeId, topicId, stage, due, missed: [questionIds], since }
+  const cfg = db.settings.review, byVisits = cfg.unit !== 'days';
+  const states = {}; // 'employeeId|topicId' -> { employeeId, topicId, stage, start, due, left, dueNow, missed: [questionIds], since }
   // In time order: answers saved offline can arrive after later ones.
   const list = db.responses.filter(r => r.employeeId && r.attempts.length && (!employeeId || r.employeeId === employeeId))
     .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));
+  // Each person's in-service days, for counting what happened in between.
+  const days = {};
+  for (const r of list) if (r.completed) (days[r.employeeId] = days[r.employeeId] || new Set()).add(r.date);
+  const between = (emp, from, to) => [...(days[emp] || [])].filter(d => d > from && d < to).length;
+  const need = st => st.stage === 1 ? cfg.firstDays : cfg.secondDays;
+  const ready = (st, date) => byVisits ? between(st.employeeId, st.start, date) >= need(st) : date >= st.due;
   for (const r of list) {
     const k = `${r.employeeId}|${r.topicId}`;
     const cur = states[k];
     if (!r.firstTryCorrect) {
-      states[k] = { employeeId: r.employeeId, topicId: r.topicId, stage: 1, due: addDays(r.date, cfg.firstDays),
+      states[k] = { employeeId: r.employeeId, topicId: r.topicId, stage: 1, start: r.date, due: addDays(r.date, cfg.firstDays),
         missed: [...new Set([...(cur ? cur.missed : []), r.questionId])], since: cur ? cur.since : r.date, lastMiss: r.submittedAt };
-    } else if (cur && r.date >= cur.due) {
-      if (cur.stage === 1) Object.assign(cur, { stage: 2, due: addDays(r.date, cfg.secondDays) });
+    } else if (cur && ready(cur, r.date)) {
+      if (cur.stage === 1) Object.assign(cur, { stage: 2, start: r.date, due: addDays(r.date, cfg.secondDays) });
       else delete states[k];
     }
+  }
+  const t = today();
+  for (const st of Object.values(states)) {
+    st.left = byVisits ? Math.max(0, need(st) - between(st.employeeId, st.start, t)) : null;
+    st.dueNow = ready(st, t);
   }
   // Taken off by an admin: that review is dropped until the person misses the topic again.
   // People marked "no spaced review" on the Staff tab never get one.
@@ -794,7 +813,7 @@ function reviewStates(employeeId) {
 // The one review this person should do now: the most overdue.
 function nextReviewFor(emp) {
   if (!db.settings.review.on) return null;
-  return reviewStates(emp.id).filter(x => x.due <= today()).sort((a, b) => a.due.localeCompare(b.due))[0] || null;
+  return reviewStates(emp.id).filter(x => x.dueNow).sort((a, b) => a.start.localeCompare(b.start))[0] || null;
 }
 
 function annualReport() {
@@ -2057,7 +2076,7 @@ async function adminRoutes(req, res, p, m, url) {
     if (Array.isArray(b.belatedAnniversaryMessages)) s.belatedAnniversaryMessages = b.belatedAnniversaryMessages.slice(0, 300).map(cleanMessage).filter(Boolean);
     if (b.review && typeof b.review === 'object') {
       const days = (v, d) => { const n = Math.round(Number(v)); return n >= 1 && n <= 60 ? n : d; };
-      s.review = { on: !!b.review.on, firstDays: days(b.review.firstDays, s.review.firstDays), secondDays: days(b.review.secondDays, s.review.secondDays) };
+      s.review = { on: !!b.review.on, unit: b.review.unit === 'days' ? 'days' : 'visits', firstDays: days(b.review.firstDays, s.review.firstDays), secondDays: days(b.review.secondDays, s.review.secondDays) };
     }
     if (b.streaks && typeof b.streaks === 'object') {
       s.streaks = { shoutOuts: !!b.streaks.shoutOuts, leaderboard: ['off', 'home', 'end', 'both'].includes(b.streaks.leaderboard) ? b.streaks.leaderboard : 'off',
@@ -2256,7 +2275,7 @@ async function adminRoutes(req, res, p, m, url) {
     const list = reviewStates().map(x => {
       const e = findEmployee(x.employeeId), t = findTopic(x.topicId);
       return Object.assign({ name: e ? e.name : '', department: e ? e.department : '', active: !!(e && e.active), title: t.title }, x);
-    }).filter(x => x.active).sort((a, b) => a.due.localeCompare(b.due));
+    }).filter(x => x.active).sort((a, b) => (b.dueNow - a.dueNow) || (a.left || 0) - (b.left || 0) || a.due.localeCompare(b.due));
     // Topics need a few questions so a review can ask it a different way.
     const thin = db.topics.filter(t => isLive(t) && t.questions.length < 3).map(t => ({ id: t.id, title: t.title, questions: t.questions.length }));
     return send(res, 200, { reviews: list, thin, settings: db.settings.review });

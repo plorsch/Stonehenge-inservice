@@ -2749,12 +2749,12 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
   async function loadReviews() {
     try {
       const { reviews, thin, settings } = await api('/api/admin/reviews');
-      $('rv-on').checked = !!settings.on; $('rv-first').value = settings.firstDays; $('rv-second').value = settings.secondDays;
+      $('rv-on').checked = !!settings.on; $('rv-first').value = settings.firstDays; $('rv-second').value = settings.secondDays; $('rv-unit').value = settings.unit === 'days' ? 'days' : 'visits';
       const today = state.todayDate;
       $('rv-rows').innerHTML = reviews.map(r => `<tr><td>${personLink(r.employeeId, r.name)}<div class="muted small">${escapeHtml(r.department || '')}</div></td>
         <td>${topicLink(r.topicId, r.title)}<div class="muted small">missed ${fmtDate(r.since)}</div></td>
         <td>${r.stage === 1 ? 'First' : 'Final'}</td>
-        <td style="white-space:nowrap">${fmtDate(r.due)} ${r.due <= today ? '<span class="pill warn">Due now</span>' : ''}</td>
+        <td style="white-space:nowrap">${r.dueNow ? '<span class="pill warn">Due now</span>' : r.left != null ? `after ${r.left} more in-service${r.left === 1 ? '' : 's'}` : fmtDate(r.due)}</td>
         <td style="white-space:nowrap"><button class="btn subtle" data-rv-skip="${r.employeeId}|${r.topicId}" data-rv-name="${escapeHtml(r.name)}" data-rv-title="${escapeHtml(r.title)}" title="Remove this review. It comes back only if they miss this topic again.">Take off</button></td></tr>`).join('')
         || '<tr><td colspan="5" class="muted">No one has anything to review right now.</td></tr>';
       $('rv-thin').innerHTML = thin.length ? `<strong>Topics with fewer than 3 questions</strong> <span class="muted">(add more so a review can ask it a different way):</span> ` +
@@ -2774,7 +2774,7 @@ ${more ? '' : '- Lesson: one short lead sentence, then up to 3 short bullets tha
     if (a) { e.preventDefault(); openEditor(topicById(a.dataset.thin)); }
   });
   autoSave($('rv-save').closest('.card'), async () => {
-    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ review: { on: $('rv-on').checked, firstDays: Number($('rv-first').value), secondDays: Number($('rv-second').value) } }) });
+    await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({ review: { on: $('rv-on').checked, unit: $('rv-unit').value, firstDays: Number($('rv-first').value), secondDays: Number($('rv-second').value) } }) });
     await refresh();
   }, [$('rv-save')]);
 

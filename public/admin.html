@@ -1004,11 +1004,12 @@ table.la tr:hover td { background: transparent; }
     </div>
     <div class="card">
       <h2>Spaced review</h2>
-      <div class="muted small">When someone misses a question on the first try, that topic comes back for them a few days later, asked with a different question from the same topic, and once more a week after that. A miss starts it over. Required education and new hire topics come first; a review replaces the regular topic that shift, one at a time. Staff see "We'll check back on this one in a few days" when they miss, and "This one's mastered" when they clear it.</div>
+      <div class="muted small">When someone misses a question on the first try, that topic comes back for them after they've done a few other in-services (or after a few days, your choice), asked with a different question from the same topic, and once more after that. A miss starts it over. Required education and new hire topics come first; a review replaces the regular topic that shift, one at a time. Staff see "We'll check back on this one in a few days" when they miss, and "This one's mastered" when they clear it.</div>
       <div class="toolbar" style="margin-top:10px">
         <label><input type="checkbox" id="rv-on"> Turn on spaced review</label>
-        <label>First check-in after <input type="number" id="rv-first" min="1" max="60" style="width:70px"> days</label>
-        <label>then after <input type="number" id="rv-second" min="1" max="60" style="width:70px"> days</label>
+        <label>First check-in after <input type="number" id="rv-first" min="1" max="60" style="width:70px"></label>
+        <label>then after <input type="number" id="rv-second" min="1" max="60" style="width:70px"></label>
+        <select id="rv-unit"><option value="visits">other in-services in between</option><option value="days">calendar days</option></select>
         <button class="btn" id="rv-save">Save</button>
       </div>
       <div class="table-wrap"><table>
